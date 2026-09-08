@@ -52,6 +52,7 @@ export default function EntrenamientoPage() {
       usuario={usuario}
       progreso={progreso}
       onGuardado={recargarSilencioso}
+      onRutinaCambiada={cargar}
     />
   );
 }
@@ -166,7 +167,7 @@ function NumberField({ label, value, onChange }) {
   );
 }
 
-function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado }) {
+function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, onRutinaCambiada }) {
   const diasUnicos = useMemo(() => {
     const vistos = new Set();
     return rutina.dias.filter((d) => {
@@ -202,12 +203,12 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado })
       </div>
 
       {/* key={dia.id} fuerza un remount limpio del estado de series al cambiar de dia */}
-      <RegistroDia key={dia.id} dia={dia} microciclo={microciclo} usuario={usuario} progreso={progreso} onGuardado={onGuardado} />
+      <RegistroDia key={dia.id} dia={dia} microciclo={microciclo} usuario={usuario} progreso={progreso} onGuardado={onGuardado} onRutinaCambiada={onRutinaCambiada} />
     </div>
   );
 }
 
-function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado }) {
+function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada }) {
   const [series, setSeries] = useState(() => construirEstadoInicial(dia));
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -337,6 +338,8 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado }) {
                   />
                 </div>
               ))}
+
+              <EjercicioAcciones ejercicio={ej} usuario={usuario} onCambiado={onRutinaCambiada} />
             </div>
           );
         })}
@@ -361,6 +364,132 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado }) {
         </button>
       </div>
     </>
+  );
+}
+
+function EjercicioAcciones({ ejercicio, usuario, onCambiado }) {
+  const [linealForzado, setLinealForzado] = useState(Boolean(ejercicio.modo_lineal_forzado));
+  const [mostrarSustituir, setMostrarSustituir] = useState(false);
+
+  async function toggleLineal() {
+    const nuevo = !linealForzado;
+    setLinealForzado(nuevo);
+    try {
+      await api.patch(`/ejercicios/${ejercicio.id}/lineal-forzado`, { activo: nuevo });
+    } catch {
+      setLinealForzado(!nuevo);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 pt-1 border-t border-border -mx-4 px-4">
+      <div className="flex items-center justify-between pt-2">
+        <button
+          type="button"
+          onClick={toggleLineal}
+          title="Si lo activás, el peso no baja automáticamente aunque no llegues al mínimo de reps."
+          className={`text-[11px] font-medium px-2.5 py-1 rounded-md border ${
+            linealForzado ? 'border-accent text-accent bg-bg' : 'border-border text-text-faint bg-transparent'
+          }`}
+        >
+          {linealForzado ? '✓ Lineal forzado' : 'Lineal forzado'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMostrarSustituir((v) => !v)}
+          className="text-[11px] font-medium text-text-muted underline underline-offset-2"
+        >
+          Cambiar ejercicio
+        </button>
+      </div>
+      {mostrarSustituir && (
+        <SustituirEjercicio
+          ejercicio={ejercicio}
+          usuario={usuario}
+          onListo={() => { setMostrarSustituir(false); onCambiado(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SustituirEjercicio({ ejercicio, onListo }) {
+  const [candidatos, setCandidatos] = useState(null);
+  const [elegido, setElegido] = useState('');
+  const [peso, setPeso] = useState('');
+  const [reps1, setReps1] = useState('');
+  const [reps2, setReps2] = useState('');
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  useEffect(() => {
+    api.get(`/ejercicios/${ejercicio.id}/candidatos`).then(setCandidatos).catch((err) => setError(err.message));
+  }, [ejercicio.id]);
+
+  async function confirmar() {
+    if (!elegido || peso === '' || reps1 === '' || reps2 === '') {
+      setError('Completá el ejercicio nuevo, el peso y las 2 series de testeo.');
+      return;
+    }
+    setEnviando(true);
+    setError('');
+    try {
+      await api.post(`/ejercicios/${ejercicio.id}/sustituir`, {
+        nuevo_ejercicio_id: Number(elegido),
+        peso: Number(peso),
+        reps_serie1: Number(reps1),
+        reps_serie2: Number(reps2),
+      });
+      onListo();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="bg-bg border border-border rounded-xl p-3 flex flex-col gap-2.5">
+      <span className="text-[12px] font-semibold">Sustituir por otro ejercicio del mismo músculo</span>
+      <p className="text-[11.5px] text-text-muted leading-relaxed">
+        Probá un peso con el que puedas hacer entre 12 y 16 reps, y cargá 2 series de testeo — se usa como piso para lo que queda de este microciclo.
+      </p>
+
+      {candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
+      {candidatos?.length === 0 && (
+        <span className="text-[12px] text-text-muted">No hay alternativas para este músculo con tu equipamiento actual.</span>
+      )}
+      {candidatos?.length > 0 && (
+        <>
+          <select
+            value={elegido}
+            onChange={(e) => setElegido(e.target.value)}
+            className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] outline-none focus:border-accent"
+          >
+            <option value="">Elegí un ejercicio…</option>
+            {candidatos.map((c) => (
+              <option key={c.id} value={c.id}>{c.nombre}</option>
+            ))}
+          </select>
+          <div className="grid grid-cols-3 gap-2">
+            <NumberField label="Peso (kg)" value={peso} onChange={setPeso} />
+            <NumberField label="Reps S1" value={reps1} onChange={setReps1} />
+            <NumberField label="Reps S2" value={reps2} onChange={setReps2} />
+          </div>
+        </>
+      )}
+
+      {error && <span className="text-[12px] text-danger">{error}</span>}
+
+      <button
+        type="button"
+        onClick={confirmar}
+        disabled={enviando || !candidatos?.length}
+        className="h-9 rounded-lg bg-accent text-accent-fg text-[13px] font-semibold disabled:opacity-60"
+      >
+        {enviando ? 'Guardando…' : 'Confirmar sustitución'}
+      </button>
+    </div>
   );
 }
 

@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
-import { crearRutina, obtenerRutinaActiva, reordenarEjercicios } from '../services/rutinaService.js';
-import { cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
+import { crearRutina, obtenerRutinaActiva, reordenarEjercicios, sustituirEjercicio } from '../services/rutinaService.js';
+import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
+import { tagsDisponibles } from '../services/routineBuilder.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -59,6 +60,88 @@ router.patch('/dias/:diaRutinaId/orden', (req, res) => {
   }
   reordenarEjercicios(req.params.diaRutinaId, orden);
   res.status(204).end();
+});
+
+function getEjercicioAsignadoOr404(req, res) {
+  const ea = db.prepare(`
+    SELECT ea.*, r.id AS rutina_id, r.usuario_id
+    FROM ejercicio_asignado ea
+    JOIN dia_rutina dr ON dr.id = ea.dia_rutina_id
+    JOIN rutina r ON r.id = dr.rutina_id
+    WHERE ea.id = ?
+  `).get(req.params.ejercicioAsignadoId);
+  if (!ea) {
+    res.status(404).json({ error: 'Ejercicio asignado no encontrado.' });
+    return null;
+  }
+  if (!checkAccesoUsuario(req, res, ea.usuario_id)) return null;
+  return ea;
+}
+
+router.patch('/ejercicios/:ejercicioAsignadoId/lineal-forzado', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { activo } = req.body || {};
+  if (typeof activo !== 'boolean') return res.status(400).json({ error: 'activo debe ser boolean.' });
+  db.prepare('UPDATE ejercicio_asignado SET modo_lineal_forzado = ? WHERE id = ?').run(activo ? 1 : 0, ea.id);
+  res.json({ id: ea.id, modo_lineal_forzado: activo });
+});
+
+router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const equipamiento = db.prepare('SELECT * FROM equipamiento WHERE usuario_id = ?').get(ea.usuario_id);
+  const tags = tagsDisponibles({ tipo: equipamiento.tipo, checklist: JSON.parse(equipamiento.checklist_json) });
+  const candidatos = db.prepare(`
+    SELECT id, nombre, tipo, equipamiento_requerido_json FROM ejercicio
+    WHERE musculo_primario_id = ? AND activo = 1 AND id != ?
+  `).all(ea.musculo_objetivo_id, ea.ejercicio_id).filter((c) => {
+    const requeridos = JSON.parse(c.equipamiento_requerido_json);
+    return requeridos.every((tag) => tags.has(tag));
+  });
+  res.json(candidatos.map(({ equipamiento_requerido_json, ...c }) => c));
+});
+
+router.post('/ejercicios/:ejercicioAsignadoId/sustituir', (req, res, next) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { nuevo_ejercicio_id, peso, reps_serie1, reps_serie2 } = req.body || {};
+  if (!nuevo_ejercicio_id || peso == null || reps_serie1 == null || reps_serie2 == null) {
+    return res.status(400).json({ error: 'nuevo_ejercicio_id, peso, reps_serie1 y reps_serie2 son obligatorios.' });
+  }
+  try {
+    const out = sustituirEjercicio({ ejercicioAsignadoId: ea.id, usuarioId: ea.usuario_id, nuevoEjercicioId: nuevo_ejercicio_id, peso, repsSerie1: reps_serie1, repsSerie2: reps_serie2 });
+    res.json(out);
+  } catch (err) {
+    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('microciclo')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+router.post('/rutinas/:rutinaId/deload', (req, res, next) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  try {
+    const out = aplicarDeload(rutina.id);
+    res.status(201).json(out);
+  } catch (err) {
+    if (err.message.includes('No hay microciclo')) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
+router.get('/rutinas/:rutinaId/deload/actual', (req, res) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  const microciclo = db.prepare("SELECT * FROM microciclo WHERE rutina_id = ? AND estado = 'en_curso'").get(rutina.id);
+  if (!microciclo) return res.json(null);
+  const deload = db.prepare(
+    'SELECT * FROM deload WHERE microciclo_asociado_id = ? ORDER BY id DESC LIMIT 1'
+  ).get(microciclo.id);
+  if (!deload) return res.json(null);
+  res.json({ ...deload, detalle: JSON.parse(deload.detalle_json) });
 });
 
 router.post('/rutinas/:rutinaId/semana0', (req, res, next) => {

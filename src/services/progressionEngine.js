@@ -282,3 +282,43 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
 
   return { microciclo, siguiente, resultadosPorEjercicio, estancadoPorMusculo, cercaMavPorMusculo, volumenPorMusculo };
 });
+
+const insertDeload = db.prepare(
+  'INSERT INTO deload (usuario_id, microciclo_asociado_id, detalle_json) VALUES (?, ?, ?)'
+);
+
+// Semana de descarga: solo a pedido explicito del usuario, nunca automatica
+// (§6). No modifica el piso/techo del microciclo en curso -- es una
+// prescripcion informativa para esa semana puntual.
+export function aplicarDeload(rutinaId) {
+  const rutina = getRutina.get(rutinaId);
+  const microciclo = db.prepare("SELECT * FROM microciclo WHERE rutina_id = ? AND numero >= 1 AND estado = 'en_curso'").get(rutinaId);
+  if (!microciclo) throw new Error('No hay microciclo en curso para aplicar una descarga.');
+
+  const ejercicios = getEjerciciosDeRutina.all(rutinaId);
+  const detalle = [];
+  for (const ej of ejercicios) {
+    const progreso = getProgresoEjercicio.get(ej.id, microciclo.id);
+    if (!progreso) continue;
+
+    const seriesNormales = progreso.series_prescritas;
+    const seriesDeload = Math.max(2, Math.ceil(seriesNormales / 2));
+    const pesoTopSet = progreso.peso_prescrito;
+    const pesoResto = Math.round(progreso.peso_prescrito * 0.75 * 2) / 2;
+
+    detalle.push({
+      ejercicio_asignado_id: ej.id,
+      ejercicio_nombre: ej.ejercicio_nombre,
+      series: seriesDeload,
+      meta_reps: progreso.piso_reps,
+      series_detalle: Array.from({ length: seriesDeload }, (_, i) => ({
+        numero_serie: i + 1,
+        peso: i === 0 ? pesoTopSet : pesoResto,
+        meta_reps: progreso.piso_reps,
+      })),
+    });
+  }
+
+  const info = insertDeload.run(rutina.usuario_id, microciclo.id, JSON.stringify(detalle));
+  return { id: info.lastInsertRowid, microciclo_id: microciclo.id, detalle };
+}

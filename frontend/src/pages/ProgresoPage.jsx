@@ -9,6 +9,8 @@ export default function ProgresoPage() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [cerrando, setCerrando] = useState(false);
+  const [deload, setDeload] = useState(null);
+  const [pidiendoDeload, setPidiendoDeload] = useState(false);
 
   async function cargar() {
     setCargando(true);
@@ -18,10 +20,25 @@ export default function ProgresoPage() {
       setRutina(r);
       const p = await api.get(`/rutinas/${r.id}/progreso`);
       setProgreso(p);
+      const d = await api.get(`/rutinas/${r.id}/deload/actual`).catch(() => null);
+      setDeload(d);
     } catch (err) {
       setError(err.message);
     } finally {
       setCargando(false);
+    }
+  }
+
+  async function pedirDeload() {
+    setPidiendoDeload(true);
+    setError('');
+    try {
+      const d = await api.post(`/rutinas/${rutina.id}/deload`);
+      setDeload(d);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPidiendoDeload(false);
     }
   }
 
@@ -70,16 +87,50 @@ export default function ProgresoPage() {
       </div>
 
       {puedeCerrar && (
-        <button
-          onClick={cerrarMicrociclo}
-          disabled={cerrando}
-          className="h-11 rounded-[10px] bg-accent text-accent-fg text-[14px] font-semibold disabled:opacity-60"
-        >
-          {cerrando ? 'Cerrando…' : `Cerrar microciclo ${actual.numero}`}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={cerrarMicrociclo}
+            disabled={cerrando}
+            className="flex-1 h-11 rounded-[10px] bg-accent text-accent-fg text-[14px] font-semibold disabled:opacity-60"
+          >
+            {cerrando ? 'Cerrando…' : `Cerrar microciclo ${actual.numero}`}
+          </button>
+          {!deload && (
+            <button
+              onClick={pedirDeload}
+              disabled={pidiendoDeload}
+              className="h-11 px-4 rounded-[10px] border border-border bg-surface text-text-muted text-[13px] font-semibold disabled:opacity-60"
+            >
+              {pidiendoDeload ? 'Calculando…' : 'Pedir descarga'}
+            </button>
+          )}
+        </div>
       )}
 
       {error && <p className="text-[13px] text-danger">{error}</p>}
+
+      {deload && (
+        <section className="flex flex-col gap-3">
+          <span className="text-[13px] font-semibold text-text-muted tracking-wide">SEMANA DE DESCARGA</span>
+          <p className="text-[12px] text-text-muted leading-relaxed -mt-1">
+            Reemplazá tus series normales por esto durante esta semana. El piso y el techo del microciclo no se tocan.
+          </p>
+          <div className="flex flex-col gap-2.5">
+            {deload.detalle.map((d) => (
+              <div key={d.ejercicio_asignado_id} className="bg-surface border border-border rounded-xl p-3.5 flex flex-col gap-2">
+                <span className="text-[13px] font-semibold">{d.ejercicio_nombre}</span>
+                <div className="flex gap-1.5 flex-wrap">
+                  {d.series_detalle.map((s) => (
+                    <span key={s.numero_serie} className="tabular text-[12px] bg-bg border border-border rounded-md px-2 py-1">
+                      S{s.numero_serie}: {s.peso}kg × {s.meta_reps}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {progreso?.musculos?.length > 0 && (
         <section className="flex flex-col gap-3">
