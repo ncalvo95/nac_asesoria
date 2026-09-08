@@ -41,22 +41,28 @@ cierre de microciclo → progreso → export a Excel):
   sirve como respaldo/continuación offline. Ambos comparten la misma lógica
   de generación (`src/services/excelGenerator.js`).
 
-- Frontend (`frontend/`): login, onboarding, pantalla de "Día de
-  entrenamiento" (con navegación por día, semana 0 de testeo, registro de
-  series por peso/reps/RIR) y pantalla de Progreso (volumen por músculo vs
-  MAV, notas de estancamiento/mejora, cerrar microciclo, exportar a Excel).
+- Frontend (`frontend/`): login, onboarding, "Día de entrenamiento" (semana
+  0 de testeo, registro de series por peso/reps/RIR, modo "lineal forzado"
+  por ejercicio, sustitución de ejercicio a mitad de rutina), Progreso
+  (volumen por músculo vs MAV, notas de estancamiento/mejora, cerrar
+  microciclo, pedir descarga/deload, exportar a Excel), Reportes (semestral
+  y resumen de mesociclo, comparando peso/reps/volumen), pantalla de
+  invitado sin cuenta (descarga el Excel de 6 meses directo desde el
+  navegador), y un panel de coach/admin (listado de clientes, alta de
+  cuentas, ver la rutina/progreso/reportes de un cliente puntual).
   Diseño mobile-first, paleta clínica/neutra con acento configurable
   (mismos tokens que la [vista previa visual](https://claude.ai/code/artifact/e2941d16-a51b-4dad-ad83-4921bfcfecfe)
   que se acordó antes de construirlo), tema oscuro automático por
   `prefers-color-scheme`.
 
-Pendiente:
+Pendiente / simplificaciones conocidas:
 
-- Reportes (semestral / mesociclo), deload manual, sustitución de ejercicio
-  a mitad de rutina, modo "lineal forzado" por ejercicio, panel de
-  admin/coach para gestionar clientes desde la UI (hoy se crean por API).
-- Modo invitado (Excel sin cuenta) solo tiene backend; falta su pantalla en
-  el frontend.
+- La sustitución de ejercicio no reubica sesiones ya registradas antes del
+  cambio (quedan asociadas al `ejercicio_asignado_id`, que ahora apunta al
+  ejercicio nuevo) - es un límite aceptado del MVP, documentado en el
+  código.
+- Los reportes se generan a pedido (botón), no hay un cron real de "cada 6
+  meses" - no hacía falta para el volumen de uso esperado.
 
 ## Setup
 

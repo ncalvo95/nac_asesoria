@@ -65,4 +65,27 @@ router.post('/usuarios', requireAuth, requireRole('admin', 'coach'), async (req,
   res.status(201).json({ id: info.lastInsertRowid, nombre, email, rol, coach_id });
 });
 
+// Listado de cuentas: un coach ve solo sus clientes; el admin ve todo
+// (opcionalmente filtrado por rol).
+router.get('/usuarios', requireAuth, requireRole('admin', 'coach'), (req, res) => {
+  const { rol } = req.query;
+  let usuarios;
+  if (req.usuario.rol === 'coach') {
+    usuarios = db.prepare(
+      "SELECT id, nombre, email, rol, created_at FROM usuarios WHERE coach_id = ? ORDER BY nombre"
+    ).all(req.usuario.id);
+  } else if (rol) {
+    usuarios = db.prepare(
+      'SELECT id, nombre, email, rol, coach_id, created_at FROM usuarios WHERE rol = ? ORDER BY nombre'
+    ).all(rol);
+  } else {
+    usuarios = db.prepare(
+      'SELECT id, nombre, email, rol, coach_id, created_at FROM usuarios ORDER BY rol, nombre'
+    ).all();
+  }
+
+  const tieneRutina = db.prepare("SELECT 1 FROM rutina WHERE usuario_id = ? AND estado = 'activa'");
+  res.json(usuarios.map((u) => ({ ...u, tiene_rutina_activa: Boolean(tieneRutina.get(u.id)) })));
+});
+
 export default router;

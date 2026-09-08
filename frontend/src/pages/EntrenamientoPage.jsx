@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function EntrenamientoPage() {
-  const { usuario } = useAuth();
+  const { usuario: sesion } = useAuth();
+  const { usuarioId: usuarioIdParam } = useParams();
+  const usuario = usuarioIdParam ? { id: Number(usuarioIdParam) } : sesion;
   const [rutina, setRutina] = useState(null);
   const [progreso, setProgreso] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -29,7 +32,7 @@ export default function EntrenamientoPage() {
   // completa (eso desmontaría el formulario y perdería el cartel de "guardado").
   const recargarSilencioso = () => cargar({ silencioso: true });
 
-  useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [usuario.id]);
 
   if (cargando) return <div className="p-6 text-sm text-text-muted">Cargando tu rutina…</div>;
   if (error) return <div className="p-6 text-sm text-danger">{error}</div>;

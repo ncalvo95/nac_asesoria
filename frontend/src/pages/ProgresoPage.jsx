@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 
 export default function ProgresoPage() {
-  const { usuario } = useAuth();
+  const { usuario: sesion } = useAuth();
+  const { usuarioId: usuarioIdParam } = useParams();
+  const usuario = usuarioIdParam ? { id: Number(usuarioIdParam) } : sesion;
   const [rutina, setRutina] = useState(null);
   const [progreso, setProgreso] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -42,7 +45,7 @@ export default function ProgresoPage() {
     }
   }
 
-  useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [usuario.id]);
 
   async function cerrarMicrociclo() {
     const actual = rutina.microciclos.find((m) => m.estado === 'en_curso');

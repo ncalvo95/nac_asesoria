@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 const tabs = [
   { to: '/entrenamiento', label: 'Entrenamiento' },
   { to: '/progreso', label: 'Progreso' },
+  { to: '/reportes', label: 'Reportes' },
 ];
 
 export default function Layout() {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function LoginPage() {
@@ -74,6 +74,16 @@ export default function LoginPage() {
           {enviando ? 'Entrando…' : 'Entrar'}
         </button>
       </form>
+
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-border" />
+        <span className="text-[11.5px] text-text-faint">O</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+
+      <Link to="/invitado" className="text-[13px] text-center text-text-muted">
+        <span className="text-accent font-semibold">Probá el plan de 6 meses sin registro →</span>
+      </Link>
     </div>
   );
 }
