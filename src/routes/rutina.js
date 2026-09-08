@@ -95,6 +95,38 @@ router.post('/rutinas/:rutinaId/microciclos/:numero/cerrar', (req, res, next) =>
   }
 });
 
+router.get('/rutinas/:rutinaId/progreso', (req, res) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+
+  const ultimoCerrado = db.prepare(
+    "SELECT * FROM microciclo WHERE rutina_id = ? AND estado = 'cerrado' ORDER BY numero DESC LIMIT 1"
+  ).get(rutina.id);
+  if (!ultimoCerrado) return res.json({ microciclo: null, musculos: [], ejercicios: [] });
+
+  const musculos = db.prepare(`
+    SELECT m.nombre, pmm.volumen_directo, pmm.volumen_indirecto, pmm.estancado, pmm.cerca_de_mav, pmm.serie_agregada, r.mev, r.mav, r.mrv
+    FROM progreso_muscular_microciclo pmm
+    JOIN musculo m ON m.id = pmm.musculo_id
+    JOIN referencia_volumen_muscular r ON r.musculo_id = m.id
+    WHERE pmm.microciclo_id = ?
+    ORDER BY m.id
+  `).all(ultimoCerrado.id);
+
+  const ejercicios = db.prepare(`
+    SELECT ea.id, e.nombre AS ejercicio_nombre, m.nombre AS musculo_nombre, ea.es_top_de_musculo,
+           pem.sem1_reps, pem.sem2_reps, pem.piso_reps, pem.techo_reps, pem.mejoro, pem.serie_agregada, pem.nota, pem.peso_prescrito
+    FROM progreso_ejercicio_microciclo pem
+    JOIN ejercicio_asignado ea ON ea.id = pem.ejercicio_asignado_id
+    JOIN ejercicio e ON e.id = ea.ejercicio_id
+    JOIN musculo m ON m.id = ea.musculo_objetivo_id
+    WHERE pem.microciclo_id = ?
+    ORDER BY ea.orden
+  `).all(ultimoCerrado.id);
+
+  res.json({ microciclo: ultimoCerrado, musculos, ejercicios });
+});
+
 router.get('/rutinas/:rutinaId/export.xlsx', async (req, res) => {
   const rutina = getRutinaOr404(req, res);
   if (!rutina) return;

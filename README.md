@@ -8,13 +8,16 @@ Loot Ledger, detrás de la misma instancia de Caddy.
 ## Stack
 
 - **Backend:** Node.js + Express + SQLite (better-sqlite3), un solo proceso.
-- **Frontend:** React + Vite + Tailwind (pendiente de scaffoldear), compilado
-  a estáticos y servido por el mismo proceso Node.
+- **Frontend:** React + Vite + Tailwind v4 (mobile-first, tema claro/oscuro
+  automático), compilado a estáticos en `frontend/dist` y servido por el
+  mismo proceso Node.
 - **Auth:** JWT en cookie httpOnly + bcryptjs. Roles: `admin`, `coach`, `cliente`.
 
 ## Estado actual
 
-Backend completo y probado end-to-end (falta el frontend):
+Backend y frontend completos, probados end-to-end en navegador (login →
+onboarding → generación de rutina → semana 0 → registro de sesiones →
+cierre de microciclo → progreso → export a Excel):
 
 - Schema SQLite completo (`src/db/schema.sql`).
 - Seed de catálogo: 11 grupos musculares con referencia MEV/MAV/MRV
@@ -38,11 +41,22 @@ Backend completo y probado end-to-end (falta el frontend):
   sirve como respaldo/continuación offline. Ambos comparten la misma lógica
   de generación (`src/services/excelGenerator.js`).
 
+- Frontend (`frontend/`): login, onboarding, pantalla de "Día de
+  entrenamiento" (con navegación por día, semana 0 de testeo, registro de
+  series por peso/reps/RIR) y pantalla de Progreso (volumen por músculo vs
+  MAV, notas de estancamiento/mejora, cerrar microciclo, exportar a Excel).
+  Diseño mobile-first, paleta clínica/neutra con acento configurable
+  (mismos tokens que la [vista previa visual](https://claude.ai/code/artifact/e2941d16-a51b-4dad-ad83-4921bfcfecfe)
+  que se acordó antes de construirlo), tema oscuro automático por
+  `prefers-color-scheme`.
+
 Pendiente:
 
-- Frontend (React + Vite + Tailwind).
 - Reportes (semestral / mesociclo), deload manual, sustitución de ejercicio
-  a mitad de rutina, modo "lineal forzado" por ejercicio.
+  a mitad de rutina, modo "lineal forzado" por ejercicio, panel de
+  admin/coach para gestionar clientes desde la UI (hoy se crean por API).
+- Modo invitado (Excel sin cuenta) solo tiene backend; falta su pantalla en
+  el frontend.
 
 ## Setup
 
@@ -51,8 +65,13 @@ npm install
 JWT_SECRET=<algo-secreto> npm run db:migrate
 npm run db:seed
 ADMIN_EMAIL=vos@ejemplo.com ADMIN_PASSWORD=<pass> npm run db:bootstrap-admin
+npm run build:frontend
 JWT_SECRET=<algo-secreto> npm start
 ```
+
+Para desarrollo del frontend con hot reload: `npm --prefix frontend run dev`
+(proxea `/api` a `http://localhost:3000`, así que el backend tiene que estar
+corriendo en paralelo).
 
 Variables de entorno:
 
