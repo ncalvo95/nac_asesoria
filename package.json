@@ -1,0 +1,24 @@
+{
+  "name": "nac-asesoria",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WebApp de programacion de entrenamientos con progresion automatica por microciclos",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "build:frontend": "npm --prefix frontend run build",
+    "db:migrate": "node src/db/migrate.js",
+    "db:seed": "node src/db/seed/run.js",
+    "db:bootstrap-admin": "node src/db/seed/bootstrap-admin.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.9.1",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
