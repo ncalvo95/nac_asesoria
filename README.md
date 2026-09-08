@@ -14,25 +14,35 @@ Loot Ledger, detrás de la misma instancia de Caddy.
 
 ## Estado actual
 
-Implementado y probado:
+Backend completo y probado end-to-end (falta el frontend):
 
 - Schema SQLite completo (`src/db/schema.sql`).
 - Seed de catálogo: 11 grupos musculares con referencia MEV/MAV/MRV
   (`src/db/seed/musculos.js`) y 51 ejercicios (`src/db/seed/ejercicios.js`).
 - Auth con roles admin/coach/cliente (`src/routes/auth.js`).
-- Armado de rutina por split según días/semana (`src/services/routineBuilder.js`).
+- Onboarding: objetivo, disponibilidad, equipamiento, perfil médico,
+  antropometría, RM estimado, preferencias de ejercicio (`src/routes/perfil.js`).
+- Generación y persistencia de la rutina real por split según días/semana
+  (`src/services/routineBuilder.js`, `src/services/rutinaService.js`,
+  `src/routes/rutina.js`), con reordenamiento de ejercicios por el usuario.
+- Semana 0 (testeo) y registro de sesión/serie (`src/services/progressionEngine.js`,
+  `src/routes/sesiones.js`).
+- **Motor de cierre de microciclo** (el núcleo del sistema): calcula
+  piso/techo por ejercicio (mejor marca vs promedio), detecta estancamiento
+  por músculo, aplica el tope MAV, suma serie al ejercicio top, ajusta peso
+  por rango de reps, y encadena el siguiente microciclo.
 - Generador de Excel para invitados, sin cuenta ni persistencia
-  (`src/services/excelGenerator.js`, `src/routes/guest.js`): motor de
-  progresión completo (doble progresión, estancamiento por músculo, tope MAV,
-  ajuste por rep-cap absoluto) implementado como fórmulas vivas de Excel.
+  (`src/routes/guest.js`) y **exportación a Excel para usuarios registrados**
+  (`GET /api/rutinas/:rutinaId/export.xlsx`) que precarga el historial real
+  (microciclos ya cerrados) y deja fórmulas vivas para lo que falta, así
+  sirve como respaldo/continuación offline. Ambos comparten la misma lógica
+  de generación (`src/services/excelGenerator.js`).
 
 Pendiente:
 
 - Frontend (React + Vite + Tailwind).
-- Motor de progresión server-side para cuentas registradas (equivalente en
-  JS a lo que hoy resuelve el Excel de invitados).
-- Registro de sesión/serie, reportes, deload manual, reordenamiento de
-  ejercicios por el usuario.
+- Reportes (semestral / mesociclo), deload manual, sustitución de ejercicio
+  a mitad de rutina, modo "lineal forzado" por ejercicio.
 
 ## Setup
 
@@ -69,3 +79,20 @@ curl -X POST http://localhost:3000/api/guest/rutina.xlsx \
 sin tildes). El split se arma automáticamente según la cantidad de días
 (ver `src/services/routineBuilder.js` para la tabla completa del §3 del
 prompt original).
+
+## Flujo completo para un usuario registrado
+
+```
+POST /api/auth/login                                  (admin o coach)
+POST /api/auth/usuarios            {rol: "coach"}      (solo admin)
+POST /api/auth/usuarios            {rol: "cliente"}    (admin o coach)
+PUT  /api/usuarios/:id/objetivo
+PUT  /api/usuarios/:id/disponibilidad
+PUT  /api/usuarios/:id/equipamiento
+POST /api/usuarios/:id/rutina                          (genera y persiste la rutina)
+POST /api/rutinas/:rutinaId/semana0    {resultados: [...]}
+POST /api/usuarios/:id/sesiones        {dia_rutina_id, microciclo_id, series: [...]}
+POST /api/rutinas/:rutinaId/microciclos/:numero/cerrar  (el nucleo: calcula piso/techo,
+                                                          estancamiento, ajusta peso/series)
+GET  /api/rutinas/:rutinaId/export.xlsx                 (backup/continuacion en Excel)
+```

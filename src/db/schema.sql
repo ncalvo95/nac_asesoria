@@ -190,8 +190,13 @@ CREATE TABLE IF NOT EXISTS progreso_ejercicio_microciclo (
   microciclo_id INTEGER NOT NULL REFERENCES microciclo(id) ON DELETE CASCADE,
   peso_prescrito REAL NOT NULL,
   piso_reps INTEGER NOT NULL,
+  series_prescritas INTEGER NOT NULL DEFAULT 2,
+  sem1_reps INTEGER,
+  sem2_reps INTEGER,
   techo_reps INTEGER,
   mejoro INTEGER,
+  serie_agregada INTEGER NOT NULL DEFAULT 0,
+  nota TEXT,
   UNIQUE (ejercicio_asignado_id, microciclo_id)
 );
 
@@ -230,7 +235,7 @@ CREATE TABLE IF NOT EXISTS registro_serie (
   numero_serie INTEGER NOT NULL,
   peso REAL NOT NULL,
   reps INTEGER NOT NULL,
-  rir INTEGER NOT NULL,
+  rir INTEGER, -- puede faltar en series de semana 0 (testeo exploratorio)
   molestia TEXT
 );
 

@@ -4,6 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import authRouter from './routes/auth.js';
 import guestRouter from './routes/guest.js';
+import perfilRouter from './routes/perfil.js';
+import rutinaRouter from './routes/rutina.js';
+import sesionesRouter from './routes/sesiones.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
@@ -16,6 +19,9 @@ app.use(cookieParser());
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
 app.use('/api/guest', guestRouter);
+app.use('/api/usuarios', perfilRouter);
+app.use('/api', rutinaRouter);
+app.use('/api', sesionesRouter);
 
 app.use(express.static(frontendDist));
 app.get('*', (req, res, next) => {

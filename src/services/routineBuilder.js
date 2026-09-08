@@ -79,15 +79,18 @@ export function tagsDisponibles({ tipo, checklist }) {
   return base;
 }
 
-function rangoRepsPara({ musculo, objetivo, esCompuestoPrincipalFuerza, region }) {
+export function rangoRepsPara({ musculo, objetivo, esCompuestoPrincipalFuerza, region }) {
   if (objetivo === 'rendimiento' && region === 'pierna') return { min: 8, max: 18 };
   if (objetivo === 'fuerza' && esCompuestoPrincipalFuerza) return { min: 6, max: 10 };
   return { min: 8, max: 16 };
 }
 
-function topeSeriesPara({ objetivo, esCompuestoPrincipalFuerza }) {
+export function topeSeriesPara({ objetivo, esCompuestoPrincipalFuerza }) {
   return objetivo === 'fuerza' && esCompuestoPrincipalFuerza ? 6 : 4;
 }
+
+export const SERIES_MINIMO = 2;
+export const INCREMENTO_KG_DEFAULT = 2.5;
 
 const getEjerciciosPorMusculo = db.prepare(`
   SELECT e.*, m.nombre AS musculo_nombre, m.region AS musculo_region
