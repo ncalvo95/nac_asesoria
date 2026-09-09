@@ -2,6 +2,8 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import { TODOS_MUSCULOS } from '../services/routineBuilder.js';
+import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
+import { aplicarDisponibilidad, aplicarEquipamiento, aplicarObjetivo } from '../services/perfilService.js';
 
 const router = Router({ mergeParams: true });
 
@@ -17,12 +19,6 @@ function checkAcceso(req, res) {
 router.use(requireAuth);
 
 // ---- Objetivo ----
-const upsertObjetivo = db.prepare(`
-  INSERT INTO objetivo (usuario_id, tipo, sub_objetivo, deporte)
-  VALUES (@usuario_id, @tipo, @sub_objetivo, @deporte)
-  ON CONFLICT(usuario_id) DO UPDATE SET tipo = excluded.tipo, sub_objetivo = excluded.sub_objetivo, deporte = excluded.deporte
-`);
-
 router.put('/:usuarioId/objetivo', (req, res) => {
   const usuario_id = checkAcceso(req, res);
   if (usuario_id === null) return;
@@ -34,17 +30,16 @@ router.put('/:usuarioId/objetivo', (req, res) => {
   if (tipo === 'rendimiento' && !deporte) {
     return res.status(400).json({ error: 'deporte es obligatorio para objetivo rendimiento.' });
   }
-  upsertObjetivo.run({ usuario_id, tipo, sub_objetivo, deporte: deporte || null });
-  res.json({ usuario_id, tipo, sub_objetivo, deporte: deporte || null });
+  const payload = { tipo, sub_objetivo, deporte: deporte || null };
+  if (debeQuedarPendiente(req.usuario, usuario_id)) {
+    const s = crearSolicitudCambio({ usuario_id, coach_id: req.usuario.coach_id, tipo: 'objetivo', payload });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
+  }
+  aplicarObjetivo(usuario_id, payload);
+  res.json({ usuario_id, ...payload });
 });
 
 // ---- Disponibilidad ----
-const upsertDisponibilidad = db.prepare(`
-  INSERT INTO disponibilidad (usuario_id, dias_por_semana, dias_especificos_json, duracion_sesion_json)
-  VALUES (@usuario_id, @dias_por_semana, @dias_especificos_json, @duracion_sesion_json)
-  ON CONFLICT(usuario_id) DO UPDATE SET dias_por_semana = excluded.dias_por_semana,
-    dias_especificos_json = excluded.dias_especificos_json, duracion_sesion_json = excluded.duracion_sesion_json
-`);
 const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 
 router.put('/:usuarioId/disponibilidad', (req, res) => {
@@ -60,24 +55,16 @@ router.put('/:usuarioId/disponibilidad', (req, res) => {
   if (!duracion_sesion || typeof duracion_sesion !== 'object') {
     return res.status(400).json({ error: 'duracion_sesion debe ser un objeto {dia: minutos}.' });
   }
-  upsertDisponibilidad.run({
-    usuario_id,
-    dias_por_semana: dias_especificos.length,
-    dias_especificos_json: JSON.stringify(dias_especificos),
-    duracion_sesion_json: JSON.stringify(duracion_sesion),
-  });
-  res.json({ usuario_id, dias_especificos, duracion_sesion });
+  const payload = { dias_especificos, duracion_sesion };
+  if (debeQuedarPendiente(req.usuario, usuario_id)) {
+    const s = crearSolicitudCambio({ usuario_id, coach_id: req.usuario.coach_id, tipo: 'disponibilidad', payload });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
+  }
+  aplicarDisponibilidad(usuario_id, payload);
+  res.json({ usuario_id, ...payload });
 });
 
 // ---- Equipamiento ----
-const upsertEquipamiento = db.prepare(`
-  INSERT INTO equipamiento (usuario_id, tipo, checklist_json, musculos_ubicacion_json)
-  VALUES (@usuario_id, @tipo, @checklist_json, @musculos_ubicacion_json)
-  ON CONFLICT(usuario_id) DO UPDATE SET
-    tipo = excluded.tipo, checklist_json = excluded.checklist_json,
-    musculos_ubicacion_json = excluded.musculos_ubicacion_json
-`);
-
 router.put('/:usuarioId/equipamiento', (req, res) => {
   const usuario_id = checkAcceso(req, res);
   if (usuario_id === null) return;
@@ -95,12 +82,13 @@ router.put('/:usuarioId/equipamiento', (req, res) => {
       return res.status(400).json({ error: `musculos_ubicacion invalido en "${musculo}": debe mapear un musculo valido a gimnasio o casa.` });
     }
   }
-  upsertEquipamiento.run({
-    usuario_id, tipo,
-    checklist_json: JSON.stringify(checklist || []),
-    musculos_ubicacion_json: JSON.stringify(musculosUbicacion),
-  });
-  res.json({ usuario_id, tipo, checklist: checklist || [], musculos_ubicacion: musculosUbicacion });
+  const payload = { tipo, checklist: checklist || [], musculos_ubicacion: musculosUbicacion };
+  if (debeQuedarPendiente(req.usuario, usuario_id)) {
+    const s = crearSolicitudCambio({ usuario_id, coach_id: req.usuario.coach_id, tipo: 'equipamiento', payload });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
+  }
+  aplicarEquipamiento(usuario_id, payload);
+  res.json({ usuario_id, ...payload });
 });
 
 // ---- Perfil medico (opcional) ----
@@ -208,6 +196,19 @@ router.get('/:usuarioId/preferencias-ejercicio', (req, res) => {
   const usuario_id = checkAcceso(req, res);
   if (usuario_id === null) return;
   res.json(db.prepare('SELECT * FROM preferencia_ejercicio_usuario WHERE usuario_id = ?').all(usuario_id));
+});
+
+// ---- Aprobacion del coach ----
+// Solo tiene efecto real si el usuario es cliente y tiene coach_id asignado
+// (ver debeQuedarPendiente en solicitudCambio.js) - se puede prender/apagar
+// igual aunque todavia no tenga coach, por si lo consigue despues.
+router.patch('/:usuarioId/aprobacion-coach', (req, res) => {
+  const usuario_id = checkAcceso(req, res);
+  if (usuario_id === null) return;
+  const { activo } = req.body || {};
+  if (typeof activo !== 'boolean') return res.status(400).json({ error: 'activo debe ser boolean.' });
+  db.prepare('UPDATE usuarios SET requiere_aprobacion_coach = ? WHERE id = ?').run(activo ? 1 : 0, usuario_id);
+  res.json({ usuario_id, requiere_aprobacion_coach: activo });
 });
 
 // ---- Vista consolidada del perfil (para armar la rutina) ----

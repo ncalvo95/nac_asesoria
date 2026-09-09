@@ -20,13 +20,19 @@ export function AuthProvider({ children }) {
     return u;
   }
 
+  async function claimInvite(payload) {
+    const u = await api.post('/auth/claim-invite', payload);
+    setUsuario(u);
+    return u;
+  }
+
   async function logout() {
     await api.post('/auth/logout').catch(() => {});
     setUsuario(null);
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, cargando, login, logout }}>
+    <AuthContext.Provider value={{ usuario, cargando, login, logout, claimInvite }}>
       {children}
     </AuthContext.Provider>
   );

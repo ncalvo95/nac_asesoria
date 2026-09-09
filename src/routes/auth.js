@@ -3,23 +3,14 @@ import db from '../db/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import {
   comparePassword, cookieOptions, COOKIE_NAME, crearSesion, hashPassword,
-  listarSesiones, revocarOtrasSesiones, revocarSesion, revocarSesionPorId,
+  listarSesiones, PASSWORD_MAX, PASSWORD_MIN, passwordValida,
+  revocarOtrasSesiones, revocarSesion, revocarSesionPorId, usuarioValido,
 } from '../services/auth.js';
+import {
+  claimInvite, createInvitePlaceholder, listarInvitesPendientes, validateInviteCode,
+} from '../services/invites.js';
 
 const router = Router();
-
-const PASSWORD_MIN = 6;
-const PASSWORD_MAX = 64;
-function passwordValida(password) {
-  return typeof password === 'string' && password.length >= PASSWORD_MIN && password.length <= PASSWORD_MAX;
-}
-
-// Mismo formato que Loot Ledger: 4-10 caracteres, letras/numeros/puntos/
-// guiones/guion bajo. Login por usuario, no por email.
-const USUARIO_REGEX = /^[A-Za-z0-9._-]{4,10}$/;
-function usuarioValido(usuario) {
-  return typeof usuario === 'string' && USUARIO_REGEX.test(usuario);
-}
 
 const getUsuarioPorNombreUsuario = db.prepare('SELECT * FROM usuarios WHERE usuario = ?');
 const insertUsuario = db.prepare(`
@@ -34,7 +25,7 @@ router.post('/login', async (req, res) => {
   }
 
   const usuario = getUsuarioPorNombreUsuario.get(nombreUsuario);
-  if (!usuario || !usuario.activo) {
+  if (!usuario || !usuario.activo || usuario.invite_code) {
     return res.status(401).json({ error: 'Credenciales invalidas.' });
   }
 
@@ -150,6 +141,65 @@ router.get('/usuarios', requireAuth, requireRole('admin', 'coach'), (req, res) =
 
   const tieneRutina = db.prepare("SELECT 1 FROM rutina WHERE usuario_id = ? AND estado = 'activa'");
   res.json(usuarios.map((u) => ({ ...u, tiene_rutina_activa: Boolean(tieneRutina.get(u.id)) })));
+});
+
+// ---- Invitaciones ----
+// El admin puede invitar coach o cliente (sin coach fijo, salvo que elija
+// uno); un coach solo invita clientes, siempre linkeados a si mismo.
+router.post('/invites', requireAuth, requireRole('admin', 'coach'), async (req, res, next) => {
+  const { rol, coach_id } = req.body || {};
+  if (!['coach', 'cliente'].includes(rol)) {
+    return res.status(400).json({ error: 'rol debe ser coach o cliente.' });
+  }
+  if (req.usuario.rol === 'coach' && rol !== 'cliente') {
+    return res.status(403).json({ error: 'Un coach solo puede invitar cuentas de cliente.' });
+  }
+  try {
+    const coachIdInvite = req.usuario.rol === 'coach' ? req.usuario.id : (rol === 'cliente' ? coach_id ?? null : null);
+    const invite = await createInvitePlaceholder({ rol, coach_id: coachIdInvite });
+    res.status(201).json(invite);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Invitaciones sin reclamar todavia (para volver a copiar el codigo).
+router.get('/invites', requireAuth, requireRole('admin', 'coach'), (req, res) => {
+  res.json(listarInvitesPendientes(req.usuario));
+});
+
+// ---- Rutas publicas para reclamar una invitacion (sin cuenta todavia) ----
+router.get('/invite/:code', (req, res) => {
+  const info = validateInviteCode(req.params.code);
+  if (!info) return res.status(404).json({ error: 'Codigo de invitacion invalido o ya usado.' });
+  res.json(info);
+});
+
+router.get('/coaches-disponibles', (req, res) => {
+  res.json(db.prepare("SELECT id, nombre FROM usuarios WHERE rol = 'coach' AND activo = 1 ORDER BY nombre").all());
+});
+
+router.post('/claim-invite', async (req, res, next) => {
+  const { code, nombre, usuario, password, coach_id } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'Falta el codigo de invitacion.' });
+  if (!nombre || !nombre.trim()) return res.status(400).json({ error: 'Falta el nombre.' });
+  if (!usuarioValido(usuario)) {
+    return res.status(400).json({ error: 'El usuario debe tener entre 4 y 10 caracteres: letras, numeros, puntos, guiones o guion bajo.' });
+  }
+  if (!passwordValida(password)) {
+    return res.status(400).json({ error: `La contraseña debe tener entre ${PASSWORD_MIN} y ${PASSWORD_MAX} caracteres.` });
+  }
+  try {
+    const cuenta = await claimInvite({ code, nombre, usuario, password, coach_id });
+    const { token } = crearSesion(cuenta.id, { userAgent: req.get('user-agent'), recordar: false });
+    res.cookie(COOKIE_NAME, token, cookieOptions(req, { recordar: false }));
+    res.status(201).json({ id: cuenta.id, nombre: cuenta.nombre, usuario: cuenta.usuario, rol: cuenta.rol });
+  } catch (err) {
+    if (err.code === 'INVALID_INVITE') return res.status(404).json({ error: err.message });
+    if (err.code === 'USUARIO_TOMADO') return res.status(409).json({ error: err.message });
+    if (err.code === 'COACH_INVALIDO') return res.status(400).json({ error: err.message });
+    next(err);
+  }
 });
 
 export default router;

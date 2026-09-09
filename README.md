@@ -14,9 +14,14 @@ Cloudflare Tunnel (ver Deployment).
   mismo proceso Node.
 - **Auth:** bcryptjs (costo 10) + token opaco en cookie httpOnly, con su
   hash SHA-256 guardado en una tabla `sesiones_auth` (revocar una sesión es
-  un `DELETE`, sin JWT ni blacklist). Roles: `admin`, `coach`, `cliente`.
-  Límite de 5 sesiones activas por usuario, "recordarme" (30 días) y
-  listar/revocar sesiones propias.
+  un `DELETE`, sin JWT ni blacklist). Login por **usuario** (4-10
+  caracteres, no email), mismo formato que Loot Ledger. Roles: `admin`,
+  `coach`, `cliente`. Límite de 5 sesiones activas por usuario, "recordarme"
+  (30 días) y listar/revocar sesiones propias. Alta de cuentas por
+  **invitación** (código de un solo uso, igual que Loot Ledger): el admin
+  invita coach o cliente, un coach solo invita clientes (quedan linkeados
+  a él automáticamente); reclamar el código activa la cuenta al toque, sin
+  aprobación manual extra.
 - **PWA:** instalable en el teléfono o la PC ("Agregar a pantalla de
   inicio") con ícono propio y arranque a pantalla completa, igual que Loot
   Ledger (`frontend/public/manifest.webmanifest` + `sw.js`).
@@ -86,9 +91,18 @@ Pendiente / simplificaciones conocidas:
   muestran, pero falta conectarlos al pool de selección de
   `routineBuilder.js`. El armado **manual** no tiene este límite: el
   usuario elige directamente cualquier ejercicio del catálogo.
-- El modelo de cuentas es cerrado a propósito (admin/coach dan de alta,
-  sin auto-registro ni invitación entre pares) - encaja con "un coach
-  gestiona a sus clientes", no con una app tipo marketplace.
+- El modelo de cuentas es cerrado a propósito (nadie se registra libremente
+  ni invita a quien quiera - el alta siempre nace de un código que generó un
+  admin o un coach) - encaja con "un coach gestiona a sus clientes", no con
+  una app tipo marketplace.
+- Un cliente con un coach asignado puede activar "que mi coach apruebe mis
+  cambios de objetivo/disponibilidad/equipamiento/rutina"
+  (`PATCH /usuarios/:id/aprobacion-coach`, toggle en la pantalla de
+  Progreso) - mientras está activo, esos cambios quedan en
+  `solicitud_cambio` hasta que el coach los aprueba o rechaza
+  (`src/services/solicitudCambio.js`, panel de coach). Si el coach edita
+  directo a su cliente no pasa por esto (el coach ya es quien aprobaría).
+  Apagado por default.
 
 ## Setup
 
@@ -198,8 +212,13 @@ prompt original).
 
 ```
 POST /api/auth/login                                  (admin o coach)
-POST /api/auth/usuarios            {rol: "coach"}      (solo admin)
-POST /api/auth/usuarios            {rol: "cliente"}    (admin o coach)
+POST /api/auth/usuarios            {rol: "coach"}      (solo admin, alta directa con password)
+POST /api/auth/usuarios            {rol: "cliente"}    (admin o coach, alta directa con password)
+  # alternativa por invitacion (igual que Loot Ledger, ver arriba):
+  # POST /api/auth/invites {rol}                 -> {code}   (admin o coach)
+  # GET  /api/auth/invite/:code                              (publica, valida sin consumir)
+  # POST /api/auth/claim-invite {code, nombre, usuario, password, coach_id?}
+  #   -> activa la cuenta y loguea de una, publica
 PUT  /api/usuarios/:id/objetivo
 PUT  /api/usuarios/:id/disponibilidad
 PUT  /api/usuarios/:id/equipamiento

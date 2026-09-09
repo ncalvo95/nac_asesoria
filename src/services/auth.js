@@ -23,6 +23,21 @@ export function comparePassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
+// Mismo formato que Loot Ledger: usuario 4-10 caracteres, password 6-64 -
+// letras/numeros/puntos/guiones/guion bajo. Compartido entre login/alta de
+// cuentas directa y el reclamo de invitaciones.
+export const USUARIO_REGEX = /^[A-Za-z0-9._-]{4,10}$/;
+export const PASSWORD_MIN = 6;
+export const PASSWORD_MAX = 64;
+
+export function usuarioValido(usuario) {
+  return typeof usuario === 'string' && USUARIO_REGEX.test(usuario);
+}
+
+export function passwordValida(password) {
+  return typeof password === 'string' && password.length >= PASSWORD_MIN && password.length <= PASSWORD_MAX;
+}
+
 function generarToken() {
   return crypto.randomBytes(32).toString('hex');
 }
@@ -64,7 +79,7 @@ export const crearSesion = db.transaction((usuarioId, { userAgent, recordar }) =
 });
 
 const getSesionValida = db.prepare(`
-  SELECT s.id AS sesion_id, s.last_seen_at, u.id, u.nombre, u.usuario, u.rol, u.coach_id, u.activo
+  SELECT s.id AS sesion_id, s.last_seen_at, u.id, u.nombre, u.usuario, u.rol, u.coach_id, u.activo, u.requiere_aprobacion_coach
   FROM sesiones_auth s JOIN usuarios u ON u.id = s.usuario_id
   WHERE s.token_hash = ? AND s.expires_at > datetime('now')
 `);

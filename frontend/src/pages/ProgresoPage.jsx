@@ -3,10 +3,19 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api, API_BASE } from '../api/client.js';
 
+const TIPO_LABEL = {
+  objetivo: 'Objetivo',
+  disponibilidad: 'Disponibilidad',
+  equipamiento: 'Equipamiento',
+  rutina_auto: 'Generar rutina (automática)',
+  rutina_manual: 'Generar rutina (manual)',
+};
+
 export default function ProgresoPage() {
   const { usuario: sesion } = useAuth();
   const { usuarioId: usuarioIdParam } = useParams();
   const usuario = usuarioIdParam ? { id: Number(usuarioIdParam) } : sesion;
+  const esPropioCliente = !usuarioIdParam && sesion.rol === 'cliente';
   const [rutina, setRutina] = useState(null);
   const [progreso, setProgreso] = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -70,6 +79,8 @@ export default function ProgresoPage() {
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-8">
+      {esPropioCliente && sesion.coach_id != null && <AprobacionCoach usuario={sesion} />}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[17px] font-bold">Progreso</h1>
@@ -190,5 +201,62 @@ export default function ProgresoPage() {
         </p>
       )}
     </div>
+  );
+}
+
+// Toggle "que mi coach apruebe mis cambios de programacion" + lista de
+// solicitudes propias (para saber que esta esperando aprobacion). Solo se
+// muestra si el usuario es un cliente viendo su propio progreso y tiene un
+// coach asignado - ver debeQuedarPendiente en solicitudCambio.js.
+function AprobacionCoach({ usuario }) {
+  const [activo, setActivo] = useState(Boolean(usuario.requiere_aprobacion_coach));
+  const [solicitudes, setSolicitudes] = useState([]);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    api.get(`/usuarios/${usuario.id}/solicitudes`).then(setSolicitudes).catch(() => {});
+  }, [usuario.id]);
+
+  const pendientes = solicitudes.filter((s) => s.estado === 'pendiente');
+
+  async function toggle() {
+    setGuardando(true);
+    try {
+      const nuevo = !activo;
+      await api.patch(`/usuarios/${usuario.id}/aprobacion-coach`, { activo: nuevo });
+      setActivo(nuevo);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-2.5 bg-surface border border-border rounded-xl p-3.5">
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-[12.5px] text-text-muted leading-snug">
+          Que mi coach apruebe mis cambios de objetivo, disponibilidad, equipamiento y rutina
+        </span>
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={guardando}
+          className={`flex-none w-11 h-6 rounded-full transition-colors relative disabled:opacity-60 ${activo ? 'bg-accent' : 'bg-border'}`}
+        >
+          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-surface transition-transform ${activo ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+        </button>
+      </label>
+      {pendientes.length > 0 && (
+        <div className="flex flex-col gap-1 pt-1 border-t border-border">
+          <span className="text-[11.5px] font-semibold text-warning uppercase tracking-wide">
+            Esperando aprobación
+          </span>
+          {pendientes.map((s) => (
+            <span key={s.id} className="text-[12px] text-text-muted">
+              {TIPO_LABEL[s.tipo] || s.tipo}
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

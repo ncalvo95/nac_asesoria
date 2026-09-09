@@ -96,6 +96,10 @@ export default function LoginPage() {
       <Link to="/invitado" className="text-[13px] text-center text-text-muted">
         <span className="text-accent font-semibold">Probá el plan de 6 meses sin registro →</span>
       </Link>
+
+      <Link to="/invitacion" className="text-[13px] text-center text-text-muted">
+        ¿Tenés un código de invitación? <span className="text-accent font-semibold">Usalo acá →</span>
+      </Link>
     </div>
   );
 }

@@ -94,27 +94,38 @@ export default function OnboardingPage() {
 
     setEnviando(true);
     try {
-      await api.put(`/usuarios/${usuario.id}/objetivo`, {
+      let huboPendientes = false;
+      const marcar = (resultado) => {
+        if (resultado?.pendiente) huboPendientes = true;
+        return resultado;
+      };
+
+      marcar(await api.put(`/usuarios/${usuario.id}/objetivo`, {
         tipo, sub_objetivo: subObjetivo, deporte: tipo === 'rendimiento' ? deporte : undefined,
-      });
+      }));
 
       if (modo === 'manual') {
-        await api.post(`/usuarios/${usuario.id}/rutina/manual`, {
+        marcar(await api.post(`/usuarios/${usuario.id}/rutina/manual`, {
           dias: diasManual.map((d) => ({ dia_semana: d.dia_semana, ejercicios: d.ejercicios.map((ej) => ej.id) })),
-        });
+        }));
       } else {
         const duracionPorDia = Object.fromEntries(dias.map((d) => [d, Number(duracion)]));
-        await api.put(`/usuarios/${usuario.id}/disponibilidad`, {
+        marcar(await api.put(`/usuarios/${usuario.id}/disponibilidad`, {
           dias_especificos: dias, duracion_sesion: duracionPorDia,
-        });
-        await api.put(`/usuarios/${usuario.id}/equipamiento`, {
+        }));
+        marcar(await api.put(`/usuarios/${usuario.id}/equipamiento`, {
           tipo: equipoTipo,
           checklist: equipoTipo === 'casa' || equipoTipo === 'mixto' ? checklist : [],
           musculos_ubicacion: equipoTipo === 'mixto' ? musculosUbicacion : {},
-        });
-        await api.post(`/usuarios/${usuario.id}/rutina`);
+        }));
+        marcar(await api.post(`/usuarios/${usuario.id}/rutina`));
       }
-      navigate('/entrenamiento');
+
+      // Si algo quedo pendiente de aprobacion del coach, no hay rutina nueva
+      // (o no refleja lo recien pedido) - mandamos a Progreso, que muestra
+      // que esta esperando aprobacion, en vez de a Entrenamiento como si ya
+      // se hubiera aplicado.
+      navigate(huboPendientes ? '/progreso' : '/entrenamiento');
     } catch (err) {
       setError(err.message || 'No se pudo generar la rutina.');
     } finally {

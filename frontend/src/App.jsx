@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Layout from './components/Layout.jsx';
 import CoachClientLayout from './components/CoachClientLayout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
+import InvitePage from './pages/InvitePage.jsx';
 import GuestPage from './pages/GuestPage.jsx';
 import HomePage from './pages/HomePage.jsx';
 import OnboardingPage from './pages/OnboardingPage.jsx';
@@ -19,6 +20,8 @@ export default function App() {
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/invitacion" element={<InvitePage />} />
+          <Route path="/invitacion/:code" element={<InvitePage />} />
           <Route path="/invitado" element={<GuestPage />} />
           <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
           <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />

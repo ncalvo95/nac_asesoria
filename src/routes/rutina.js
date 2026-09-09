@@ -5,6 +5,7 @@ import { crearRutina, crearRutinaManual, obtenerRutinaActiva, reordenarEjercicio
 import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
 import { tagsDisponibles } from '../services/routineBuilder.js';
+import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -30,6 +31,10 @@ function getRutinaOr404(req, res) {
 router.post('/usuarios/:usuarioId/rutina', (req, res, next) => {
   const usuarioId = Number(req.params.usuarioId);
   if (!checkAccesoUsuario(req, res, usuarioId)) return;
+  if (debeQuedarPendiente(req.usuario, usuarioId)) {
+    const s = crearSolicitudCambio({ usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_auto', payload: {} });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
+  }
   try {
     const rutina = crearRutina(usuarioId);
     res.status(201).json(rutina);
@@ -71,6 +76,11 @@ router.post('/usuarios/:usuarioId/rutina/manual', (req, res, next) => {
     if (new Set(dia.ejercicios).size !== dia.ejercicios.length) {
       return res.status(400).json({ error: `El dia ${dia.dia_semana} tiene un ejercicio repetido.` });
     }
+  }
+
+  if (debeQuedarPendiente(req.usuario, usuarioId)) {
+    const s = crearSolicitudCambio({ usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_manual', payload: { dias } });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
   }
 
   try {

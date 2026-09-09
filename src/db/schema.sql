@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS usuarios (
   anios_entrenamiento_continuo REAL,
   unidad_medida TEXT NOT NULL DEFAULT 'kg_cm' CHECK (unidad_medida IN ('kg_cm', 'lb_in')),
   activo INTEGER NOT NULL DEFAULT 1,
+  -- No NULL mientras la cuenta es un placeholder de invitacion sin reclamar
+  -- (usuario/password_hash random, ver src/services/invites.js). Se pisa
+  -- (vuelve a NULL) al reclamar el codigo - a partir de ahi la cuenta ya es
+  -- utilizable y el codigo queda consumido.
+  invite_code TEXT UNIQUE,
+  -- Si esta en 1 (solo aplica a rol 'cliente' con coach_id asignado), sus
+  -- cambios de objetivo/disponibilidad/equipamiento/rutina no se aplican al
+  -- toque: quedan en solicitud_cambio hasta que el coach los apruebe.
+  requiere_aprobacion_coach INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -45,6 +54,26 @@ CREATE TABLE IF NOT EXISTS sesiones_auth (
 
 CREATE INDEX IF NOT EXISTS idx_sesiones_auth_usuario ON sesiones_auth(usuario_id);
 CREATE INDEX IF NOT EXISTS idx_sesiones_auth_token_hash ON sesiones_auth(token_hash);
+
+-- Cambios de un cliente con requiere_aprobacion_coach=1 que quedan a la
+-- espera de que su coach los apruebe antes de aplicarse de verdad (ver
+-- src/services/solicitudCambio.js). payload_json guarda exactamente lo que
+-- se hubiera aplicado directo (mismo shape que el body del endpoint
+-- original) - al aprobar se aplica tal cual, sin volver a pedir datos.
+CREATE TABLE IF NOT EXISTS solicitud_cambio (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  coach_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL CHECK (tipo IN ('objetivo', 'disponibilidad', 'equipamiento', 'rutina_auto', 'rutina_manual')),
+  payload_json TEXT NOT NULL,
+  estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'aprobada', 'rechazada')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resuelta_at TEXT,
+  nota_coach TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_solicitud_cambio_coach ON solicitud_cambio(coach_id, estado);
+CREATE INDEX IF NOT EXISTS idx_solicitud_cambio_usuario ON solicitud_cambio(usuario_id);
 
 CREATE TABLE IF NOT EXISTS perfil_medico (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
