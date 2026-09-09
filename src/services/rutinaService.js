@@ -32,6 +32,33 @@ const desactivarRutinasPrevias = db.prepare(
   "UPDATE rutina SET estado = 'finalizada' WHERE usuario_id = ? AND estado = 'activa'"
 );
 
+// Persiste el resultado de armarRutina (dias + ejercicios) para una rutina
+// ya creada - compartido por crearRutina y crearRutinaConSplit, que solo
+// difieren en como arman "rutinaPorDia" (split fijo vs elegido a mano).
+function persistirDias(rutinaId, rutinaPorDia) {
+  for (const dia of rutinaPorDia) {
+    const { lastInsertRowid: diaRutinaId } = insertDiaRutina.run({
+      rutina_id: rutinaId,
+      numero_dia: dia.numero_dia,
+      dia_semana: dia.dia_semana,
+      musculos_trabajados_json: JSON.stringify(dia.ejercicios.map((e) => e.musculo)),
+    });
+
+    for (const ej of dia.ejercicios) {
+      insertEjercicioAsignado.run({
+        dia_rutina_id: diaRutinaId,
+        ejercicio_id: ej.ejercicio_id,
+        orden: ej.orden,
+        es_top_de_musculo: ej.es_top_de_musculo ? 1 : 0,
+        musculo_objetivo_id: getMusculoId.get(ej.musculo).id,
+        series_actuales: 2,
+        rango_reps_min: ej.rango_reps_min,
+        rango_reps_max: ej.rango_reps_max,
+      });
+    }
+  }
+}
+
 // Genera y persiste una rutina nueva para el usuario, en base al perfil ya
 // cargado (objetivo, disponibilidad, equipamiento, exclusiones). Finaliza
 // cualquier rutina activa previa. Crea el microciclo 0 (semana de testeo).
@@ -62,29 +89,7 @@ export const crearRutina = db.transaction((usuarioId) => {
 
   const splitNombre = describirSplit(diasEspecificos.length, rutinaPorDia);
   const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: splitNombre });
-
-  for (const dia of rutinaPorDia) {
-    const { lastInsertRowid: diaRutinaId } = insertDiaRutina.run({
-      rutina_id: rutinaId,
-      numero_dia: dia.numero_dia,
-      dia_semana: dia.dia_semana,
-      musculos_trabajados_json: JSON.stringify(dia.ejercicios.map((e) => e.musculo)),
-    });
-
-    for (const ej of dia.ejercicios) {
-      insertEjercicioAsignado.run({
-        dia_rutina_id: diaRutinaId,
-        ejercicio_id: ej.ejercicio_id,
-        orden: ej.orden,
-        es_top_de_musculo: ej.es_top_de_musculo ? 1 : 0,
-        musculo_objetivo_id: getMusculoId.get(ej.musculo).id,
-        series_actuales: 2,
-        rango_reps_min: ej.rango_reps_min,
-        rango_reps_max: ej.rango_reps_max,
-      });
-    }
-  }
-
+  persistirDias(rutinaId, rutinaPorDia);
   insertMicrociclo.run(rutinaId, 0);
 
   return obtenerRutinaActiva(usuarioId);
@@ -94,6 +99,47 @@ function describirSplit(nDias, rutinaPorDia) {
   const tipos = [...new Set(rutinaPorDia.map((d) => d.nombre_tipo))];
   return `${nDias} dias/semana - ${tipos.join('/')}`;
 }
+
+// Alternativa a crearRutina: el usuario elige el split (que musculos va cada
+// dia) y el motor sigue eligiendo los ejercicios dentro de cada uno (a
+// diferencia de crearRutinaManual, donde el usuario tambien elige los
+// ejercicios). No pasa por disponibilidad (mismo criterio que
+// crearRutinaManual: el split ya lo define el propio "dias" del payload) -
+// si requiere equipamiento, porque el motor SI filtra por el al elegir.
+// dias: [{ dia_semana, musculos: [...], duracion_minutos }] ya validado por
+// la ruta.
+export const crearRutinaConSplit = db.transaction((usuarioId, { dias }) => {
+  const objetivo = getObjetivo.get(usuarioId);
+  const equipamiento = getEquipamiento.get(usuarioId);
+  if (!objetivo || !equipamiento) {
+    throw new Error('Falta completar objetivo o equipamiento antes de generar la rutina.');
+  }
+
+  const exclusiones = getExclusiones.all(usuarioId).map((r) => r.ejercicio_id);
+  const diasEspecificos = dias.map((d) => d.dia_semana);
+  const duracionPorDia = Object.fromEntries(dias.map((d) => [d.dia_semana, d.duracion_minutos]));
+  const secuenciaPersonalizada = dias.map((d) => ({ dia_semana: d.dia_semana, musculos: d.musculos }));
+
+  const rutinaPorDia = armarRutina({
+    diasEspecificos,
+    objetivo: objetivo.tipo,
+    equipamiento: {
+      tipo: equipamiento.tipo,
+      checklist: JSON.parse(equipamiento.checklist_json),
+      musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
+    },
+    exclusiones,
+    duracionPorDia,
+    secuenciaPersonalizada,
+  });
+
+  desactivarRutinasPrevias.run(usuarioId);
+  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: 'Split personalizado' });
+  persistirDias(rutinaId, rutinaPorDia);
+  insertMicrociclo.run(rutinaId, 0);
+
+  return obtenerRutinaActiva(usuarioId);
+});
 
 // Alternativa a crearRutina: el usuario elige el/los ejercicios de cada dia
 // el mismo (en vez de que el motor los elija por equipamiento/exclusiones).
@@ -315,3 +361,68 @@ export const sustituirEjercicioPreTesteo = db.transaction(({ ejercicioAsignadoId
 
   return { ejercicio_asignado_id: ejercicioAsignadoId, nuevo_ejercicio_id: nuevoEjercicioId, rango_reps_min: rango.min, rango_reps_max: rango.max };
 });
+
+const getMaxOrdenDia = db.prepare('SELECT COALESCE(MAX(orden), 0) AS maxOrden FROM ejercicio_asignado WHERE dia_rutina_id = ?');
+const insertEjercicioAsignadoExtra = db.prepare(`
+  INSERT INTO ejercicio_asignado (
+    dia_rutina_id, ejercicio_id, orden, es_top_de_musculo, musculo_objetivo_id,
+    series_actuales, peso_actual, rango_reps_min, rango_reps_max, modo_lineal_forzado
+  ) VALUES (?, ?, ?, 0, ?, ?, NULL, ?, ?, 0)
+`);
+
+// Suma un ejercicio EXTRA a un musculo que ya esta presente ese dia (no
+// reemplaza nada, a diferencia de sustituir) - queda con es_top_de_musculo=0
+// (el "top" sigue siendo el que ya estaba, es el que suma la serie extra si
+// el musculo se estanca) y series_actuales = SERIES_MINIMO, como si fuera un
+// ejercicio recien agregado a testear.
+export const agregarEjercicioADia = db.transaction(({ diaRutinaId, usuarioId, musculoId, ejercicioId }) => {
+  const nuevo = getEjercicioCatalogo.get(ejercicioId);
+  if (!nuevo) throw new Error('Ejercicio no encontrado.');
+  if (nuevo.musculo_primario_id !== musculoId) throw new Error('El ejercicio no es del musculo indicado.');
+
+  const yaUsado = db.prepare('SELECT 1 FROM ejercicio_asignado WHERE dia_rutina_id = ? AND ejercicio_id = ?').get(diaRutinaId, ejercicioId);
+  if (yaUsado) throw new Error('Ese ejercicio ya esta asignado en este dia.');
+
+  const equipamiento = getEquipamiento.get(usuarioId);
+  const tags = tagsDisponibles({
+    tipo: equipamiento.tipo,
+    checklist: JSON.parse(equipamiento.checklist_json),
+    musculo: nuevo.musculo_nombre,
+    musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
+  });
+  const requeridos = JSON.parse(nuevo.equipamiento_requerido_json);
+  if (!requeridos.every((tag) => tags.has(tag))) {
+    throw new Error('El ejercicio no es compatible con tu equipamiento disponible.');
+  }
+
+  const objetivo = getObjetivo.get(usuarioId);
+  const rango = rangoRepsPara({
+    musculo: nuevo.musculo_nombre,
+    objetivo: objetivo.tipo,
+    esCompuestoPrincipalFuerza: Boolean(nuevo.es_compuesto_principal_fuerza),
+    region: nuevo.musculo_region,
+  });
+
+  const { maxOrden } = getMaxOrdenDia.get(diaRutinaId);
+  const info = insertEjercicioAsignadoExtra.run(diaRutinaId, ejercicioId, maxOrden + 1, musculoId, SERIES_MINIMO, rango.min, rango.max);
+  return {
+    id: info.lastInsertRowid, ejercicio_id: ejercicioId, ejercicio_nombre: nuevo.nombre,
+    musculo_objetivo_id: musculoId, rango_reps_min: rango.min, rango_reps_max: rango.max,
+    es_top_de_musculo: false, series_actuales: SERIES_MINIMO,
+  };
+});
+
+// Inversa de agregarEjercicioADia - solo se puede sacar un ejercicio que NO
+// sea el top de su musculo (el top se sustituye, nunca se saca sin
+// reemplazo) y que todavia no tenga ninguna serie registrada (si ya
+// entreno con el, sacarlo de golpe le haria perder ese historial).
+export function quitarEjercicioAsignado(ejercicioAsignadoId) {
+  const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
+  if (!ea) throw new Error('Ejercicio asignado no encontrado.');
+  if (ea.es_top_de_musculo) {
+    throw new Error('No se puede quitar el ejercicio principal (top) de un musculo - sustituilo en cambio.');
+  }
+  const tieneSeries = db.prepare('SELECT 1 FROM registro_serie WHERE ejercicio_asignado_id = ?').get(ejercicioAsignadoId);
+  if (tieneSeries) throw new Error('Ese ejercicio ya tiene series registradas, no se puede quitar.');
+  db.prepare('DELETE FROM ejercicio_asignado WHERE id = ?').run(ejercicioAsignadoId);
+}

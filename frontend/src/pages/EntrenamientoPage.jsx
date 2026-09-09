@@ -102,6 +102,14 @@ function Semana0Form({ rutina, usuario, onListo }) {
 
   const diaActual = dias.find((d) => d.id === diaId) ?? dias[0];
 
+  const musculosDelDiaActual = useMemo(() => {
+    const vistos = new Map();
+    for (const e of diaActual.ejercicios) {
+      if (!vistos.has(e.musculo_objetivo_id)) vistos.set(e.musculo_objetivo_id, e.musculo_nombre);
+    }
+    return [...vistos.entries()].map(([id, nombre]) => ({ id, nombre }));
+  }, [diaActual]);
+
   function set(id, campo, valor) {
     setValores((v) => ({ ...v, [id]: { ...v[id], [campo]: valor } }));
   }
@@ -114,6 +122,24 @@ function Semana0Form({ rutina, usuario, onListo }) {
         : e)),
     })));
     setValores((v) => ({ ...v, [ejercicioAsignadoId]: { peso: '', reps1: '', reps2: '' } }));
+  }
+
+  function onAgregado(diaId, nuevo, musculoNombre) {
+    setDias((prev) => prev.map((d) => (d.id === diaId
+      ? { ...d, ejercicios: [...d.ejercicios, { ...nuevo, musculo_nombre: musculoNombre }] }
+      : d)));
+    setValores((v) => ({ ...v, [nuevo.id]: { peso: '', reps1: '', reps2: '' } }));
+  }
+
+  function onQuitado(diaId, ejercicioAsignadoId) {
+    setDias((prev) => prev.map((d) => (d.id === diaId
+      ? { ...d, ejercicios: d.ejercicios.filter((e) => e.id !== ejercicioAsignadoId) }
+      : d)));
+    setValores((v) => {
+      const copia = { ...v };
+      delete copia[ejercicioAsignadoId];
+      return copia;
+    });
   }
 
   async function onCambiarFecha(nuevaFecha) {
@@ -209,9 +235,20 @@ function Semana0Form({ rutina, usuario, onListo }) {
               <NumberField label="Reps S1" value={valores[ej.id].reps1} onChange={(v) => set(ej.id, 'reps1', v)} />
               <NumberField label="Reps S2" value={valores[ej.id].reps2} onChange={(v) => set(ej.id, 'reps2', v)} />
             </div>
-            <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
+            <div className="flex items-center justify-between">
+              <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
+              {!ej.es_top_de_musculo && (
+                <QuitarEjercicioBoton ejercicioAsignadoId={ej.id} onQuitado={() => onQuitado(diaActual.id, ej.id)} />
+              )}
+            </div>
           </div>
         ))}
+
+        <AgregarEjercicioDia
+          diaRutinaId={diaActual.id}
+          musculos={musculosDelDiaActual}
+          onAgregado={(nuevo, musculoNombre) => onAgregado(diaActual.id, nuevo, musculoNombre)}
+        />
       </div>
 
       {error && <p className="text-[13px] text-danger px-1">{error}</p>}
@@ -316,6 +353,158 @@ function CambiarEjercicioSemana0({ ejercicio, onSustituido }) {
   );
 }
 
+// Suma un ejercicio EXTRA a un musculo ya presente ese dia (no reemplaza
+// nada) - usa GET /dias/:id/musculos/:id/candidatos + POST /dias/:id/ejercicios.
+// Compartido entre Semana0Form (estado local) y RegistroDia (recarga completa).
+function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
+  const [abierto, setAbierto] = useState(false);
+  const [musculoId, setMusculoId] = useState(musculos.length === 1 ? musculos[0].id : '');
+  const [candidatos, setCandidatos] = useState(null);
+  const [elegido, setElegido] = useState('');
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  function cargarCandidatos(id) {
+    setMusculoId(id);
+    setCandidatos(null);
+    setElegido('');
+    setError('');
+    api.get(`/dias/${diaRutinaId}/musculos/${id}/candidatos`).then(setCandidatos).catch((err) => setError(err.message));
+  }
+
+  function abrir() {
+    setAbierto(true);
+    setError('');
+    if (musculos.length === 1) cargarCandidatos(musculos[0].id);
+  }
+
+  async function confirmar() {
+    if (!musculoId || !elegido) {
+      setError('Elegí un músculo y un ejercicio.');
+      return;
+    }
+    setEnviando(true);
+    setError('');
+    try {
+      const nuevo = await api.post(`/dias/${diaRutinaId}/ejercicios`, { musculo_id: Number(musculoId), ejercicio_id: Number(elegido) });
+      const musculoNombre = musculos.find((m) => m.id === Number(musculoId))?.nombre;
+      onAgregado(nuevo, musculoNombre);
+      setAbierto(false);
+      setMusculoId(musculos.length === 1 ? musculos[0].id : '');
+      setCandidatos(null);
+      setElegido('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={abrir}
+        className="self-start text-[12.5px] font-semibold text-accent underline underline-offset-2 px-1"
+      >
+        + Agregar ejercicio
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-surface border border-dashed border-border rounded-xl p-3.5 flex flex-col gap-2.5">
+      <span className="text-[12px] font-semibold">Agregar un ejercicio extra a este día</span>
+
+      {musculos.length > 1 && (
+        <div className="flex gap-1.5 flex-wrap">
+          {musculos.map((m) => (
+            <button
+              type="button"
+              key={m.id}
+              onClick={() => cargarCandidatos(m.id)}
+              className={`px-2.5 h-8 rounded-full border text-[12px] font-medium capitalize ${
+                Number(musculoId) === m.id ? 'bg-accent text-accent-fg border-accent' : 'bg-bg border-border text-text-muted'
+              }`}
+            >
+              {m.nombre}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {musculoId && candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
+      {musculoId && candidatos?.length === 0 && (
+        <span className="text-[12px] text-text-muted">No hay más ejercicios para ese músculo con tu equipamiento actual.</span>
+      )}
+      {musculoId && candidatos?.length > 0 && (
+        <select
+          value={elegido}
+          onChange={(e) => setElegido(e.target.value)}
+          className="h-9 rounded-lg border border-border bg-bg px-2 text-[13px] outline-none focus:border-accent"
+        >
+          <option value="">Elegí un ejercicio…</option>
+          {candidatos.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </select>
+      )}
+
+      {error && <span className="text-[12px] text-danger">{error}</span>}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setAbierto(false)}
+          className="flex-1 h-9 rounded-lg border border-border text-text-muted text-[12.5px] font-semibold"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={confirmar}
+          disabled={enviando || !elegido}
+          className="flex-1 h-9 rounded-lg bg-accent text-accent-fg text-[13px] font-semibold disabled:opacity-60"
+        >
+          {enviando ? 'Agregando…' : 'Agregar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function QuitarEjercicioBoton({ ejercicioAsignadoId, onQuitado }) {
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState('');
+
+  async function quitar() {
+    setEnviando(true);
+    setError('');
+    try {
+      await api.del(`/ejercicios-asignados/${ejercicioAsignadoId}`);
+      onQuitado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <button
+        type="button"
+        onClick={quitar}
+        disabled={enviando}
+        className="text-[11px] font-medium text-danger underline underline-offset-2 disabled:opacity-60"
+      >
+        {enviando ? 'Quitando…' : 'Quitar'}
+      </button>
+      {error && <span className="text-[11px] text-danger">{error}</span>}
+    </div>
+  );
+}
+
 function NumberField({ label, value, onChange }) {
   return (
     <label className="flex flex-col gap-1">
@@ -377,6 +566,14 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [ok, setOk] = useState(false);
+
+  const musculosDelDia = useMemo(() => {
+    const vistos = new Map();
+    for (const e of dia.ejercicios) {
+      if (!vistos.has(e.musculo_objetivo_id)) vistos.set(e.musculo_objetivo_id, e.musculo_nombre);
+    }
+    return [...vistos.entries()].map(([id, nombre]) => ({ id, nombre }));
+  }, [dia]);
 
   const notasPorEjercicio = useMemo(() => {
     const map = new Map();
@@ -507,6 +704,8 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
             </div>
           );
         })}
+
+        <AgregarEjercicioDia diaRutinaId={dia.id} musculos={musculosDelDia} onAgregado={onRutinaCambiada} />
       </div>
 
       {error && <p className="text-[13px] text-danger">{error}</p>}
@@ -558,13 +757,18 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado }) {
         >
           {linealForzado ? '✓ Lineal forzado' : 'Lineal forzado'}
         </button>
-        <button
-          type="button"
-          onClick={() => setMostrarSustituir((v) => !v)}
-          className="text-[11px] font-medium text-text-muted underline underline-offset-2"
-        >
-          Cambiar ejercicio
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setMostrarSustituir((v) => !v)}
+            className="text-[11px] font-medium text-text-muted underline underline-offset-2"
+          >
+            Cambiar ejercicio
+          </button>
+          {!ejercicio.es_top_de_musculo && (
+            <QuitarEjercicioBoton ejercicioAsignadoId={ejercicio.id} onQuitado={onCambiado} />
+          )}
+        </div>
       </div>
       {mostrarSustituir && (
         <SustituirEjercicio

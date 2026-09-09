@@ -43,9 +43,24 @@ cierre de microciclo → progreso → export a Excel):
 - Generación y persistencia de la rutina real por split según días/semana
   (`src/services/routineBuilder.js`, `src/services/rutinaService.js`,
   `src/routes/rutina.js`), con reordenamiento de ejercicios por el usuario.
-  Alternativa: **armado manual** (`POST /usuarios/:id/rutina/manual`) - el
-  usuario elige directamente los ejercicios de cada día desde el catálogo
-  en vez de que el motor los elija por equipamiento/exclusiones.
+  El armado automático llena el tiempo disponible por día (según la
+  duración declarada) sumando más de un ejercicio por músculo cuando sobra
+  tiempo, no solo el mínimo. Alternativas al armado 100% automático:
+  - **Armado manual** (`POST /usuarios/:id/rutina/manual`) - el usuario
+    elige directamente los ejercicios de cada día desde el catálogo en vez
+    de que el motor los elija por equipamiento/exclusiones.
+  - **Split personalizado** (`POST /usuarios/:id/rutina/split`) - el
+    usuario elige qué músculos entrena cada día (a diferencia del armado
+    manual, acá el motor sigue eligiendo los ejercicios dentro de cada
+    músculo). El frontend avisa (sin bloquear) si un músculo queda en dos
+    días calendario consecutivos.
+
+  Ya generada la rutina, se puede **agregar un ejercicio extra** a un
+  músculo que ya está presente ese día (`POST /dias/:id/ejercicios`,
+  candidatos vía `GET /dias/:id/musculos/:id/candidatos`) o **quitarlo**
+  (`DELETE /ejercicios-asignados/:id` - no se puede quitar el ejercicio
+  "top" de un músculo ni uno que ya tenga series registradas), además de
+  la sustitución existente.
 - Semana 0 (testeo) y registro de sesión/serie (`src/services/progressionEngine.js`,
   `src/routes/sesiones.js`).
 - **Motor de cierre de microciclo** (el núcleo del sistema): calcula
@@ -71,7 +86,12 @@ cierre de microciclo → progreso → export a Excel):
   navegador), y un panel de coach/admin (listado de clientes, alta de
   cuentas, ver la rutina/progreso/reportes/preferencias de ejercicio de un
   cliente puntual — excluir ejercicios, marcar preferidos, o agregar un
-  ejercicio propio al pool de sustitución de un músculo).
+  ejercicio propio al pool de sustitución de un músculo), y un
+  **catálogo de ejercicios** administrado por el admin (`/catalogo`,
+  `POST /api/catalogo/ejercicios`, `PATCH /api/catalogo/ejercicios/:id/activo`)
+  - el admin da de alta ejercicios nuevos (músculo, tipo, patrón de
+  movimiento, equipamiento requerido) que quedan visibles para todos los
+  usuarios al armar o sustituir, y puede activar/desactivar los existentes.
   Diseño mobile-first, paleta clínica/neutra con acento configurable
   (mismos tokens que la [vista previa visual](https://claude.ai/code/artifact/e2941d16-a51b-4dad-ad83-4921bfcfecfe)
   que se acordó antes de construirlo), tema oscuro automático por

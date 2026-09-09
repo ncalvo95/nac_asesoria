@@ -2,12 +2,12 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
-  crearRutina, crearRutinaManual, obtenerRutinaActiva, reordenarEjercicios,
-  sustituirEjercicio, sustituirEjercicioPreTesteo,
+  agregarEjercicioADia, crearRutina, crearRutinaConSplit, crearRutinaManual, obtenerRutinaActiva,
+  quitarEjercicioAsignado, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
-import { tagsDisponibles } from '../services/routineBuilder.js';
+import { tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
 import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
 
 const router = Router();
@@ -91,6 +91,49 @@ router.post('/usuarios/:usuarioId/rutina/manual', (req, res, next) => {
     res.status(201).json(rutina);
   } catch (err) {
     if (err.message.includes('objetivo') || err.message.includes('Ejercicio')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// Alternativa a POST /usuarios/:usuarioId/rutina: el usuario elige que
+// musculos va cada dia (el split), pero el motor sigue eligiendo los
+// ejercicios adentro de cada uno (a diferencia de /rutina/manual, donde
+// tambien elige los ejercicios). Requiere equipamiento (a diferencia de
+// /rutina/manual) porque el motor filtra candidatos por el.
+router.post('/usuarios/:usuarioId/rutina/split', (req, res, next) => {
+  const usuarioId = Number(req.params.usuarioId);
+  if (!checkAccesoUsuario(req, res, usuarioId)) return;
+
+  const { dias } = req.body || {};
+  if (!Array.isArray(dias) || dias.length < 2 || dias.length > 6) {
+    return res.status(400).json({ error: 'dias debe tener entre 2 y 6 elementos.' });
+  }
+  const diasVistos = new Set();
+  for (const dia of dias) {
+    if (!dia || !DIAS_VALIDOS.includes(dia.dia_semana) || diasVistos.has(dia.dia_semana)) {
+      return res.status(400).json({ error: `dia_semana invalido o repetido: ${dia?.dia_semana}` });
+    }
+    diasVistos.add(dia.dia_semana);
+    if (!Array.isArray(dia.musculos) || dia.musculos.length === 0 || dia.musculos.some((m) => !TODOS_MUSCULOS.includes(m))) {
+      return res.status(400).json({ error: `El dia ${dia.dia_semana} necesita al menos un musculo valido.` });
+    }
+    if (!Number.isFinite(dia.duracion_minutos) || dia.duracion_minutos <= 0) {
+      return res.status(400).json({ error: `El dia ${dia.dia_semana} necesita duracion_minutos (numero mayor a 0).` });
+    }
+  }
+
+  if (debeQuedarPendiente(req.usuario, usuarioId)) {
+    const s = crearSolicitudCambio({ usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_split', payload: { dias } });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
+  }
+
+  try {
+    const rutina = crearRutinaConSplit(usuarioId, { dias });
+    res.status(201).json(rutina);
+  } catch (err) {
+    if (err.message.includes('objetivo') || err.message.includes('equipamiento')) {
       return res.status(400).json({ error: err.message });
     }
     next(err);
@@ -198,6 +241,84 @@ router.post('/ejercicios/:ejercicioAsignadoId/sustituir-pre-testeo', (req, res, 
     res.json(out);
   } catch (err) {
     if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('semana 0')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+function getDiaOr404(req, res) {
+  const dia = db.prepare(`
+    SELECT dr.*, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?
+  `).get(req.params.diaRutinaId);
+  if (!dia) {
+    res.status(404).json({ error: 'Dia no encontrado.' });
+    return null;
+  }
+  if (!checkAccesoUsuario(req, res, dia.usuario_id)) return null;
+  return dia;
+}
+
+// Candidatos para AGREGAR (no sustituir) un ejercicio extra a un musculo que
+// ya esta presente ese dia - mismo filtro de equipamiento/duplicados que
+// sustituir, pero sin partir de un ejercicio_asignado existente.
+router.get('/dias/:diaRutinaId/musculos/:musculoId/candidatos', (req, res) => {
+  const dia = getDiaOr404(req, res);
+  if (!dia) return;
+  const musculoId = Number(req.params.musculoId);
+  const musculosDelDia = JSON.parse(dia.musculos_trabajados_json);
+  const musculo = db.prepare('SELECT nombre FROM musculo WHERE id = ?').get(musculoId);
+  if (!musculo || !musculosDelDia.includes(musculo.nombre)) {
+    return res.status(400).json({ error: 'Ese musculo no esta asignado a este dia.' });
+  }
+
+  const equipamiento = db.prepare('SELECT * FROM equipamiento WHERE usuario_id = ?').get(dia.usuario_id);
+  const tags = tagsDisponibles({
+    tipo: equipamiento.tipo,
+    checklist: JSON.parse(equipamiento.checklist_json),
+    musculo: musculo.nombre,
+    musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
+  });
+  const usadosEnElDia = db.prepare('SELECT ejercicio_id FROM ejercicio_asignado WHERE dia_rutina_id = ?')
+    .all(dia.id).map((r) => r.ejercicio_id);
+
+  const candidatos = db.prepare(`
+    SELECT id, nombre, tipo, equipamiento_requerido_json FROM ejercicio
+    WHERE musculo_primario_id = ? AND activo = 1
+  `).all(musculoId).filter((c) => {
+    if (usadosEnElDia.includes(c.id)) return false;
+    const requeridos = JSON.parse(c.equipamiento_requerido_json);
+    return requeridos.every((tag) => tags.has(tag));
+  });
+  res.json(candidatos.map(({ equipamiento_requerido_json, ...c }) => c));
+});
+
+router.post('/dias/:diaRutinaId/ejercicios', (req, res, next) => {
+  const dia = getDiaOr404(req, res);
+  if (!dia) return;
+  const { musculo_id, ejercicio_id } = req.body || {};
+  if (!musculo_id || !ejercicio_id) {
+    return res.status(400).json({ error: 'musculo_id y ejercicio_id son obligatorios.' });
+  }
+  try {
+    const out = agregarEjercicioADia({ diaRutinaId: dia.id, usuarioId: dia.usuario_id, musculoId: musculo_id, ejercicioId: ejercicio_id });
+    res.status(201).json(out);
+  } catch (err) {
+    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('ya esta')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+router.delete('/ejercicios-asignados/:ejercicioAsignadoId', (req, res, next) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  try {
+    quitarEjercicioAsignado(ea.id);
+    res.status(204).end();
+  } catch (err) {
+    if (err.message.includes('top') || err.message.includes('series registradas')) {
       return res.status(400).json({ error: err.message });
     }
     next(err);

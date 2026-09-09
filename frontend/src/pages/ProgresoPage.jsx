@@ -9,6 +9,7 @@ const TIPO_LABEL = {
   equipamiento: 'Equipamiento',
   rutina_auto: 'Generar rutina (automática)',
   rutina_manual: 'Generar rutina (manual)',
+  rutina_split: 'Generar rutina (split personalizado)',
 };
 
 export default function ProgresoPage() {

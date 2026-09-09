@@ -117,8 +117,15 @@ export const MINUTOS_POR_EJERCICIO = 9;
 // agotar el tiempo disponible o quedarse sin candidatos. Asi la cantidad de
 // ejercicios por dia refleja los minutos que el usuario dijo tener, en vez
 // de un tope fijo de "1 por musculo" sin importar cuanto tiempo declaro.
-export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusiones = [], duracionPorDia = {} }) {
-  const secuencia = armarSecuenciaDeDias(diasEspecificos);
+// secuenciaPersonalizada (opcional): [{ dia_semana, musculos }] armado por el
+// propio usuario (ver "elegir mi split" en el onboarding) en vez de la tabla
+// fija de armarSecuenciaDeDias - el resto de la logica (filtro por
+// equipamiento, reparto del tiempo disponible, rango de reps) es identica
+// sin importar de donde salio la secuencia.
+export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusiones = [], duracionPorDia = {}, secuenciaPersonalizada = null }) {
+  const secuencia = secuenciaPersonalizada
+    ? secuenciaPersonalizada.map((d) => ({ dia_semana: d.dia_semana, nombre: 'Personalizado', musculos: d.musculos }))
+    : armarSecuenciaDeDias(diasEspecificos);
   const excluidos = new Set(exclusiones);
 
   return secuencia.map((diaInfo, numeroDia) => {

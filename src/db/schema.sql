@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS solicitud_cambio (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   coach_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-  tipo TEXT NOT NULL CHECK (tipo IN ('objetivo', 'disponibilidad', 'equipamiento', 'rutina_auto', 'rutina_manual')),
+  tipo TEXT NOT NULL CHECK (tipo IN ('objetivo', 'disponibilidad', 'equipamiento', 'rutina_auto', 'rutina_manual', 'rutina_split')),
   payload_json TEXT NOT NULL,
   estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'aprobada', 'rechazada')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -273,10 +273,10 @@ CREATE TABLE IF NOT EXISTS progreso_muscular_microciclo (
 CREATE TABLE IF NOT EXISTS registro_sesion (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-  dia_rutina_id INTEGER NOT NULL REFERENCES dia_rutina(id),
+  dia_rutina_id INTEGER NOT NULL REFERENCES dia_rutina(id) ON DELETE CASCADE,
   fecha TEXT NOT NULL DEFAULT (date('now')),
   salteada INTEGER NOT NULL DEFAULT 0,
-  microciclo_id INTEGER NOT NULL REFERENCES microciclo(id)
+  microciclo_id INTEGER NOT NULL REFERENCES microciclo(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_registro_sesion_usuario ON registro_sesion(usuario_id, fecha);
@@ -284,7 +284,7 @@ CREATE INDEX IF NOT EXISTS idx_registro_sesion_usuario ON registro_sesion(usuari
 CREATE TABLE IF NOT EXISTS registro_serie (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   registro_sesion_id INTEGER NOT NULL REFERENCES registro_sesion(id) ON DELETE CASCADE,
-  ejercicio_asignado_id INTEGER NOT NULL REFERENCES ejercicio_asignado(id),
+  ejercicio_asignado_id INTEGER NOT NULL REFERENCES ejercicio_asignado(id) ON DELETE CASCADE,
   numero_serie INTEGER NOT NULL,
   peso REAL NOT NULL,
   reps INTEGER NOT NULL,

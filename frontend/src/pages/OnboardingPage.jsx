@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import ArmadoManualRutina from '../components/ArmadoManualRutina.jsx';
+import ArmadoSplitPersonalizado from '../components/ArmadoSplitPersonalizado.jsx';
 
 const DIAS = [
   { id: 'lunes', label: 'Lun' },
@@ -36,6 +37,7 @@ export default function OnboardingPage() {
 
   const [modo, setModo] = useState('auto');
   const [diasManual, setDiasManual] = useState([]);
+  const [diasSplit, setDiasSplit] = useState([]);
 
   const [tipo, setTipo] = useState('hipertrofia');
   const [subObjetivo, setSubObjetivo] = useState('');
@@ -91,6 +93,16 @@ export default function OnboardingPage() {
         return;
       }
     }
+    if (modo === 'split') {
+      if (diasSplit.length < 2 || diasSplit.length > 6) {
+        setError('Armá entre 2 y 6 días.');
+        return;
+      }
+      if (diasSplit.some((d) => d.musculos.length === 0)) {
+        setError('Todos los días necesitan al menos un músculo.');
+        return;
+      }
+    }
 
     setEnviando(true);
     try {
@@ -107,6 +119,15 @@ export default function OnboardingPage() {
       if (modo === 'manual') {
         marcar(await api.post(`/usuarios/${usuario.id}/rutina/manual`, {
           dias: diasManual.map((d) => ({ dia_semana: d.dia_semana, ejercicios: d.ejercicios.map((ej) => ej.id) })),
+        }));
+      } else if (modo === 'split') {
+        marcar(await api.put(`/usuarios/${usuario.id}/equipamiento`, {
+          tipo: equipoTipo,
+          checklist: equipoTipo === 'casa' || equipoTipo === 'mixto' ? checklist : [],
+          musculos_ubicacion: equipoTipo === 'mixto' ? musculosUbicacion : {},
+        }));
+        marcar(await api.post(`/usuarios/${usuario.id}/rutina/split`, {
+          dias: diasSplit.map((d) => ({ dia_semana: d.dia_semana, musculos: d.musculos, duracion_minutos: Number(d.duracion_minutos) })),
         }));
       } else {
         const duracionPorDia = Object.fromEntries(dias.map((d) => [d, Number(duracion)]));
@@ -146,13 +167,14 @@ export default function OnboardingPage() {
           <div className="flex gap-2">
             {[
               { id: 'auto', label: 'Generarla automáticamente' },
+              { id: 'split', label: 'Elegir mi split' },
               { id: 'manual', label: 'Armarla yo mismo' },
             ].map((op) => (
               <button
                 type="button"
                 key={op.id}
                 onClick={() => setModo(op.id)}
-                className={`flex-1 h-14 rounded-lg border text-[12.5px] font-semibold px-2 ${
+                className={`flex-1 h-14 rounded-lg border text-[11.5px] font-semibold px-1.5 ${
                   modo === op.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
                 }`}
               >
@@ -164,6 +186,12 @@ export default function OnboardingPage() {
             <p className="text-[12px] text-text-muted">
               Elegís vos los ejercicios de cada día. Igual seguimos calculando el rango de reps, la
               progresión semana a semana y el volumen por músculo.
+            </p>
+          )}
+          {modo === 'split' && (
+            <p className="text-[12px] text-text-muted">
+              Elegís vos qué músculos entrenás cada día (ej. espalda+bíceps, pecho+tríceps, piernas).
+              El sistema elige los ejercicios dentro de cada día, igual que en el modo automático.
             </p>
           )}
         </section>
@@ -201,37 +229,46 @@ export default function OnboardingPage() {
         </section>
 
         {modo === 'auto' && (
-          <>
-            <section className="flex flex-col gap-3">
-              <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Días disponibles</span>
-              <div className="flex gap-1.5 flex-wrap">
-                {DIAS.map((d) => (
-                  <button
-                    type="button"
-                    key={d.id}
-                    onClick={() => toggleDia(d.id)}
-                    className={`w-11 h-11 rounded-full border text-[12.5px] font-semibold ${
-                      dias.includes(d.id) ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
-                    }`}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-              <label className="flex items-center gap-3 text-[13px] text-text-muted">
-                Minutos por sesión
-                <input
-                  type="number"
-                  min={30}
-                  max={90}
-                  step={5}
-                  value={duracion}
-                  onChange={(e) => setDuracion(e.target.value)}
-                  className="w-20 h-9 rounded-lg border border-border bg-surface px-2.5 tabular text-[13.5px] text-text outline-none focus:border-accent"
-                />
-              </label>
-            </section>
+          <section className="flex flex-col gap-3">
+            <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Días disponibles</span>
+            <div className="flex gap-1.5 flex-wrap">
+              {DIAS.map((d) => (
+                <button
+                  type="button"
+                  key={d.id}
+                  onClick={() => toggleDia(d.id)}
+                  className={`w-11 h-11 rounded-full border text-[12.5px] font-semibold ${
+                    dias.includes(d.id) ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-3 text-[13px] text-text-muted">
+              Minutos por sesión
+              <input
+                type="number"
+                min={30}
+                max={90}
+                step={5}
+                value={duracion}
+                onChange={(e) => setDuracion(e.target.value)}
+                className="w-20 h-9 rounded-lg border border-border bg-surface px-2.5 tabular text-[13.5px] text-text outline-none focus:border-accent"
+              />
+            </label>
+          </section>
+        )}
 
+        {modo === 'split' && (
+          <section className="flex flex-col gap-3">
+            <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Tu split</span>
+            <ArmadoSplitPersonalizado dias={diasSplit} onChange={setDiasSplit} />
+          </section>
+        )}
+
+        {(modo === 'auto' || modo === 'split') && (
+          <>
             <section className="flex flex-col gap-3">
               <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Equipamiento</span>
               <div className="flex gap-2">
@@ -311,7 +348,7 @@ export default function OnboardingPage() {
           disabled={enviando}
           className="h-12 rounded-[10px] bg-accent text-accent-fg text-[15px] font-semibold disabled:opacity-60"
         >
-          {enviando ? 'Guardando rutina…' : modo === 'manual' ? 'Guardar mi rutina' : 'Generar mi rutina'}
+          {enviando ? 'Guardando rutina…' : modo === 'manual' ? 'Guardar mi rutina' : modo === 'split' ? 'Generar con mi split' : 'Generar mi rutina'}
         </button>
       </form>
     </div>

@@ -9,6 +9,7 @@ const TIPO_LABEL = {
   equipamiento: 'Equipamiento',
   rutina_auto: 'Generar rutina (automática)',
   rutina_manual: 'Generar rutina (manual)',
+  rutina_split: 'Generar rutina (split personalizado)',
 };
 
 export default function CoachPage() {
@@ -70,6 +71,9 @@ export default function CoachPage() {
           <span className="text-[15px] font-bold">Bitácora {usuario.rol === 'admin' ? '· Admin' : '· Coach'}</span>
         </div>
         <div className="flex items-center gap-3">
+          {usuario.rol === 'admin' && (
+            <Link to="/catalogo" className="text-xs font-semibold text-accent">Catálogo</Link>
+          )}
           <button onClick={irAMiEntrenamiento} className="text-xs font-semibold text-accent">
             Mi entrenamiento
           </button>

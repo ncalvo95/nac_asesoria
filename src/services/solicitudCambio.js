@@ -1,6 +1,6 @@
 import db from '../db/index.js';
 import { aplicarDisponibilidad, aplicarEquipamiento, aplicarObjetivo } from './perfilService.js';
-import { crearRutina, crearRutinaManual } from './rutinaService.js';
+import { crearRutina, crearRutinaConSplit, crearRutinaManual } from './rutinaService.js';
 
 // Un cambio queda pendiente de aprobacion solo cuando: el actor ES el
 // cliente (no su coach ni el admin editandolo por el - esos ya son la
@@ -66,6 +66,8 @@ export function aplicarSolicitud(solicitud) {
       return crearRutina(solicitud.usuario_id);
     case 'rutina_manual':
       return crearRutinaManual(solicitud.usuario_id, payload);
+    case 'rutina_split':
+      return crearRutinaConSplit(solicitud.usuario_id, payload);
     default:
       throw new Error(`Tipo de solicitud desconocido: ${solicitud.tipo}`);
   }
