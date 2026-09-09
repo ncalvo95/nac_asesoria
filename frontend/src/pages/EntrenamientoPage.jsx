@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { api } from '../api/client.js';
+import { api, API_BASE } from '../api/client.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function ExportarExcel({ rutinaId }) {
+  return (
+    <a
+      href={`${API_BASE}/rutinas/${rutinaId}/export.xlsx`}
+      className="text-[12px] font-semibold text-accent border border-accent rounded-lg px-2.5 py-1.5 whitespace-nowrap"
+    >
+      Exportar Excel
+    </a>
+  );
+}
 
 export default function EntrenamientoPage() {
   const { usuario: sesion } = useAuth();
@@ -185,7 +196,10 @@ function Semana0Form({ rutina, usuario, onListo }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4 pb-24">
       <div className="px-1 flex flex-col gap-1">
-        <h1 className="text-[17px] font-bold">Semana 0 · Testeo</h1>
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-[17px] font-bold">Semana 0 · Testeo</h1>
+          <ExportarExcel rutinaId={rutina.id} />
+        </div>
         <p className="text-[13px] text-text-muted leading-relaxed">
           Elegí un peso con el que creas poder hacer entre 12 y 16 repeticiones, y cargá 2 series a ese mismo peso por cada ejercicio.
         </p>
@@ -361,6 +375,8 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
   const [musculoId, setMusculoId] = useState(musculos.length === 1 ? musculos[0].id : '');
   const [candidatos, setCandidatos] = useState(null);
   const [elegido, setElegido] = useState('');
+  const [particular, setParticular] = useState(false);
+  const [nombreParticular, setNombreParticular] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -378,18 +394,27 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
     if (musculos.length === 1) cargarCandidatos(musculos[0].id);
   }
 
+  function cerrar() {
+    setAbierto(false);
+    setParticular(false);
+    setNombreParticular('');
+  }
+
   async function confirmar() {
-    if (!musculoId || !elegido) {
-      setError('Elegí un músculo y un ejercicio.');
+    if (!musculoId || (particular ? !nombreParticular.trim() : !elegido)) {
+      setError(particular ? 'Elegí un músculo y escribí el nombre del ejercicio.' : 'Elegí un músculo y un ejercicio.');
       return;
     }
     setEnviando(true);
     setError('');
     try {
-      const nuevo = await api.post(`/dias/${diaRutinaId}/ejercicios`, { musculo_id: Number(musculoId), ejercicio_id: Number(elegido) });
+      const body = particular
+        ? { musculo_id: Number(musculoId), nombre_personalizado: nombreParticular.trim() }
+        : { musculo_id: Number(musculoId), ejercicio_id: Number(elegido) };
+      const nuevo = await api.post(`/dias/${diaRutinaId}/ejercicios`, body);
       const musculoNombre = musculos.find((m) => m.id === Number(musculoId))?.nombre;
       onAgregado(nuevo, musculoNombre);
-      setAbierto(false);
+      cerrar();
       setMusculoId(musculos.length === 1 ? musculos[0].id : '');
       setCandidatos(null);
       setElegido('');
@@ -433,11 +458,11 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
         </div>
       )}
 
-      {musculoId && candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
-      {musculoId && candidatos?.length === 0 && (
+      {!particular && musculoId && candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
+      {!particular && musculoId && candidatos?.length === 0 && (
         <span className="text-[12px] text-text-muted">No hay más ejercicios para ese músculo con tu equipamiento actual.</span>
       )}
-      {musculoId && candidatos?.length > 0 && (
+      {!particular && musculoId && candidatos?.length > 0 && (
         <select
           value={elegido}
           onChange={(e) => setElegido(e.target.value)}
@@ -450,12 +475,31 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
         </select>
       )}
 
+      {particular && musculoId && (
+        <input
+          value={nombreParticular}
+          onChange={(e) => setNombreParticular(e.target.value)}
+          placeholder="Nombre del ejercicio particular"
+          className="h-9 rounded-lg border border-border bg-bg px-2.5 text-[13px] outline-none focus:border-accent"
+        />
+      )}
+
+      {musculoId && (
+        <button
+          type="button"
+          onClick={() => { setParticular((v) => !v); setError(''); }}
+          className="self-start text-[11.5px] text-text-muted underline underline-offset-2"
+        >
+          {particular ? '← Elegir del catálogo' : 'No está en la lista, cargar uno particular'}
+        </button>
+      )}
+
       {error && <span className="text-[12px] text-danger">{error}</span>}
 
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => setAbierto(false)}
+          onClick={cerrar}
           className="flex-1 h-9 rounded-lg border border-border text-text-muted text-[12.5px] font-semibold"
         >
           Cancelar
@@ -463,7 +507,7 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
         <button
           type="button"
           onClick={confirmar}
-          disabled={enviando || !elegido}
+          disabled={enviando || (particular ? !nombreParticular.trim() : !elegido)}
           className="flex-1 h-9 rounded-lg bg-accent text-accent-fg text-[13px] font-semibold disabled:opacity-60"
         >
           {enviando ? 'Agregando…' : 'Agregar'}
@@ -536,9 +580,12 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
   return (
     <div className="flex flex-col gap-4 p-4 pb-6">
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h1 className="text-[17px] font-bold">{CAPITALIZAR(dia.dia_semana)}</h1>
-          <span className="tabular text-[12px] text-text-muted">Microciclo {microciclo.numero}</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h1 className="text-[17px] font-bold">{CAPITALIZAR(dia.dia_semana)}</h1>
+            <span className="tabular text-[12px] text-text-muted">Microciclo {microciclo.numero}</span>
+          </div>
+          <ExportarExcel rutinaId={rutina.id} />
         </div>
         <div className="flex gap-1.5 flex-wrap">
           {diasUnicos.map((d) => (

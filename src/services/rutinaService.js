@@ -449,6 +449,43 @@ export const agregarEjercicioADia = db.transaction(({ diaRutinaId, usuarioId, mu
   };
 });
 
+const insertEjercicioPersonalizado = db.prepare(`
+  INSERT INTO ejercicio (nombre, musculo_primario_id, tipo, patron_movimiento, equipamiento_requerido_json, activo)
+  VALUES (?, ?, 'aislado', 'personalizado', '[]', 1)
+`);
+const getMusculoPorId = db.prepare('SELECT nombre, region FROM musculo WHERE id = ?');
+
+// Igual que agregarEjercicioADia, pero para cuando el ejercicio que se
+// quiere sumar no esta en el catalogo (ni el global del admin ni el de
+// preferencias) - lo da de alta con equipamiento_requerido_json vacio
+// (siempre compatible) y lo asigna en el mismo paso. Queda en el catalogo
+// para poder reutilizarlo despues.
+export const agregarEjercicioPersonalizadoADia = db.transaction(({ diaRutinaId, usuarioId, musculoId, nombre }) => {
+  const nombreLimpio = (nombre || '').trim();
+  if (!nombreLimpio) throw new Error('El nombre del ejercicio no puede estar vacio.');
+
+  const musculo = getMusculoPorId.get(musculoId);
+  if (!musculo) throw new Error('Musculo no encontrado.');
+
+  const { lastInsertRowid: ejercicioId } = insertEjercicioPersonalizado.run(nombreLimpio, musculoId);
+
+  const objetivo = getObjetivo.get(usuarioId);
+  const rango = rangoRepsPara({
+    musculo: musculo.nombre,
+    objetivo: objetivo.tipo,
+    esCompuestoPrincipalFuerza: false,
+    region: musculo.region,
+  });
+
+  const { maxOrden } = getMaxOrdenDia.get(diaRutinaId);
+  const info = insertEjercicioAsignadoExtra.run(diaRutinaId, ejercicioId, maxOrden + 1, musculoId, SERIES_MINIMO, rango.min, rango.max);
+  return {
+    id: info.lastInsertRowid, ejercicio_id: ejercicioId, ejercicio_nombre: nombreLimpio,
+    musculo_objetivo_id: musculoId, rango_reps_min: rango.min, rango_reps_max: rango.max,
+    es_top_de_musculo: false, series_actuales: SERIES_MINIMO,
+  };
+});
+
 // Inversa de agregarEjercicioADia - solo se puede sacar un ejercicio que NO
 // sea el top de su musculo (el top se sustituye, nunca se saca sin
 // reemplazo) y que todavia no tenga ninguna serie registrada (si ya

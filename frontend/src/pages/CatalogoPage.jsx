@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 const EQUIPO_TAGS = ['barra', 'mancuernas', 'banco', 'polea', 'maquina', 'banda', 'paralelas', 'barra_dominadas', 'peso_corporal'];
 
@@ -49,6 +50,7 @@ export default function CatalogoPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link to="/coach" className="text-xs font-semibold text-accent">Panel de coach</Link>
+          <ThemeToggle />
           <button onClick={logout} className="text-xs font-semibold text-text-muted">{usuario.nombre} · Salir</button>
         </div>
       </header>

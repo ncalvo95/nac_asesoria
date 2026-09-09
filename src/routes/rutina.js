@@ -2,9 +2,9 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
-  agregarEjercicioADia, crearRutina, crearRutinaConSplit, crearRutinaManual, eliminarRutina,
-  listarRutinas, obtenerRutinaActiva, quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios,
-  sustituirEjercicio, sustituirEjercicioPreTesteo,
+  agregarEjercicioADia, agregarEjercicioPersonalizadoADia, crearRutina, crearRutinaConSplit,
+  crearRutinaManual, eliminarRutina, listarRutinas, obtenerRutinaActiva, quitarEjercicioAsignado,
+  reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
@@ -327,15 +327,17 @@ router.get('/dias/:diaRutinaId/musculos/:musculoId/candidatos', (req, res) => {
 router.post('/dias/:diaRutinaId/ejercicios', (req, res, next) => {
   const dia = getDiaOr404(req, res);
   if (!dia) return;
-  const { musculo_id, ejercicio_id } = req.body || {};
-  if (!musculo_id || !ejercicio_id) {
-    return res.status(400).json({ error: 'musculo_id y ejercicio_id son obligatorios.' });
+  const { musculo_id, ejercicio_id, nombre_personalizado } = req.body || {};
+  if (!musculo_id || (!ejercicio_id && !nombre_personalizado)) {
+    return res.status(400).json({ error: 'musculo_id y (ejercicio_id o nombre_personalizado) son obligatorios.' });
   }
   try {
-    const out = agregarEjercicioADia({ diaRutinaId: dia.id, usuarioId: dia.usuario_id, musculoId: musculo_id, ejercicioId: ejercicio_id });
+    const out = ejercicio_id
+      ? agregarEjercicioADia({ diaRutinaId: dia.id, usuarioId: dia.usuario_id, musculoId: musculo_id, ejercicioId: ejercicio_id })
+      : agregarEjercicioPersonalizadoADia({ diaRutinaId: dia.id, usuarioId: dia.usuario_id, musculoId: musculo_id, nombre: nombre_personalizado });
     res.status(201).json(out);
   } catch (err) {
-    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('ya esta')) {
+    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('ya esta') || err.message.includes('nombre')) {
       return res.status(400).json({ error: err.message });
     }
     next(err);

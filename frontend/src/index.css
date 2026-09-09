@@ -19,7 +19,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="claro"]) {
     --bg: #17181A;
     --surface: #202225;
     --border: #33353A;
@@ -36,6 +36,44 @@
     --accent: #4A9490;
     --accent-fg: #0D1414;
   }
+}
+
+/* Eleccion manual del usuario (ThemeContext) - pisa la media query en
+   cualquier direccion, sin importar la preferencia del sistema. */
+:root[data-theme="oscuro"] {
+  --bg: #17181A;
+  --surface: #202225;
+  --border: #33353A;
+  --text: #EDEBE6;
+  --text-muted: #A5A29B;
+  --text-faint: #6E6C67;
+  --success: #5FB38C;
+  --success-bg: #1B2E26;
+  --warning: #D9A44E;
+  --warning-bg: #332812;
+  --danger: #D97862;
+  --danger-bg: #331E19;
+  --track: #2B2D30;
+  --accent: #4A9490;
+  --accent-fg: #0D1414;
+}
+
+:root[data-theme="claro"] {
+  --bg: #F7F6F3;
+  --surface: #FFFFFF;
+  --border: #E4E2DC;
+  --text: #23221F;
+  --text-muted: #6F6C64;
+  --text-faint: #A7A399;
+  --success: #3F8F6F;
+  --success-bg: #EAF3EE;
+  --warning: #B8842E;
+  --warning-bg: #FBF2E2;
+  --danger: #B5533F;
+  --danger-bg: #FAEBE7;
+  --track: #EDEBE5;
+  --accent: #2F6F6B;
+  --accent-fg: #FFFFFF;
 }
 
 @theme {

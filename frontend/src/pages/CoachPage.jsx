@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 const TIPO_LABEL = {
   objetivo: 'Objetivo',
@@ -74,15 +75,27 @@ export default function CoachPage() {
           {usuario.rol === 'admin' && (
             <Link to="/catalogo" className="text-xs font-semibold text-accent">Catálogo</Link>
           )}
-          <button onClick={irAMiEntrenamiento} className="text-xs font-semibold text-accent">
-            Mi entrenamiento
-          </button>
+          <ThemeToggle />
           <button onClick={logout} className="text-xs font-semibold text-text-muted">{usuario.nombre} · Salir</button>
         </div>
       </header>
 
       <div className="p-4 flex flex-col gap-6 max-w-xl w-full mx-auto">
         {error && <p className="text-[13px] text-danger">{error}</p>}
+
+        <button
+          type="button"
+          onClick={irAMiEntrenamiento}
+          className="bg-surface border border-accent rounded-xl p-4 flex items-center justify-between gap-3 text-left"
+        >
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[14px] font-semibold">Tu propio entrenamiento</span>
+            <span className="text-[12px] text-text-muted">
+              Como {usuario.rol === 'admin' ? 'admin' : 'coach'} también podés tener tu propia rutina.
+            </span>
+          </div>
+          <span className="flex-none text-[13px] font-semibold text-accent whitespace-nowrap">Ir →</span>
+        </button>
 
         {solicitudes?.length > 0 && (
           <section className="flex flex-col gap-2">
