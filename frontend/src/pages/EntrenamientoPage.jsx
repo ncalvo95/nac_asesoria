@@ -60,19 +60,72 @@ export default function EntrenamientoPage() {
   );
 }
 
+const ORDEN_DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+
+// Fecha calendario del proximo (o mismo) "dia_semana" a partir de fechaInicio
+// (YYYY-MM-DD) - asume que la semana arranca en fechaInicio, sin importar
+// que dia de la semana sea.
+function fechaParaDia(fechaInicio, diaSemana) {
+  if (!fechaInicio) return null;
+  const inicio = new Date(`${fechaInicio}T00:00:00`);
+  const idxInicio = (inicio.getDay() + 6) % 7; // getDay(): 0=domingo -> lunes=0..domingo=6
+  const idxObjetivo = ORDEN_DIAS.indexOf(diaSemana);
+  const delta = (idxObjetivo - idxInicio + 7) % 7;
+  const fecha = new Date(inicio);
+  fecha.setDate(fecha.getDate() + delta);
+  return fecha;
+}
+
+function formatearFechaCorta(fecha) {
+  return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+}
+
 function Semana0Form({ rutina, usuario, onListo }) {
+  // Estado local mutable de los dias/ejercicios (independiente del prop
+  // "rutina", que queda fijo desde que se monta la pantalla) - hace falta
+  // porque sustituir un ejercicio antes del testeo cambia que ejercicio va
+  // en cada slot, sin recargar toda la pantalla.
+  const [dias, setDias] = useState(() => rutina.dias.map((d) => ({ ...d, ejercicios: d.ejercicios.map((e) => ({ ...e })) })));
+  const [fechaInicio, setFechaInicio] = useState(rutina.fecha_inicio?.slice(0, 10) || '');
+  const [diaId, setDiaId] = useState(dias[0]?.id);
+
   const todosEjercicios = useMemo(
-    () => rutina.dias.flatMap((d) => d.ejercicios.map((e) => ({ ...e, dia_semana: d.dia_semana }))),
-    [rutina]
+    () => dias.flatMap((d) => d.ejercicios.map((e) => ({ ...e, dia_semana: d.dia_semana }))),
+    [dias]
   );
   const [valores, setValores] = useState(() =>
     Object.fromEntries(todosEjercicios.map((e) => [e.id, { peso: '', reps1: '', reps2: '' }]))
   );
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [guardandoFecha, setGuardandoFecha] = useState(false);
+
+  const diaActual = dias.find((d) => d.id === diaId) ?? dias[0];
 
   function set(id, campo, valor) {
     setValores((v) => ({ ...v, [id]: { ...v[id], [campo]: valor } }));
+  }
+
+  function onSustituido(ejercicioAsignadoId, nuevo) {
+    setDias((prev) => prev.map((d) => ({
+      ...d,
+      ejercicios: d.ejercicios.map((e) => (e.id === ejercicioAsignadoId
+        ? { ...e, ejercicio_id: nuevo.id, ejercicio_nombre: nuevo.nombre, rango_reps_min: nuevo.rango_reps_min, rango_reps_max: nuevo.rango_reps_max }
+        : e)),
+    })));
+    setValores((v) => ({ ...v, [ejercicioAsignadoId]: { peso: '', reps1: '', reps2: '' } }));
+  }
+
+  async function onCambiarFecha(nuevaFecha) {
+    setFechaInicio(nuevaFecha);
+    setGuardandoFecha(true);
+    try {
+      await api.patch(`/rutinas/${rutina.id}/fecha-inicio`, { fecha_inicio: nuevaFecha });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardandoFecha(false);
+    }
   }
 
   async function onSubmit(e) {
@@ -82,7 +135,7 @@ function Semana0Form({ rutina, usuario, onListo }) {
     for (const ej of todosEjercicios) {
       const v = valores[ej.id];
       if (!v.peso || !v.reps1 || !v.reps2) {
-        setError(`Completá peso y las 2 series de "${ej.ejercicio_nombre}".`);
+        setError(`Completá peso y las 2 series de "${ej.ejercicio_nombre}" (${CAPITALIZAR(ej.dia_semana)}).`);
         return;
       }
       resultados.push({
@@ -103,9 +156,8 @@ function Semana0Form({ rutina, usuario, onListo }) {
     }
   }
 
-  let diaActual = null;
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-5 p-4 pb-24">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4 pb-24">
       <div className="px-1 flex flex-col gap-1">
         <h1 className="text-[17px] font-bold">Semana 0 · Testeo</h1>
         <p className="text-[13px] text-text-muted leading-relaxed">
@@ -113,32 +165,54 @@ function Semana0Form({ rutina, usuario, onListo }) {
         </p>
       </div>
 
-      {todosEjercicios.map((ej) => {
-        const mostrarDia = ej.dia_semana !== diaActual;
-        diaActual = ej.dia_semana;
-        return (
-          <div key={ej.id} className="flex flex-col gap-2">
-            {mostrarDia && (
-              <span className="text-[11px] font-semibold text-text-faint uppercase tracking-wide mt-1">
-                {CAPITALIZAR(ej.dia_semana)}
+      <label className="flex items-center gap-2 px-1">
+        <span className="text-[12.5px] font-semibold text-text-muted">Empieza el</span>
+        <input
+          type="date"
+          value={fechaInicio}
+          onChange={(e) => onCambiarFecha(e.target.value)}
+          className="h-9 rounded-lg border border-border bg-surface px-2.5 text-[13px] outline-none focus:border-accent"
+        />
+        {guardandoFecha && <span className="text-[11px] text-text-faint">Guardando…</span>}
+      </label>
+
+      <div className="flex gap-1.5 flex-wrap px-1">
+        {dias.map((d) => {
+          const fecha = fechaParaDia(fechaInicio, d.dia_semana);
+          return (
+            <button
+              type="button"
+              key={d.id}
+              onClick={() => setDiaId(d.id)}
+              className={`px-3 h-11 rounded-xl border text-[12.5px] font-semibold flex flex-col items-center justify-center leading-tight ${
+                d.id === diaActual.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+              }`}
+            >
+              <span>{CAPITALIZAR(d.dia_semana)}</span>
+              {fecha && <span className="text-[10px] font-normal opacity-80">{formatearFechaCorta(fecha)}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-col gap-3">
+        {diaActual.ejercicios.map((ej) => (
+          <div key={ej.id} className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[14px] font-semibold">{ej.ejercicio_nombre}</span>
+              <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
+                {ej.musculo_nombre}
               </span>
-            )}
-            <div className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[14px] font-semibold">{ej.ejercicio_nombre}</span>
-                <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
-                  {ej.musculo_nombre}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <NumberField label="Peso (kg)" value={valores[ej.id].peso} onChange={(v) => set(ej.id, 'peso', v)} />
-                <NumberField label="Reps S1" value={valores[ej.id].reps1} onChange={(v) => set(ej.id, 'reps1', v)} />
-                <NumberField label="Reps S2" value={valores[ej.id].reps2} onChange={(v) => set(ej.id, 'reps2', v)} />
-              </div>
             </div>
+            <div className="grid grid-cols-3 gap-2">
+              <NumberField label="Peso (kg)" value={valores[ej.id].peso} onChange={(v) => set(ej.id, 'peso', v)} />
+              <NumberField label="Reps S1" value={valores[ej.id].reps1} onChange={(v) => set(ej.id, 'reps1', v)} />
+              <NumberField label="Reps S2" value={valores[ej.id].reps2} onChange={(v) => set(ej.id, 'reps2', v)} />
+            </div>
+            <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
           </div>
-        );
-      })}
+        ))}
+      </div>
 
       {error && <p className="text-[13px] text-danger px-1">{error}</p>}
 
@@ -152,6 +226,93 @@ function Semana0Form({ rutina, usuario, onListo }) {
         </button>
       </div>
     </form>
+  );
+}
+
+function CambiarEjercicioSemana0({ ejercicio, onSustituido }) {
+  const [abierto, setAbierto] = useState(false);
+  const [candidatos, setCandidatos] = useState(null);
+  const [elegido, setElegido] = useState('');
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  function abrir() {
+    setAbierto(true);
+    if (candidatos === null) {
+      api.get(`/ejercicios/${ejercicio.id}/candidatos`).then(setCandidatos).catch((err) => setError(err.message));
+    }
+  }
+
+  async function confirmar() {
+    if (!elegido) {
+      setError('Elegí un ejercicio.');
+      return;
+    }
+    setEnviando(true);
+    setError('');
+    try {
+      const candidato = candidatos.find((c) => String(c.id) === elegido);
+      const out = await api.post(`/ejercicios/${ejercicio.id}/sustituir-pre-testeo`, { nuevo_ejercicio_id: Number(elegido) });
+      onSustituido({ id: out.nuevo_ejercicio_id, nombre: candidato.nombre, rango_reps_min: out.rango_reps_min, rango_reps_max: out.rango_reps_max });
+      setAbierto(false);
+      setElegido('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (!abierto) {
+    return (
+      <button
+        type="button"
+        onClick={abrir}
+        className="text-[11px] font-medium text-text-muted underline underline-offset-2 self-start"
+      >
+        Cambiar ejercicio
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-bg border border-border rounded-xl p-3 flex flex-col gap-2.5">
+      <span className="text-[12px] font-semibold">Sustituir por otro ejercicio del mismo músculo</span>
+      {candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
+      {candidatos?.length === 0 && (
+        <span className="text-[12px] text-text-muted">No hay alternativas para este músculo con tu equipamiento actual.</span>
+      )}
+      {candidatos?.length > 0 && (
+        <select
+          value={elegido}
+          onChange={(e) => setElegido(e.target.value)}
+          className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] outline-none focus:border-accent"
+        >
+          <option value="">Elegí un ejercicio…</option>
+          {candidatos.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </select>
+      )}
+      {error && <span className="text-[12px] text-danger">{error}</span>}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setAbierto(false)}
+          className="flex-1 h-9 rounded-lg border border-border text-text-muted text-[12.5px] font-semibold"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={confirmar}
+          disabled={enviando || !candidatos?.length}
+          className="flex-1 h-9 rounded-lg bg-accent text-accent-fg text-[13px] font-semibold disabled:opacity-60"
+        >
+          {enviando ? 'Guardando…' : 'Confirmar'}
+        </button>
+      </div>
+    </div>
   );
 }
 

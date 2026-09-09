@@ -55,6 +55,7 @@ export const crearRutina = db.transaction((usuarioId) => {
       musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
     },
     exclusiones,
+    duracionPorDia: JSON.parse(disponibilidad.duracion_sesion_json),
   });
 
   desactivarRutinasPrevias.run(usuarioId);
@@ -214,12 +215,10 @@ const upsertProgresoEjercicioSustitucion = db.prepare(`
     sem1_reps = NULL, sem2_reps = NULL, techo_reps = NULL, mejoro = NULL, serie_agregada = 0, nota = NULL
 `);
 
-// Sustituye un ejercicio a mitad de rutina por otro del pool (mismo musculo,
-// dentro del equipamiento disponible). Pasa por su propio mini-testeo de 2
-// series: el piso resultante rige el resto del microciclo en curso, tal
-// como si fuera una semana 0 acotada a ese ejercicio.
-export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuarioId, nuevoEjercicioId, peso, repsSerie1, repsSerie2 }) => {
-  const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
+// Validaciones compartidas por las dos variantes de sustitucion: el nuevo
+// ejercicio existe, es del mismo musculo objetivo, y es compatible con el
+// equipamiento actual del usuario.
+function validarNuevoEjercicio(ea, usuarioId, nuevoEjercicioId) {
   const nuevo = getEjercicioCatalogo.get(nuevoEjercicioId);
   if (!nuevo) throw new Error('Ejercicio destino no encontrado.');
   if (nuevo.musculo_primario_id !== ea.musculo_objetivo_id) {
@@ -238,6 +237,27 @@ export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuario
   if (!requeridos.every((tag) => tags.has(tag))) {
     throw new Error('El nuevo ejercicio no es compatible con tu equipamiento disponible.');
   }
+
+  // Puede haber mas de un ejercicio por musculo en el mismo dia (ver
+  // armarRutina), asi que hay que evitar terminar con el mismo ejercicio
+  // repetido dos veces en un mismo dia al sustituir.
+  const yaUsadoEnElDia = db.prepare(
+    'SELECT 1 FROM ejercicio_asignado WHERE dia_rutina_id = ? AND id != ? AND ejercicio_id = ?'
+  ).get(ea.dia_rutina_id, ea.id, nuevoEjercicioId);
+  if (yaUsadoEnElDia) {
+    throw new Error('Ese ejercicio ya esta asignado en otro musculo de este mismo dia.');
+  }
+
+  return { nuevo, musculoNombre };
+}
+
+// Sustituye un ejercicio a mitad de rutina por otro del pool (mismo musculo,
+// dentro del equipamiento disponible). Pasa por su propio mini-testeo de 2
+// series: el piso resultante rige el resto del microciclo en curso, tal
+// como si fuera una semana 0 acotada a ese ejercicio.
+export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuarioId, nuevoEjercicioId, peso, repsSerie1, repsSerie2 }) => {
+  const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
+  const { nuevo, musculoNombre } = validarNuevoEjercicio(ea, usuarioId, nuevoEjercicioId);
 
   const dia = db.prepare('SELECT dr.rutina_id, dr.id AS dia_rutina_id FROM dia_rutina dr WHERE dr.id = ?').get(ea.dia_rutina_id);
   const microciclo = getMicrocicloEnCurso.get(dia.rutina_id);
@@ -263,6 +283,35 @@ export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuario
   const { lastInsertRowid: sesionId } = insertRegistroSesionSustitucion.run(usuarioId, dia.dia_rutina_id, microciclo.id);
   insertRegistroSerieSustitucion.run(sesionId, ejercicioAsignadoId, 1, peso, repsSerie1);
   insertRegistroSerieSustitucion.run(sesionId, ejercicioAsignadoId, 2, peso, repsSerie2);
+
+  return { ejercicio_asignado_id: ejercicioAsignadoId, nuevo_ejercicio_id: nuevoEjercicioId, rango_reps_min: rango.min, rango_reps_max: rango.max };
+});
+
+const getMicrociclo0EnCurso = db.prepare("SELECT * FROM microciclo WHERE rutina_id = ? AND numero = 0 AND estado = 'en_curso'");
+
+// Version simple de sustituirEjercicio para antes de guardar la semana 0:
+// todavia no hay ningun peso/reps cargado para este slot (el usuario los va
+// a completar el mismo, para el ejercicio nuevo, en el propio formulario de
+// semana 0), asi que solo hace falta cambiar el ejercicio_id y recalcular su
+// rango de reps - sin mini-testeo ni registro_sesion.
+export const sustituirEjercicioPreTesteo = db.transaction(({ ejercicioAsignadoId, usuarioId, nuevoEjercicioId }) => {
+  const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
+  const { nuevo, musculoNombre } = validarNuevoEjercicio(ea, usuarioId, nuevoEjercicioId);
+
+  const dia = db.prepare('SELECT rutina_id FROM dia_rutina WHERE id = ?').get(ea.dia_rutina_id);
+  const microciclo0 = getMicrociclo0EnCurso.get(dia.rutina_id);
+  if (!microciclo0) throw new Error('Solo se puede cambiar el ejercicio antes de guardar la semana 0.');
+
+  const objetivo = getObjetivo.get(usuarioId);
+  const rango = rangoRepsPara({
+    musculo: musculoNombre,
+    objetivo: objetivo.tipo,
+    esCompuestoPrincipalFuerza: Boolean(nuevo.es_compuesto_principal_fuerza),
+    region: nuevo.musculo_region,
+  });
+
+  db.prepare('UPDATE ejercicio_asignado SET ejercicio_id = ?, rango_reps_min = ?, rango_reps_max = ? WHERE id = ?')
+    .run(nuevoEjercicioId, rango.min, rango.max, ejercicioAsignadoId);
 
   return { ejercicio_asignado_id: ejercicioAsignadoId, nuevo_ejercicio_id: nuevoEjercicioId, rango_reps_min: rango.min, rango_reps_max: rango.max };
 });

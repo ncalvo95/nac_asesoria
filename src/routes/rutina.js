@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
-import { crearRutina, crearRutinaManual, obtenerRutinaActiva, reordenarEjercicios, sustituirEjercicio } from '../services/rutinaService.js';
+import {
+  crearRutina, crearRutinaManual, obtenerRutinaActiva, reordenarEjercicios,
+  sustituirEjercicio, sustituirEjercicioPreTesteo,
+} from '../services/rutinaService.js';
 import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
 import { tagsDisponibles } from '../services/routineBuilder.js';
@@ -145,10 +148,19 @@ router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {
     musculo: musculoNombre,
     musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
   });
+  // Excluye tambien los ejercicios que ya estan usados en OTRO slot del
+  // mismo dia (puede haber mas de un ejercicio por musculo desde que
+  // armarRutina reparte el tiempo disponible - sin esto, sustituir podia
+  // terminar repitiendo el mismo ejercicio dos veces en el mismo dia).
+  const usadosEnElDia = db.prepare(`
+    SELECT ejercicio_id FROM ejercicio_asignado WHERE dia_rutina_id = ? AND id != ?
+  `).all(ea.dia_rutina_id, ea.id).map((r) => r.ejercicio_id);
+
   const candidatos = db.prepare(`
     SELECT id, nombre, tipo, equipamiento_requerido_json FROM ejercicio
     WHERE musculo_primario_id = ? AND activo = 1 AND id != ?
   `).all(ea.musculo_objetivo_id, ea.ejercicio_id).filter((c) => {
+    if (usadosEnElDia.includes(c.id)) return false;
     const requeridos = JSON.parse(c.equipamiento_requerido_json);
     return requeridos.every((tag) => tags.has(tag));
   });
@@ -167,6 +179,25 @@ router.post('/ejercicios/:ejercicioAsignadoId/sustituir', (req, res, next) => {
     res.json(out);
   } catch (err) {
     if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('microciclo')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// Version simple de sustituir, solo utilizable mientras la semana 0 sigue
+// en curso (todavia no se cargo peso/reps para el slot) - el usuario carga
+// los datos de testeo del ejercicio nuevo directo en el propio formulario.
+router.post('/ejercicios/:ejercicioAsignadoId/sustituir-pre-testeo', (req, res, next) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { nuevo_ejercicio_id } = req.body || {};
+  if (!nuevo_ejercicio_id) return res.status(400).json({ error: 'nuevo_ejercicio_id es obligatorio.' });
+  try {
+    const out = sustituirEjercicioPreTesteo({ ejercicioAsignadoId: ea.id, usuarioId: ea.usuario_id, nuevoEjercicioId: nuevo_ejercicio_id });
+    res.json(out);
+  } catch (err) {
+    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('semana 0')) {
       return res.status(400).json({ error: err.message });
     }
     next(err);
@@ -195,6 +226,27 @@ router.get('/rutinas/:rutinaId/deload/actual', (req, res) => {
   ).get(microciclo.id);
   if (!deload) return res.json(null);
   res.json({ ...deload, detalle: JSON.parse(deload.detalle_json) });
+});
+
+const FECHA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+// Solo se puede mover mientras la semana 0 sigue en curso - una vez que
+// arranca el microciclo 1, cambiar la fecha retroactivamente desincroniza
+// el calendario de cierres (+14 dias, ver progressionEngine.js).
+router.patch('/rutinas/:rutinaId/fecha-inicio', (req, res) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  const { fecha_inicio } = req.body || {};
+  if (!fecha_inicio || !FECHA_REGEX.test(fecha_inicio)) {
+    return res.status(400).json({ error: 'fecha_inicio debe tener formato YYYY-MM-DD.' });
+  }
+  const microciclo0 = db.prepare("SELECT id FROM microciclo WHERE rutina_id = ? AND numero = 0 AND estado = 'en_curso'").get(rutina.id);
+  if (!microciclo0) {
+    return res.status(400).json({ error: 'Solo se puede cambiar la fecha de inicio mientras la semana 0 sigue en curso.' });
+  }
+  db.prepare('UPDATE rutina SET fecha_inicio = ? WHERE id = ?').run(fecha_inicio, rutina.id);
+  db.prepare('UPDATE microciclo SET fecha_inicio = ? WHERE id = ?').run(fecha_inicio, microciclo0.id);
+  res.json({ rutina_id: rutina.id, fecha_inicio });
 });
 
 router.post('/rutinas/:rutinaId/semana0', (req, res, next) => {

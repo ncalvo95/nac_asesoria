@@ -103,38 +103,74 @@ const getEjerciciosPorMusculo = db.prepare(`
   WHERE m.nombre = ? AND e.activo = 1
 `);
 
-// Arma la lista final de ejercicios asignados: por cada dia y musculo
-// objetivo, elige 1 ejercicio compuesto (top del musculo) + 1 aislado
-// (si hay disponible) dentro del equipamiento del usuario, evitando repetir
-// nombre de ejercicio dentro del mismo dia.
-export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusiones = [] }) {
+// Estimado de minutos por ejercicio (series de trabajo + descanso entre
+// series + transicion al siguiente), para poder repartir el tiempo
+// disponible del dia entre varios ejercicios por musculo en vez de asignar
+// siempre uno solo sin importar cuantos minutos declaro el usuario.
+export const MINUTOS_POR_EJERCICIO = 9;
+
+// Arma la lista final de ejercicios asignados. Por cada dia: primero
+// garantiza 1 ejercicio (el compuesto tiene prioridad - "top" del musculo,
+// ver supuesto #2 del prompt original) por cada musculo objetivo; despues,
+// con el tiempo que sobre segun duracionPorDia, va sumando ejercicios extra
+// -musculo por musculo, siempre al que menos tiene hasta ahora- hasta
+// agotar el tiempo disponible o quedarse sin candidatos. Asi la cantidad de
+// ejercicios por dia refleja los minutos que el usuario dijo tener, en vez
+// de un tope fijo de "1 por musculo" sin importar cuanto tiempo declaro.
+export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusiones = [], duracionPorDia = {} }) {
   const secuencia = armarSecuenciaDeDias(diasEspecificos);
   const excluidos = new Set(exclusiones);
 
   return secuencia.map((diaInfo, numeroDia) => {
     const usadosEnElDia = new Set();
-    const ejercicios = [];
+    const elegidosPorMusculo = new Map();
+    const restantesPorMusculo = new Map();
 
     for (const musculo of diaInfo.musculos) {
       const tags = tagsDisponibles({ ...equipamiento, musculo });
       const candidatos = getEjerciciosPorMusculo.all(musculo).filter((ej) => {
         if (excluidos.has(ej.id)) return false;
-        if (usadosEnElDia.has(ej.nombre)) return false;
         const requeridos = JSON.parse(ej.equipamiento_requerido_json);
         return requeridos.every((tag) => tags.has(tag));
       });
-      if (candidatos.length === 0) continue;
-
-      // Un ejercicio por musculo por dia (el compuesto tiene prioridad y se
-      // marca como "top" del musculo, ver supuesto #2 del prompt original).
-      // Si la sesion no entra en el tiempo disponible, el propio usuario
-      // recorta filas del Excel priorizando los compuestos (ver §4).
+      if (candidatos.length === 0) {
+        elegidosPorMusculo.set(musculo, []);
+        restantesPorMusculo.set(musculo, []);
+        continue;
+      }
       const compuestos = candidatos.filter((c) => c.tipo === 'compuesto');
-      const elegido = compuestos[0] || candidatos[0];
-      const elegidos = [{ ejercicio: elegido, esTop: true }];
+      const aislados = candidatos.filter((c) => c.tipo !== 'compuesto');
+      const ordenados = [...compuestos, ...aislados];
+      const top = ordenados[0];
+      usadosEnElDia.add(top.nombre);
+      elegidosPorMusculo.set(musculo, [{ ejercicio: top, esTop: true }]);
+      restantesPorMusculo.set(musculo, ordenados.slice(1));
+    }
 
-      for (const { ejercicio, esTop } of elegidos) {
-        usadosEnElDia.add(ejercicio.nombre);
+    const minutosDisponibles = duracionPorDia[diaInfo.dia_semana] || 60;
+    let minutosUsados = [...elegidosPorMusculo.values()].reduce((acc, arr) => acc + arr.length, 0) * MINUTOS_POR_EJERCICIO;
+
+    while (minutosDisponibles - minutosUsados >= MINUTOS_POR_EJERCICIO) {
+      const musculoElegido = diaInfo.musculos
+        .filter((m) => restantesPorMusculo.get(m)?.length > 0)
+        .sort((a, b) => elegidosPorMusculo.get(a).length - elegidosPorMusculo.get(b).length)[0];
+      if (!musculoElegido) break;
+
+      const cola = restantesPorMusculo.get(musculoElegido);
+      const siguiente = cola.find((c) => !usadosEnElDia.has(c.nombre));
+      if (!siguiente) {
+        restantesPorMusculo.set(musculoElegido, []);
+        continue;
+      }
+      usadosEnElDia.add(siguiente.nombre);
+      elegidosPorMusculo.get(musculoElegido).push({ ejercicio: siguiente, esTop: false });
+      restantesPorMusculo.set(musculoElegido, cola.filter((c) => c !== siguiente));
+      minutosUsados += MINUTOS_POR_EJERCICIO;
+    }
+
+    const ejercicios = [];
+    for (const musculo of diaInfo.musculos) {
+      for (const { ejercicio, esTop } of elegidosPorMusculo.get(musculo) || []) {
         const rango = rangoRepsPara({
           musculo,
           objetivo,
