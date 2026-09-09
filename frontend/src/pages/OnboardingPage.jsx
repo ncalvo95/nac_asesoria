@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import ArmadoManualRutina from '../components/ArmadoManualRutina.jsx';
@@ -32,7 +32,9 @@ const MUSCULOS = [
 ];
 
 export default function OnboardingPage() {
-  const { usuario } = useAuth();
+  const { usuario: sesion } = useAuth();
+  const { usuarioId: usuarioIdParam } = useParams();
+  const usuario = usuarioIdParam ? { id: Number(usuarioIdParam) } : sesion;
   const navigate = useNavigate();
 
   const [modo, setModo] = useState('auto');
@@ -146,7 +148,8 @@ export default function OnboardingPage() {
       // (o no refleja lo recien pedido) - mandamos a Progreso, que muestra
       // que esta esperando aprobacion, en vez de a Entrenamiento como si ya
       // se hubiera aplicado.
-      navigate(huboPendientes ? '/progreso' : '/entrenamiento');
+      const base = usuarioIdParam ? `/coach/clientes/${usuarioIdParam}` : '';
+      navigate(`${base}${huboPendientes ? '/progreso' : '/entrenamiento'}`);
     } catch (err) {
       setError(err.message || 'No se pudo generar la rutina.');
     } finally {

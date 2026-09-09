@@ -29,6 +29,7 @@ export default function App() {
             <Route path="/invitado" element={<GuestPage />} />
             <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
             <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
+            <Route path="/coach/clientes/:usuarioId/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route path="/entrenamiento" element={<EntrenamientoPage />} />
               <Route path="/rutinas" element={<RutinasPage />} />

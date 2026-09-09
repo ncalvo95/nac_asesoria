@@ -188,10 +188,10 @@ export default function CoachPage() {
                 </div>
                 {u.rol === 'cliente' && (
                   <Link
-                    to={`/coach/clientes/${u.id}/entrenamiento`}
+                    to={`/coach/clientes/${u.id}/${u.tiene_rutina_activa ? 'entrenamiento' : 'onboarding'}`}
                     className="text-[12.5px] font-semibold text-accent whitespace-nowrap"
                   >
-                    Ver →
+                    {u.tiene_rutina_activa ? 'Ver →' : 'Armar rutina →'}
                   </Link>
                 )}
               </div>

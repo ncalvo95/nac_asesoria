@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 
@@ -21,9 +21,12 @@ export default function RutinasPage() {
   const { usuario: sesion } = useAuth();
   const { usuarioId: usuarioIdParam } = useParams();
   const usuario = usuarioIdParam ? { id: Number(usuarioIdParam) } : sesion;
+  const navigate = useNavigate();
   const [rutinas, setRutinas] = useState(null);
   const [error, setError] = useState('');
   const [ocupada, setOcupada] = useState(null);
+
+  const linkNuevaRutina = usuarioIdParam ? `/coach/clientes/${usuarioIdParam}/onboarding` : '/onboarding';
 
   async function cargar() {
     try {
@@ -67,11 +70,20 @@ export default function RutinasPage() {
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-8">
-      <div className="px-1 flex flex-col gap-1">
-        <h1 className="text-[17px] font-bold">Mis rutinas</h1>
-        <p className="text-[13px] text-text-muted leading-relaxed">
-          Solo una rutina puede estar activa a la vez. Las anteriores quedan acá - podés retomar una vieja o borrarla.
-        </p>
+      <div className="px-1 flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-[17px] font-bold">Mis rutinas</h1>
+          <p className="text-[13px] text-text-muted leading-relaxed">
+            Solo una rutina puede estar activa a la vez. Las anteriores quedan acá - podés retomar una vieja o borrarla.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate(linkNuevaRutina)}
+          className="flex-none text-[12.5px] font-semibold text-accent border border-accent rounded-lg px-3 py-1.5 whitespace-nowrap"
+        >
+          + Nueva rutina
+        </button>
       </div>
 
       {error && <p className="text-[13px] text-danger px-1">{error}</p>}
