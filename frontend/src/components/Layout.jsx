@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import ThemeToggle from './ThemeToggle.jsx';
+import AccountMenu from './AccountMenu.jsx';
 
 const tabs = [
   { to: '/entrenamiento', label: 'Entrenamiento' },
@@ -10,7 +10,7 @@ const tabs = [
 ];
 
 export default function Layout() {
-  const { usuario, logout } = useAuth();
+  const { usuario } = useAuth();
 
   return (
     <div className="min-h-dvh flex flex-col bg-bg">
@@ -27,10 +27,7 @@ export default function Layout() {
               Panel de coach
             </Link>
           )}
-          <ThemeToggle />
-          <button onClick={logout} className="text-xs font-semibold text-text-muted">
-            {usuario?.nombre} · Salir
-          </button>
+          <AccountMenu />
         </div>
       </header>
 

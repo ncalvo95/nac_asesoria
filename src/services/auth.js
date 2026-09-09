@@ -117,6 +117,15 @@ export function revocarOtrasSesiones(usuarioId, sesionActualId) {
   db.prepare('DELETE FROM sesiones_auth WHERE usuario_id = ? AND id != ?').run(usuarioId, sesionActualId);
 }
 
+// Etiqueta a mano opcional (ej. "Celular del gym") para distinguir sesiones
+// cuando el user-agent no alcanza (dos pestañas del mismo Chrome, etc.) -
+// null/'' la borra y vuelve a mostrar el nombre detectado del user-agent.
+export function renombrarSesion(id, usuarioId, etiqueta) {
+  const info = db.prepare('UPDATE sesiones_auth SET etiqueta = ? WHERE id = ? AND usuario_id = ?')
+    .run(etiqueta || null, id, usuarioId);
+  return info.changes > 0;
+}
+
 // secure via req.secure (con "trust proxy" activado en server.js, refleja
 // X-Forwarded-Proto que manda el reverse proxy real) en vez de NODE_ENV
 // hardcodeado - asi no rompe el acceso por IP local en HTTP plano.

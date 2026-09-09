@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
-import ThemeToggle from '../components/ThemeToggle.jsx';
+import AccountMenu from '../components/AccountMenu.jsx';
 
 const TIPO_LABEL = {
   objetivo: 'Objetivo',
@@ -14,7 +14,7 @@ const TIPO_LABEL = {
 };
 
 export default function CoachPage() {
-  const { usuario, logout } = useAuth();
+  const { usuario } = useAuth();
   const navigate = useNavigate();
   const [usuarios, setUsuarios] = useState(null);
   const [solicitudes, setSolicitudes] = useState(null);
@@ -75,8 +75,7 @@ export default function CoachPage() {
           {usuario.rol === 'admin' && (
             <Link to="/catalogo" className="text-xs font-semibold text-accent">Catálogo</Link>
           )}
-          <ThemeToggle />
-          <button onClick={logout} className="text-xs font-semibold text-text-muted">{usuario.nombre} · Salir</button>
+          <AccountMenu />
         </div>
       </header>
 

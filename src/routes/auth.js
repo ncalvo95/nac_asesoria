@@ -3,7 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import {
   comparePassword, cookieOptions, COOKIE_NAME, crearSesion, hashPassword,
-  listarSesiones, PASSWORD_MAX, PASSWORD_MIN, passwordValida,
+  listarSesiones, PASSWORD_MAX, PASSWORD_MIN, passwordValida, renombrarSesion,
   revocarOtrasSesiones, revocarSesion, revocarSesionPorId, usuarioValido,
 } from '../services/auth.js';
 import {
@@ -73,6 +73,16 @@ router.delete('/sesiones/:id', requireAuth, (req, res) => {
 
 router.post('/sesiones/revocar-otras', requireAuth, (req, res) => {
   revocarOtrasSesiones(req.usuario.id, req.usuario.sesion_id);
+  res.status(204).end();
+});
+
+router.patch('/sesiones/:id', requireAuth, (req, res) => {
+  const { etiqueta } = req.body || {};
+  if (etiqueta != null && typeof etiqueta !== 'string') {
+    return res.status(400).json({ error: 'etiqueta debe ser texto.' });
+  }
+  const ok = renombrarSesion(req.params.id, req.usuario.id, etiqueta?.trim().slice(0, 60));
+  if (!ok) return res.status(404).json({ error: 'Sesion no encontrada.' });
   res.status(204).end();
 });
 
