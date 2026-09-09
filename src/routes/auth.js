@@ -14,19 +14,26 @@ function passwordValida(password) {
   return typeof password === 'string' && password.length >= PASSWORD_MIN && password.length <= PASSWORD_MAX;
 }
 
-const getUsuarioPorEmail = db.prepare('SELECT * FROM usuarios WHERE email = ?');
+// Mismo formato que Loot Ledger: 4-10 caracteres, letras/numeros/puntos/
+// guiones/guion bajo. Login por usuario, no por email.
+const USUARIO_REGEX = /^[A-Za-z0-9._-]{4,10}$/;
+function usuarioValido(usuario) {
+  return typeof usuario === 'string' && USUARIO_REGEX.test(usuario);
+}
+
+const getUsuarioPorNombreUsuario = db.prepare('SELECT * FROM usuarios WHERE usuario = ?');
 const insertUsuario = db.prepare(`
-  INSERT INTO usuarios (nombre, email, password_hash, rol, coach_id)
-  VALUES (@nombre, @email, @password_hash, @rol, @coach_id)
+  INSERT INTO usuarios (nombre, usuario, password_hash, rol, coach_id)
+  VALUES (@nombre, @usuario, @password_hash, @rol, @coach_id)
 `);
 
 router.post('/login', async (req, res) => {
-  const { email, password, remember } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Falta email o password.' });
+  const { usuario: nombreUsuario, password, remember } = req.body || {};
+  if (!nombreUsuario || !password) {
+    return res.status(400).json({ error: 'Falta usuario o password.' });
   }
 
-  const usuario = getUsuarioPorEmail.get(email);
+  const usuario = getUsuarioPorNombreUsuario.get(nombreUsuario);
   if (!usuario || !usuario.activo) {
     return res.status(401).json({ error: 'Credenciales invalidas.' });
   }
@@ -39,7 +46,7 @@ router.post('/login', async (req, res) => {
   const recordar = Boolean(remember);
   const { token } = crearSesion(usuario.id, { userAgent: req.get('user-agent'), recordar });
   res.cookie(COOKIE_NAME, token, cookieOptions(req, { recordar }));
-  res.json({ id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol: usuario.rol });
+  res.json({ id: usuario.id, nombre: usuario.nombre, usuario: usuario.usuario, rol: usuario.rol });
 });
 
 router.post('/logout', (req, res) => {
@@ -95,9 +102,12 @@ router.patch('/password', requireAuth, async (req, res) => {
 // Alta de cuentas: el admin puede crear coaches o clientes; un coach solo
 // puede crear clientes propios. No hay auto-registro publico.
 router.post('/usuarios', requireAuth, requireRole('admin', 'coach'), async (req, res) => {
-  const { nombre, email, password, rol } = req.body || {};
-  if (!nombre || !email || !password || !rol) {
+  const { nombre, usuario, password, rol } = req.body || {};
+  if (!nombre || !usuario || !password || !rol) {
     return res.status(400).json({ error: 'Faltan campos obligatorios.' });
+  }
+  if (!usuarioValido(usuario)) {
+    return res.status(400).json({ error: 'El usuario debe tener entre 4 y 10 caracteres: letras, numeros, puntos, guiones o guion bajo.' });
   }
   if (!passwordValida(password)) {
     return res.status(400).json({ error: `La contraseña debe tener entre ${PASSWORD_MIN} y ${PASSWORD_MAX} caracteres.` });
@@ -108,15 +118,15 @@ router.post('/usuarios', requireAuth, requireRole('admin', 'coach'), async (req,
   if (req.usuario.rol === 'coach' && rol !== 'cliente') {
     return res.status(403).json({ error: 'Un coach solo puede crear cuentas de cliente.' });
   }
-  if (getUsuarioPorEmail.get(email)) {
-    return res.status(409).json({ error: 'Ya existe una cuenta con ese email.' });
+  if (getUsuarioPorNombreUsuario.get(usuario)) {
+    return res.status(409).json({ error: 'Ya existe una cuenta con ese usuario.' });
   }
 
   const password_hash = await hashPassword(password);
   const coach_id = rol === 'cliente' ? (req.usuario.rol === 'coach' ? req.usuario.id : req.body.coach_id ?? null) : null;
 
-  const info = insertUsuario.run({ nombre, email, password_hash, rol, coach_id });
-  res.status(201).json({ id: info.lastInsertRowid, nombre, email, rol, coach_id });
+  const info = insertUsuario.run({ nombre, usuario, password_hash, rol, coach_id });
+  res.status(201).json({ id: info.lastInsertRowid, nombre, usuario, rol, coach_id });
 });
 
 // Listado de cuentas: un coach ve solo sus clientes; el admin ve todo
@@ -126,15 +136,15 @@ router.get('/usuarios', requireAuth, requireRole('admin', 'coach'), (req, res) =
   let usuarios;
   if (req.usuario.rol === 'coach') {
     usuarios = db.prepare(
-      "SELECT id, nombre, email, rol, created_at FROM usuarios WHERE coach_id = ? ORDER BY nombre"
+      "SELECT id, nombre, usuario, rol, created_at FROM usuarios WHERE coach_id = ? ORDER BY nombre"
     ).all(req.usuario.id);
   } else if (rol) {
     usuarios = db.prepare(
-      'SELECT id, nombre, email, rol, coach_id, created_at FROM usuarios WHERE rol = ? ORDER BY nombre'
+      'SELECT id, nombre, usuario, rol, coach_id, created_at FROM usuarios WHERE rol = ? ORDER BY nombre'
     ).all(rol);
   } else {
     usuarios = db.prepare(
-      'SELECT id, nombre, email, rol, coach_id, created_at FROM usuarios ORDER BY rol, nombre'
+      'SELECT id, nombre, usuario, rol, coach_id, created_at FROM usuarios ORDER BY rol, nombre'
     ).all();
   }
 

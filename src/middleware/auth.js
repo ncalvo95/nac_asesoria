@@ -2,7 +2,7 @@ import db from '../db/index.js';
 import { COOKIE_NAME, validarSesion } from '../services/auth.js';
 
 const getUsuario = db.prepare(
-  'SELECT id, nombre, email, rol, coach_id, activo FROM usuarios WHERE id = ?'
+  'SELECT id, nombre, usuario, rol, coach_id, activo FROM usuarios WHERE id = ?'
 );
 
 export function requireAuth(req, res, next) {

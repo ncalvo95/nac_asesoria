@@ -64,7 +64,7 @@ export const crearSesion = db.transaction((usuarioId, { userAgent, recordar }) =
 });
 
 const getSesionValida = db.prepare(`
-  SELECT s.id AS sesion_id, s.last_seen_at, u.id, u.nombre, u.email, u.rol, u.coach_id, u.activo
+  SELECT s.id AS sesion_id, s.last_seen_at, u.id, u.nombre, u.usuario, u.rol, u.coach_id, u.activo
   FROM sesiones_auth s JOIN usuarios u ON u.id = s.usuario_id
   WHERE s.token_hash = ? AND s.expires_at > datetime('now')
 `);

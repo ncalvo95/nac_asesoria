@@ -96,7 +96,7 @@ Pendiente / simplificaciones conocidas:
 npm install
 npm run db:migrate
 npm run db:seed
-ADMIN_EMAIL=vos@ejemplo.com ADMIN_PASSWORD=<pass> npm run db:bootstrap-admin
+ADMIN_USUARIO=admin ADMIN_PASSWORD=<pass> npm run db:bootstrap-admin
 npm run build:frontend
 npm start
 ```

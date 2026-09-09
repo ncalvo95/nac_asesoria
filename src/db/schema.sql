@@ -10,7 +10,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS usuarios (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
+  usuario TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   rol TEXT NOT NULL CHECK (rol IN ('admin', 'coach', 'cliente')),
   coach_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,

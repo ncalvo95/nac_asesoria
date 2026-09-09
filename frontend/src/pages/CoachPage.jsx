@@ -54,7 +54,7 @@ export default function CoachPage() {
             <div key={u.id} className="bg-surface border border-border rounded-xl p-3.5 flex items-center justify-between gap-3">
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-[13.5px] font-semibold truncate">{u.nombre}</span>
-                <span className="text-[12px] text-text-muted truncate">{u.email}</span>
+                <span className="text-[12px] text-text-muted truncate">{u.usuario}</span>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="text-[10.5px] font-semibold uppercase text-text-faint bg-bg border border-border rounded-md px-1.5 py-0.5">
                     {u.rol}
@@ -84,7 +84,7 @@ export default function CoachPage() {
 
 function AltaCuenta({ rolActor, onListo }) {
   const [nombre, setNombre] = useState('');
-  const [email, setEmail] = useState('');
+  const [nombreUsuario, setNombreUsuario] = useState('');
   const [password, setPassword] = useState('');
   const [rol, setRol] = useState('cliente');
   const [error, setError] = useState('');
@@ -95,7 +95,7 @@ function AltaCuenta({ rolActor, onListo }) {
     setError('');
     setEnviando(true);
     try {
-      await api.post('/auth/usuarios', { nombre, email, password, rol });
+      await api.post('/auth/usuarios', { nombre, usuario: nombreUsuario, password, rol });
       onListo();
     } catch (err) {
       setError(err.message);
@@ -122,7 +122,8 @@ function AltaCuenta({ rolActor, onListo }) {
       )}
       <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre" required
         className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent" />
-      <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Email" required
+      <input value={nombreUsuario} onChange={(e) => setNombreUsuario(e.target.value)} type="text" placeholder="Usuario (4-10 caracteres)" required
+        minLength={4} maxLength={10} pattern="[A-Za-z0-9._-]+"
         className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent" />
       <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Contraseña" required
         className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent" />

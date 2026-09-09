@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 export default function LoginPage() {
   const { usuario, login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [nombreUsuario, setNombreUsuario] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
@@ -18,7 +18,7 @@ export default function LoginPage() {
     setError('');
     setEnviando(true);
     try {
-      await login(email, password, remember);
+      await login(nombreUsuario, password, remember);
       navigate('/');
     } catch (err) {
       setError(err.message || 'No se pudo iniciar sesión.');
@@ -43,13 +43,14 @@ export default function LoginPage() {
 
       <form onSubmit={onSubmit} className="flex flex-col gap-3.5">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-text-muted">Email</span>
+          <span className="text-xs font-semibold text-text-muted">Usuario</span>
           <input
-            type="email"
+            type="text"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="vos@ejemplo.com"
+            autoComplete="username"
+            value={nombreUsuario}
+            onChange={(e) => setNombreUsuario(e.target.value)}
+            placeholder="tu usuario"
             className="h-11.5 rounded-[10px] border border-border bg-surface px-3.5 text-[14.5px] text-text outline-none focus:border-accent"
           />
         </label>
