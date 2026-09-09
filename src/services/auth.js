@@ -7,7 +7,10 @@ if (!JWT_SECRET) {
 }
 
 const TOKEN_TTL = '30d';
-export const COOKIE_NAME = 'session';
+// Nombre especifico (no "session" a secas) porque el dominio de hosting
+// (castielo.io) sirve mas de una app - evita que dos apps se pisen la
+// cookie si ambas usan el mismo nombre generico.
+export const COOKIE_NAME = 'nac_asesoria_session';
 
 export function hashPassword(password) {
   return bcrypt.hash(password, 12);
@@ -31,6 +34,9 @@ export function cookieOptions() {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 30 * 24 * 60 * 60 * 1000,
-    path: '/',
+    // COOKIE_PATH: si la app se sirve bajo un subpath (ej. /nac_asesoria en
+    // castielo.io), restringir la cookie a ese path evita que viaje a otras
+    // apps del mismo dominio. En local queda "/" por default.
+    path: process.env.COOKIE_PATH || '/',
   };
 }

@@ -93,6 +93,72 @@ Variables de entorno:
 - `JWT_SECRET` (obligatoria): secreto para firmar los JWT de sesión.
 - `PORT` (opcional, default 3000).
 - `DB_PATH` (opcional, default `data/app.db`).
+- `COOKIE_PATH` (opcional, default `/`): restringe la cookie de sesión a un
+  path — usarlo cuando la app se sirve bajo un subpath (ver Deployment).
+
+## Deployment en castielo.io/nac_asesoria
+
+Mismo esquema que Loot Ledger: un contenedor más en la red interna del
+`docker-compose` de Caddy, sin publicar puerto al host — Caddy le llega por
+nombre de servicio y expone la app bajo un subpath del dominio.
+
+**1. Build de la imagen**, con el subpath horneado en el bundle del frontend
+(los paths de los assets y las rutas de React Router necesitan saber bajo
+qué subpath van a vivir — esto es lo único que le importa al subpath, el
+backend no necesita saber nada de esto):
+
+```bash
+docker build -t nac_asesoria --build-arg VITE_BASE_PATH=/nac_asesoria/ .
+```
+
+**2. Servicio en el `docker-compose.yml`** que ya tiene Loot Ledger (mismo
+network interno, sin `ports:` — Caddy es quien conecta):
+
+```yaml
+services:
+  nac_asesoria:
+    build:
+      context: ../nac_asesoria     # ajustar segun donde clones el repo
+      args:
+        VITE_BASE_PATH: /nac_asesoria/
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${NAC_ASESORIA_JWT_SECRET}
+      COOKIE_PATH: /nac_asesoria
+    volumes:
+      - nac_asesoria_data:/app/data
+    networks:
+      - default    # la misma red donde ya esta Caddy y Loot Ledger
+
+volumes:
+  nac_asesoria_data:
+```
+
+**3. Bloque en el `Caddyfile`** — clave usar `handle_path` (no `handle`):
+recorta el prefijo `/nac_asesoria` antes de reenviar, así la app responde
+como si viviera en la raíz y no hace falta tocarle una línea de código al
+backend:
+
+```
+castielo.io {
+    # ... bloques existentes (Loot Ledger, etc.) ...
+
+    handle_path /nac_asesoria/* {
+        reverse_proxy nac_asesoria:3000
+    }
+}
+```
+
+**4. Primer arranque** (una sola vez, dentro del contenedor o via `docker
+compose exec`): correr las migraciones/seed/bootstrap-admin de la sección
+Setup, apuntando `DB_PATH` al volumen (`/app/data/app.db`, ya es el default
+de la imagen).
+
+Validado en este entorno con un proxy que replica exactamente el
+`handle_path` de Caddy (recorta `/nac_asesoria` y reenvía): assets, API,
+navegación de React Router y la cookie de sesión (nombre y path) funcionan
+igual que serviendo en la raíz — no hay nada más que ajustar del lado de la
+app al mudarse al subpath real.
 
 ## Probar el generador de Excel para invitados
 

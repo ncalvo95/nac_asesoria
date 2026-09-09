@@ -33,7 +33,7 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie(COOKIE_NAME, { path: '/' });
+  res.clearCookie(COOKIE_NAME, { path: cookieOptions().path });
   res.status(204).end();
 });
 

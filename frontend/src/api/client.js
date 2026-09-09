@@ -1,5 +1,10 @@
+// import.meta.env.BASE_URL viene del `base` configurado en vite.config.js
+// (siempre termina en "/"), asi que esto arma bien tanto en la raiz ("/")
+// como servido bajo un subpath (ej. "/nac_asesoria/") sin tocar nada mas.
+export const API_BASE = `${import.meta.env.BASE_URL}api`;
+
 async function request(method, path, body) {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,

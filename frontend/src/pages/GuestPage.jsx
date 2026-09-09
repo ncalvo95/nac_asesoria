@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { API_BASE } from '../api/client.js';
 
 const DIAS = [
   { id: 'lunes', label: 'Lun' },
@@ -45,7 +46,7 @@ export default function GuestPage() {
 
     setGenerando(true);
     try {
-      const res = await fetch('/api/guest/rutina.xlsx', {
+      const res = await fetch(`${API_BASE}/guest/rutina.xlsx`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

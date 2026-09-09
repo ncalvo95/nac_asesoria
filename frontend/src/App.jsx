@@ -16,7 +16,7 @@ import PreferenciasPage from './pages/PreferenciasPage.jsx';
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/invitado" element={<GuestPage />} />

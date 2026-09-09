@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { api } from '../api/client.js';
+import { api, API_BASE } from '../api/client.js';
 
 export default function ProgresoPage() {
   const { usuario: sesion } = useAuth();
@@ -82,7 +82,7 @@ export default function ProgresoPage() {
           </p>
         </div>
         <a
-          href={`/api/rutinas/${rutina.id}/export.xlsx`}
+          href={`${API_BASE}/rutinas/${rutina.id}/export.xlsx`}
           className="text-[12.5px] font-semibold text-accent border border-accent rounded-lg px-3 py-2"
         >
           Exportar Excel
