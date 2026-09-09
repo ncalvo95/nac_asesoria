@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 
 const tabs = [
   { to: '/entrenamiento', label: 'Entrenamiento' },
+  { to: '/rutinas', label: 'Rutinas' },
   { to: '/progreso', label: 'Progreso' },
   { to: '/reportes', label: 'Reportes' },
 ];

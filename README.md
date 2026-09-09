@@ -75,10 +75,13 @@ cierre de microciclo → progreso → export a Excel):
   de generación (`src/services/excelGenerator.js`).
 
 - Frontend (`frontend/`): login (con "recordarme"), onboarding (con la
-  opción de generación automática o armado manual de la rutina), "Día de
-  entrenamiento" (semana 0 de testeo, registro de series por peso/reps/RIR,
-  modo "lineal forzado" por ejercicio, sustitución de ejercicio a mitad de
-  rutina), Progreso
+  opción de generación automática, split personalizado o armado manual de
+  la rutina), "Día de entrenamiento" (semana 0 de testeo con fecha de
+  inicio elegible, registro de series por peso/reps/RIR, modo "lineal
+  forzado" por ejercicio, sustitución o agregado de ejercicio a mitad de
+  rutina), "Mis rutinas" (historial de rutinas - solo una puede estar
+  activa a la vez, se finaliza sola al crear o reactivar otra; desde acá se
+  puede reactivar una vieja o borrarla para siempre), Progreso
   (volumen por músculo vs MAV, notas de estancamiento/mejora, cerrar
   microciclo, pedir descarga/deload, exportar a Excel), Reportes (semestral
   y resumen de mesociclo, comparando peso/reps/volumen), pantalla de

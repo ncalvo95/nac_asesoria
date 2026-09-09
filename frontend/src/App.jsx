@@ -9,6 +9,7 @@ import GuestPage from './pages/GuestPage.jsx';
 import HomePage from './pages/HomePage.jsx';
 import OnboardingPage from './pages/OnboardingPage.jsx';
 import EntrenamientoPage from './pages/EntrenamientoPage.jsx';
+import RutinasPage from './pages/RutinasPage.jsx';
 import ProgresoPage from './pages/ProgresoPage.jsx';
 import CoachPage from './pages/CoachPage.jsx';
 import CatalogoPage from './pages/CatalogoPage.jsx';
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
           <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route path="/entrenamiento" element={<EntrenamientoPage />} />
+            <Route path="/rutinas" element={<RutinasPage />} />
             <Route path="/progreso" element={<ProgresoPage />} />
             <Route path="/reportes" element={<ReportesPage />} />
           </Route>
@@ -35,6 +37,7 @@ export default function App() {
           <Route path="/catalogo" element={<ProtectedRoute><CatalogoPage /></ProtectedRoute>} />
           <Route path="/coach/clientes/:usuarioId" element={<ProtectedRoute><CoachClientLayout /></ProtectedRoute>}>
             <Route path="entrenamiento" element={<EntrenamientoPage />} />
+            <Route path="rutinas" element={<RutinasPage />} />
             <Route path="progreso" element={<ProgresoPage />} />
             <Route path="reportes" element={<ReportesPage />} />
             <Route path="preferencias" element={<PreferenciasPage />} />

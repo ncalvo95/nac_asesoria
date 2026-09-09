@@ -17,6 +17,14 @@ export default function CoachClientLayout() {
             Entrenamiento
           </NavLink>
           <NavLink
+            to={`/coach/clientes/${usuarioId}/rutinas`}
+            className={({ isActive }) =>
+              `px-3 h-8 rounded-full border text-[12.5px] font-semibold flex items-center ${isActive ? 'bg-accent text-accent-fg border-accent' : 'bg-bg border-border text-text-muted'}`
+            }
+          >
+            Rutinas
+          </NavLink>
+          <NavLink
             to={`/coach/clientes/${usuarioId}/progreso`}
             className={({ isActive }) =>
               `px-3 h-8 rounded-full border text-[12.5px] font-semibold flex items-center ${isActive ? 'bg-accent text-accent-fg border-accent' : 'bg-bg border-border text-text-muted'}`

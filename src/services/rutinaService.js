@@ -228,6 +228,43 @@ export function obtenerRutinaActiva(usuarioId) {
   };
 }
 
+// Historial de rutinas del usuario (activa + finalizadas) para la pantalla
+// "Mis rutinas" - un resumen liviano, sin dias/ejercicios completos.
+export function listarRutinas(usuarioId) {
+  const rutinas = db.prepare('SELECT * FROM rutina WHERE usuario_id = ? ORDER BY id DESC').all(usuarioId);
+  const contarDias = db.prepare('SELECT COUNT(*) AS n FROM dia_rutina WHERE rutina_id = ?');
+  const ultimoMicrociclo = db.prepare('SELECT MAX(numero) AS n FROM microciclo WHERE rutina_id = ?');
+  return rutinas.map((r) => ({
+    ...r,
+    cantidad_dias: contarDias.get(r.id).n,
+    ultimo_microciclo: ultimoMicrociclo.get(r.id).n,
+  }));
+}
+
+// Vuelve a poner como activa una rutina finalizada (finaliza la que este
+// activa en ese momento, si hay una - mismo mecanismo que crear una rutina
+// nueva). No toca el estado de sus microciclos: retoma donde haya quedado.
+export const reactivarRutina = db.transaction((rutinaId, usuarioId) => {
+  const rutina = db.prepare('SELECT * FROM rutina WHERE id = ?').get(rutinaId);
+  if (!rutina) throw new Error('Rutina no encontrada.');
+  if (rutina.estado === 'activa') return;
+  desactivarRutinasPrevias.run(usuarioId);
+  db.prepare("UPDATE rutina SET estado = 'activa' WHERE id = ?").run(rutinaId);
+});
+
+// Borra una rutina finalizada para siempre (dias, ejercicios asignados,
+// microciclos e historial de sesiones/series caen en cascada). Nunca se
+// puede borrar la rutina activa - hay que reactivar otra o crear una nueva
+// antes.
+export function eliminarRutina(rutinaId) {
+  const rutina = db.prepare('SELECT * FROM rutina WHERE id = ?').get(rutinaId);
+  if (!rutina) throw new Error('Rutina no encontrada.');
+  if (rutina.estado === 'activa') {
+    throw new Error('No se puede borrar la rutina activa - reactiva otra o crea una nueva primero.');
+  }
+  db.prepare('DELETE FROM rutina WHERE id = ?').run(rutinaId);
+}
+
 export function reordenarEjercicios(diaRutinaId, orden) {
   const update = db.prepare('UPDATE ejercicio_asignado SET orden = ? WHERE id = ? AND dia_rutina_id = ?');
   const tx = db.transaction((items) => {

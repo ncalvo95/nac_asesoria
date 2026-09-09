@@ -2,8 +2,9 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
-  agregarEjercicioADia, crearRutina, crearRutinaConSplit, crearRutinaManual, obtenerRutinaActiva,
-  quitarEjercicioAsignado, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
+  agregarEjercicioADia, crearRutina, crearRutinaConSplit, crearRutinaManual, eliminarRutina,
+  listarRutinas, obtenerRutinaActiva, quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios,
+  sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
@@ -53,6 +54,36 @@ router.get('/usuarios/:usuarioId/rutina', (req, res) => {
   const rutina = obtenerRutinaActiva(usuarioId);
   if (!rutina) return res.status(404).json({ error: 'El usuario no tiene una rutina activa.' });
   res.json(rutina);
+});
+
+// Historial de rutinas (activa + finalizadas) para "Mis rutinas".
+router.get('/usuarios/:usuarioId/rutinas', (req, res) => {
+  const usuarioId = Number(req.params.usuarioId);
+  if (!checkAccesoUsuario(req, res, usuarioId)) return;
+  res.json(listarRutinas(usuarioId));
+});
+
+router.post('/rutinas/:rutinaId/reactivar', (req, res, next) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  try {
+    reactivarRutina(rutina.id, rutina.usuario_id);
+    res.json(obtenerRutinaActiva(rutina.usuario_id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/rutinas/:rutinaId', (req, res, next) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  try {
+    eliminarRutina(rutina.id);
+    res.status(204).end();
+  } catch (err) {
+    if (err.message.includes('activa')) return res.status(400).json({ error: err.message });
+    next(err);
+  }
 });
 
 const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
