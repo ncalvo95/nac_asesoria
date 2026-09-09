@@ -3,7 +3,8 @@
 Webapp para programar entrenamientos con progresión automática por microciclos
 de 2 semanas, medición de volumen y series efectivas por grupo muscular.
 Pensada para convivir en la misma Raspberry Pi (3B, 1GB RAM) que ya corre
-Loot Ledger, detrás de la misma instancia de Caddy.
+Loot Ledger, expuesta en `www.castielo.io/nac_asesoria` a través del mismo
+Cloudflare Tunnel (ver Deployment).
 
 ## Stack
 
@@ -93,72 +94,70 @@ Variables de entorno:
 - `JWT_SECRET` (obligatoria): secreto para firmar los JWT de sesión.
 - `PORT` (opcional, default 3000).
 - `DB_PATH` (opcional, default `data/app.db`).
-- `COOKIE_PATH` (opcional, default `/`): restringe la cookie de sesión a un
-  path — usarlo cuando la app se sirve bajo un subpath (ver Deployment).
+- `BASE_PATH` (opcional, default vacío = raíz del dominio): subpath bajo el
+  que cuelga toda la app — API, estáticos y cookie de sesión (ver
+  `src/base-path.js`). Tiene que coincidir con el `BASE_PATH` usado al
+  buildear el frontend (`BASE_PATH=/nac_asesoria npm run build` dentro de
+  `frontend/`) — es la misma variable para los dos lados, igual que en Loot
+  Ledger (`server/src/base-path.js` / `client/vite.config.js` de ese repo).
 
 ## Deployment en castielo.io/nac_asesoria
 
-Mismo esquema que Loot Ledger: un contenedor más en la red interna del
-`docker-compose` de Caddy, sin publicar puerto al host — Caddy le llega por
-nombre de servicio y expone la app bajo un subpath del dominio.
+Mismo esquema que Loot Ledger, con la misma convención `BASE_PATH` (no
+`handle_path` de Caddy — esa variante solo la usan para *probar* con
+subdominios de DuckDNS; el dominio real (`www.castielo.io`) se sirve por
+**Cloudflare Tunnel**, que rutea por *path* sin recortar el prefijo, así que
+la app sí necesita saber bajo qué subpath vive):
 
-**1. Build de la imagen**, con el subpath horneado en el bundle del frontend
-(los paths de los assets y las rutas de React Router necesitan saber bajo
-qué subpath van a vivir — esto es lo único que le importa al subpath, el
-backend no necesita saber nada de esto):
+**1. Build de la imagen**, con el subpath horneado en el bundle del
+frontend (`docker build` ya lo hace vía `--build-arg`, no hace falta correr
+esto a mano si usás el `docker-compose.yml` del paso 2):
 
 ```bash
-docker build -t nac_asesoria --build-arg VITE_BASE_PATH=/nac_asesoria/ .
+docker build -t nac-asesoria --build-arg BASE_PATH=/nac_asesoria .
 ```
 
-**2. Servicio en el `docker-compose.yml`** que ya tiene Loot Ledger (mismo
-network interno, sin `ports:` — Caddy es quien conecta):
+**2. `docker-compose.yml` propio** (ya está en la raíz de este repo, no hay
+que copiarlo a Loot Ledger): se une a la red externa `edge` — la misma que
+ya comparten Loot Ledger y el portfolio, creada una sola vez con
+`docker network create edge` (ver `docs/deploy-ssd-domain.md` de Loot
+Ledger) — sin publicar puerto al host.
 
-```yaml
-services:
-  nac_asesoria:
-    build:
-      context: ../nac_asesoria     # ajustar segun donde clones el repo
-      args:
-        VITE_BASE_PATH: /nac_asesoria/
-    restart: unless-stopped
-    environment:
-      JWT_SECRET: ${NAC_ASESORIA_JWT_SECRET}
-      COOKIE_PATH: /nac_asesoria
-    volumes:
-      - nac_asesoria_data:/app/data
-    networks:
-      - default    # la misma red donde ya esta Caddy y Loot Ledger
-
-volumes:
-  nac_asesoria_data:
+```bash
+cp .env.example .env
+nano .env   # JWT_SECRET y BASE_PATH=/nac_asesoria
+docker compose up -d --build
 ```
 
-**3. Bloque en el `Caddyfile`** — clave usar `handle_path` (no `handle`):
-recorta el prefijo `/nac_asesoria` antes de reenviar, así la app responde
-como si viviera en la raíz y no hace falta tocarle una línea de código al
-backend:
+**3. Ruteo hacia el contenedor** — folder `nac-asesoria` (el `container_name`
+de este compose), alcanzable por Cloudflare Tunnel a través de la red
+`edge` sin tocar ningún archivo de Loot Ledger. Dos formas, elegí una en el
+dashboard de Cloudflare (Zero Trust → Networks → Tunnels → tu túnel →
+Public Hostname), para `www.castielo.io`:
 
-```
-castielo.io {
-    # ... bloques existentes (Loot Ledger, etc.) ...
+- Si el dashboard te deja poner un campo **Path**: una entrada con
+  `Path: nac_asesoria`, Service `http://nac-asesoria:3000`, evaluada
+  **antes** que la entrada catch-all del portfolio (el orden importa).
+- Si no (o preferís tenerlo versionado): un ingress rule en el `config.yml`
+  del túnel (vive en el repo de Loot Ledger, ver la sección "Rutear por
+  path" de `docs/deploy-ssd-domain.md` ahí) — algo como
+  `path: ^/nac_asesoria(/.*)?$` → `service: http://nac-asesoria:3000`,
+  antes de la regla catch-all.
 
-    handle_path /nac_asesoria/* {
-        reverse_proxy nac_asesoria:3000
-    }
-}
-```
+**4. Primer arranque** (una sola vez, `docker compose exec nac-asesoria sh`
+o similar): correr las migraciones/seed/bootstrap-admin de la sección Setup
+dentro del contenedor.
 
-**4. Primer arranque** (una sola vez, dentro del contenedor o via `docker
-compose exec`): correr las migraciones/seed/bootstrap-admin de la sección
-Setup, apuntando `DB_PATH` al volumen (`/app/data/app.db`, ya es el default
-de la imagen).
+Validado en este entorno (Docker no pudo levantar el daemon acá — se
+verificó corriendo el server directo con `BASE_PATH=/nac_asesoria`, sin
+proxy intermediario): con el subpath seteado, la app deja de responder en
+la raíz y pasa a responder solo bajo `/nac_asesoria` — assets, API,
+navegación de React Router, y la cookie de sesión (nombre y path) — igual
+que corriendo en la raíz sin la variable.
 
-Validado en este entorno con un proxy que replica exactamente el
-`handle_path` de Caddy (recorta `/nac_asesoria` y reenvía): assets, API,
-navegación de React Router y la cookie de sesión (nombre y path) funcionan
-igual que serviendo en la raíz — no hay nada más que ajustar del lado de la
-app al mudarse al subpath real.
+Nada de esto toca el repo de Loot Ledger ni el de castielo-web — solo
+hace falta la entrada de ruteo en el dashboard de Cloudflare (o en su
+`config.yml`, si prefieren esa vía) apuntando a `nac-asesoria:3000`.
 
 ## Probar el generador de Excel para invitados
 

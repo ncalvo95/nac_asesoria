@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { MOUNT_PATH } from '../base-path.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -34,9 +35,9 @@ export function cookieOptions() {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 30 * 24 * 60 * 60 * 1000,
-    // COOKIE_PATH: si la app se sirve bajo un subpath (ej. /nac_asesoria en
-    // castielo.io), restringir la cookie a ese path evita que viaje a otras
-    // apps del mismo dominio. En local queda "/" por default.
-    path: process.env.COOKIE_PATH || '/',
+    // Une la cookie a todo lo que cuelga de MOUNT_PATH ("/" en un deploy
+    // normal, "/nac_asesoria" si convive con otro sitio) - evita que viaje a
+    // otras apps del mismo dominio.
+    path: MOUNT_PATH,
   };
 }

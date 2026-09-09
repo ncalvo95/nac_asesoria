@@ -1,0 +1,39 @@
+services:
+  nac-asesoria:
+    build:
+      context: .
+      # Tiene que coincidir con el BASE_PATH de "environment:" aca abajo --
+      # una sola variable en el .env de la raiz del repo controla las dos
+      # (frontend horneado en el build + backend en runtime). Si cambias
+      # BASE_PATH hace falta reconstruir la imagen ("--build"), no alcanza
+      # con reiniciar el contenedor: queda horneado en los assets del build.
+      args:
+        BASE_PATH: ${BASE_PATH:-}
+    image: nac-asesoria:latest
+    container_name: nac-asesoria
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      DB_PATH: /app/data/app.db
+      JWT_SECRET: ${JWT_SECRET:?Definir JWT_SECRET en el .env}
+      # Subpath bajo el que cuelga la app (ej. "/nac_asesoria" para
+      # www.castielo.io/nac_asesoria). Vacio por defecto = raiz del dominio.
+      # Ver src/base-path.js.
+      BASE_PATH: ${BASE_PATH:-}
+    volumes:
+      - nac_asesoria_data:/app/data
+    # Sin "ports:" a proposito -- no se expone directo al host. Solo la red
+    # compartida "edge" (creada a mano una sola vez con
+    # "docker network create edge", ver deploy-ssd-domain.md de Loot Ledger),
+    # por la que Caddy/cloudflared (corriendo en el compose de Loot Ledger)
+    # llegan a este contenedor por su container_name, sin puertos abiertos.
+    networks:
+      - edge
+
+volumes:
+  nac_asesoria_data:
+    name: nac_asesoria_data
+
+networks:
+  edge:
+    external: true

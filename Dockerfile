@@ -1,30 +1,46 @@
-# Imagen basada en Debian (glibc), no Alpine: better-sqlite3 es un modulo
-# nativo y sus binarios prebuilt apuntan a glibc - en Alpine (musl) suele
-# forzar una compilacion desde cero, lenta en una Raspberry Pi.
-
-FROM node:22-slim AS frontend-build
+# Build del frontend (React + Vite)
+FROM node:22-bookworm-slim AS frontend-build
 WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm ci
+# Subpath bajo el que cuelga la app (ej. "/nac_asesoria"), horneado en los
+# assets del build -- ver frontend/vite.config.js y src/base-path.js. Vacio
+# por defecto: build normal, en la raiz. Se pasa como build arg desde
+# docker-compose.yml (variable BASE_PATH del .env de la raiz del repo).
+# Mismo patron que Loot Ledger (Dockerfile / client/vite.config.js), para
+# convivir en la misma Pi con la misma convencion.
+ARG BASE_PATH=
+ENV BASE_PATH=$BASE_PATH
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
 COPY frontend/ ./
-# VITE_BASE_PATH: subpath donde se sirve la app (ver README - Deployment).
-# Default "/" para que un build sin este arg siga sirviendo desde la raiz.
-ARG VITE_BASE_PATH=/
-ENV VITE_BASE_PATH=$VITE_BASE_PATH
 RUN npm run build
 
-FROM node:22-slim
+# Instalacion de dependencias del backend (compila better-sqlite3 para la
+# arquitectura destino). Se incluyen herramientas de build por si no hay
+# binario prebuilt para el arch/version de Node exactos en la Raspberry Pi -
+# mismo motivo y mismo fix que ya vale para Loot Ledger en el mismo hardware.
+FROM node:22-bookworm-slim AS server-deps
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
+
+# Imagen final: un unico proceso Node sirviendo API + estaticos (liviano
+# para Raspberry Pi 3B)
+FROM node:22-bookworm-slim
+ENV NODE_ENV=production
+WORKDIR /app
+
+COPY --from=server-deps /app/node_modules ./node_modules
+COPY package.json ./
 COPY src/ ./src/
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
-RUN mkdir -p data
 
-ENV NODE_ENV=production
+RUN mkdir -p /app/data
+VOLUME ["/app/data"]
+
 ENV PORT=3000
 ENV DB_PATH=/app/data/app.db
 EXPOSE 3000
-VOLUME ["/app/data"]
 
 CMD ["node", "src/server.js"]
