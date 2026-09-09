@@ -1,9 +1,18 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
-import { comparePassword, cookieOptions, COOKIE_NAME, hashPassword, signToken } from '../services/auth.js';
+import {
+  comparePassword, cookieOptions, COOKIE_NAME, crearSesion, hashPassword,
+  listarSesiones, revocarOtrasSesiones, revocarSesion, revocarSesionPorId,
+} from '../services/auth.js';
 
 const router = Router();
+
+const PASSWORD_MIN = 6;
+const PASSWORD_MAX = 64;
+function passwordValida(password) {
+  return typeof password === 'string' && password.length >= PASSWORD_MIN && password.length <= PASSWORD_MAX;
+}
 
 const getUsuarioPorEmail = db.prepare('SELECT * FROM usuarios WHERE email = ?');
 const insertUsuario = db.prepare(`
@@ -12,7 +21,7 @@ const insertUsuario = db.prepare(`
 `);
 
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body || {};
+  const { email, password, remember } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: 'Falta email o password.' });
   }
@@ -27,18 +36,60 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Credenciales invalidas.' });
   }
 
-  const token = signToken(usuario);
-  res.cookie(COOKIE_NAME, token, cookieOptions());
+  const recordar = Boolean(remember);
+  const { token } = crearSesion(usuario.id, { userAgent: req.get('user-agent'), recordar });
+  res.cookie(COOKIE_NAME, token, cookieOptions(req, { recordar }));
   res.json({ id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol: usuario.rol });
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie(COOKIE_NAME, { path: cookieOptions().path });
+  const token = req.cookies?.[COOKIE_NAME];
+  if (token) revocarSesion(token);
+  res.clearCookie(COOKIE_NAME, { path: cookieOptions(req, {}).path });
   res.status(204).end();
 });
 
 router.get('/me', requireAuth, (req, res) => {
-  res.json(req.usuario);
+  const { sesion_id, ...usuario } = req.usuario;
+  res.json(usuario);
+});
+
+// Sesiones activas del usuario logueado (para "cerrar esta sesion" /
+// "cerrar todas las demas" desde otro dispositivo).
+router.get('/sesiones', requireAuth, (req, res) => {
+  const sesiones = listarSesiones(req.usuario.id).map((s) => ({
+    ...s,
+    es_actual: s.id === req.usuario.sesion_id,
+  }));
+  res.json(sesiones);
+});
+
+router.delete('/sesiones/:id', requireAuth, (req, res) => {
+  const sesion = db.prepare('SELECT usuario_id FROM sesiones_auth WHERE id = ?').get(req.params.id);
+  if (!sesion || sesion.usuario_id !== req.usuario.id) {
+    return res.status(404).json({ error: 'Sesion no encontrada.' });
+  }
+  revocarSesionPorId(req.params.id);
+  res.status(204).end();
+});
+
+router.post('/sesiones/revocar-otras', requireAuth, (req, res) => {
+  revocarOtrasSesiones(req.usuario.id, req.usuario.sesion_id);
+  res.status(204).end();
+});
+
+router.patch('/password', requireAuth, async (req, res) => {
+  const { password_actual, password_nueva } = req.body || {};
+  if (!password_actual || !passwordValida(password_nueva)) {
+    return res.status(400).json({ error: `password_nueva debe tener entre ${PASSWORD_MIN} y ${PASSWORD_MAX} caracteres.` });
+  }
+  const usuario = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(req.usuario.id);
+  const ok = await comparePassword(password_actual, usuario.password_hash);
+  if (!ok) return res.status(401).json({ error: 'La contraseña actual no es correcta.' });
+
+  const password_hash = await hashPassword(password_nueva);
+  db.prepare('UPDATE usuarios SET password_hash = ? WHERE id = ?').run(password_hash, req.usuario.id);
+  res.status(204).end();
 });
 
 // Alta de cuentas: el admin puede crear coaches o clientes; un coach solo
@@ -47,6 +98,9 @@ router.post('/usuarios', requireAuth, requireRole('admin', 'coach'), async (req,
   const { nombre, email, password, rol } = req.body || {};
   if (!nombre || !email || !password || !rol) {
     return res.status(400).json({ error: 'Faltan campos obligatorios.' });
+  }
+  if (!passwordValida(password)) {
+    return res.status(400).json({ error: `La contraseña debe tener entre ${PASSWORD_MIN} y ${PASSWORD_MAX} caracteres.` });
   }
   if (!['coach', 'cliente'].includes(rol)) {
     return res.status(400).json({ error: 'Rol invalido.' });

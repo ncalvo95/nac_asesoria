@@ -15,7 +15,6 @@ services:
     environment:
       PORT: 3000
       DB_PATH: /app/data/app.db
-      JWT_SECRET: ${JWT_SECRET:?Definir JWT_SECRET en el .env}
       # Subpath bajo el que cuelga la app (ej. "/nac_asesoria" para
       # www.castielo.io/nac_asesoria). Vacio por defecto = raiz del dominio.
       # Ver src/base-path.js.

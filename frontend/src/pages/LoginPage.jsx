@@ -7,6 +7,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -17,7 +18,7 @@ export default function LoginPage() {
     setError('');
     setEnviando(true);
     try {
-      await login(email, password);
+      await login(email, password, remember);
       navigate('/');
     } catch (err) {
       setError(err.message || 'No se pudo iniciar sesión.');
@@ -62,6 +63,16 @@ export default function LoginPage() {
             placeholder="••••••••"
             className="h-11.5 rounded-[10px] border border-border bg-surface px-3.5 text-[14.5px] text-text outline-none focus:border-accent"
           />
+        </label>
+
+        <label className="flex items-center gap-2 -mt-1">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+            className="w-4 h-4 accent-accent"
+          />
+          <span className="text-[13px] text-text-muted">Recordarme en este dispositivo</span>
         </label>
 
         {error && <p className="text-[13px] text-danger">{error}</p>}

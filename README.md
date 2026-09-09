@@ -12,7 +12,9 @@ Cloudflare Tunnel (ver Deployment).
 - **Frontend:** React + Vite + Tailwind v4 (mobile-first, tema claro/oscuro
   automático), compilado a estáticos en `frontend/dist` y servido por el
   mismo proceso Node.
-- **Auth:** JWT en cookie httpOnly + bcryptjs. Roles: `admin`, `coach`, `cliente`.
+- **Auth:** bcryptjs (costo 10) + token opaco en cookie httpOnly, con su
+  hash SHA-256 guardado en una tabla `sesiones_auth` (revocar una sesión es
+  un `DELETE`, sin JWT ni blacklist). Roles: `admin`, `coach`, `cliente`.
 
 ## Estado actual
 
@@ -78,11 +80,11 @@ Pendiente / simplificaciones conocidas:
 
 ```bash
 npm install
-JWT_SECRET=<algo-secreto> npm run db:migrate
+npm run db:migrate
 npm run db:seed
 ADMIN_EMAIL=vos@ejemplo.com ADMIN_PASSWORD=<pass> npm run db:bootstrap-admin
 npm run build:frontend
-JWT_SECRET=<algo-secreto> npm start
+npm start
 ```
 
 Para desarrollo del frontend con hot reload: `npm --prefix frontend run dev`
@@ -91,7 +93,6 @@ corriendo en paralelo).
 
 Variables de entorno:
 
-- `JWT_SECRET` (obligatoria): secreto para firmar los JWT de sesión.
 - `PORT` (opcional, default 3000).
 - `DB_PATH` (opcional, default `data/app.db`).
 - `BASE_PATH` (opcional, default vacío = raíz del dominio): subpath bajo el
@@ -125,7 +126,7 @@ Ledger) — sin publicar puerto al host.
 
 ```bash
 cp .env.example .env
-nano .env   # JWT_SECRET y BASE_PATH=/nac_asesoria
+nano .env   # BASE_PATH=/nac_asesoria
 docker compose up -d --build
 ```
 

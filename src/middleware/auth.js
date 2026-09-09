@@ -1,5 +1,5 @@
 import db from '../db/index.js';
-import { COOKIE_NAME, verifyToken } from '../services/auth.js';
+import { COOKIE_NAME, validarSesion } from '../services/auth.js';
 
 const getUsuario = db.prepare(
   'SELECT id, nombre, email, rol, coach_id, activo FROM usuarios WHERE id = ?'
@@ -9,19 +9,13 @@ export function requireAuth(req, res, next) {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) return res.status(401).json({ error: 'No autenticado.' });
 
-  let payload;
-  try {
-    payload = verifyToken(token);
-  } catch {
+  const usuario = validarSesion(token);
+  if (!usuario || !usuario.activo) {
     return res.status(401).json({ error: 'Sesion invalida o expirada.' });
   }
 
-  const usuario = getUsuario.get(payload.sub);
-  if (!usuario || !usuario.activo) {
-    return res.status(401).json({ error: 'Sesion invalida.' });
-  }
-
   req.usuario = usuario;
+  req.token = token;
   next();
 }
 

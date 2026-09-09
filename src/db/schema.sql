@@ -26,6 +26,26 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 CREATE INDEX IF NOT EXISTS idx_usuarios_coach_id ON usuarios(coach_id);
 
+-- Sesiones de autenticacion (no confundir con "sesion de entrenamiento" =
+-- registro_sesion). Token opaco: nunca se guarda el token en texto plano,
+-- solo su hash SHA-256 - si alguien lee la base no puede reconstruir
+-- cookies validas. Revocar una sesion puntual es un DELETE, sin necesidad
+-- de blacklist como haria falta con un JWT autocontenido.
+CREATE TABLE IF NOT EXISTS sesiones_auth (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  user_agent TEXT,
+  recordar INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  etiqueta TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_sesiones_auth_usuario ON sesiones_auth(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_sesiones_auth_token_hash ON sesiones_auth(token_hash);
+
 CREATE TABLE IF NOT EXISTS perfil_medico (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario_id INTEGER NOT NULL UNIQUE REFERENCES usuarios(id) ON DELETE CASCADE,
@@ -114,8 +134,12 @@ CREATE TABLE IF NOT EXISTS disponibilidad (
 CREATE TABLE IF NOT EXISTS equipamiento (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario_id INTEGER NOT NULL UNIQUE REFERENCES usuarios(id) ON DELETE CASCADE,
+  -- 'gimnasio'/'casa': todo el equipamiento uniforme. 'mixto': cada musculo
+  -- puede tener su propia ubicacion (musculos_ubicacion_json), no obligatorio
+  -- por musculo - el que no se especifica cae en 'gimnasio' por default.
   tipo TEXT NOT NULL CHECK (tipo IN ('gimnasio', 'casa', 'mixto')),
-  checklist_json TEXT NOT NULL DEFAULT '[]'
+  checklist_json TEXT NOT NULL DEFAULT '[]',
+  musculos_ubicacion_json TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS rm_estimado (
