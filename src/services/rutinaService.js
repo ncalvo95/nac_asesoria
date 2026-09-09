@@ -94,6 +94,71 @@ function describirSplit(nDias, rutinaPorDia) {
   return `${nDias} dias/semana - ${tipos.join('/')}`;
 }
 
+// Alternativa a crearRutina: el usuario elige el/los ejercicios de cada dia
+// el mismo (en vez de que el motor los elija por equipamiento/exclusiones).
+// Solo requiere el objetivo ya cargado (para calcular rango de reps por
+// ejercicio) - no pasa por disponibilidad/equipamiento/exclusiones, esos
+// filtros son justamente lo que esta modalidad deja en manos del usuario.
+// dias: [{ dia_semana, ejercicios: [ejercicio_id, ...] }, ...] ya validado
+// por la ruta (2-6 dias, ids validos, sin duplicados dentro del dia).
+export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
+  const objetivo = getObjetivo.get(usuarioId);
+  if (!objetivo) {
+    throw new Error('Falta completar el objetivo antes de crear una rutina.');
+  }
+
+  desactivarRutinasPrevias.run(usuarioId);
+  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: 'Rutina personalizada' });
+
+  dias.forEach((dia, idx) => {
+    const catalogos = dia.ejercicios.map((ejercicioId) => {
+      const catalogo = getEjercicioCatalogo.get(ejercicioId);
+      if (!catalogo || !catalogo.activo) throw new Error(`Ejercicio ${ejercicioId} no encontrado.`);
+      return catalogo;
+    });
+
+    // Por musculo, el ejercicio "top" es el que suma la serie extra si el
+    // musculo se estanca (ver progressionEngine) - mismo criterio que el
+    // generador automatico: prioriza el compuesto, si no el primero elegido.
+    const topPorMusculo = new Map();
+    for (const c of catalogos) {
+      const actual = topPorMusculo.get(c.musculo_nombre);
+      if (!actual || (c.tipo === 'compuesto' && actual.tipo !== 'compuesto')) {
+        topPorMusculo.set(c.musculo_nombre, c);
+      }
+    }
+
+    const { lastInsertRowid: diaRutinaId } = insertDiaRutina.run({
+      rutina_id: rutinaId,
+      numero_dia: idx + 1,
+      dia_semana: dia.dia_semana,
+      musculos_trabajados_json: JSON.stringify([...new Set(catalogos.map((c) => c.musculo_nombre))]),
+    });
+
+    catalogos.forEach((catalogo, i) => {
+      const rango = rangoRepsPara({
+        musculo: catalogo.musculo_nombre,
+        objetivo: objetivo.tipo,
+        esCompuestoPrincipalFuerza: Boolean(catalogo.es_compuesto_principal_fuerza),
+        region: catalogo.musculo_region,
+      });
+      insertEjercicioAsignado.run({
+        dia_rutina_id: diaRutinaId,
+        ejercicio_id: catalogo.id,
+        orden: i + 1,
+        es_top_de_musculo: topPorMusculo.get(catalogo.musculo_nombre) === catalogo ? 1 : 0,
+        musculo_objetivo_id: catalogo.musculo_primario_id,
+        series_actuales: 2,
+        rango_reps_min: rango.min,
+        rango_reps_max: rango.max,
+      });
+    });
+  });
+
+  insertMicrociclo.run(rutinaId, 0);
+  return obtenerRutinaActiva(usuarioId);
+});
+
 export function obtenerRutinaActiva(usuarioId) {
   const rutina = db.prepare("SELECT * FROM rutina WHERE usuario_id = ? AND estado = 'activa'").get(usuarioId);
   if (!rutina) return null;

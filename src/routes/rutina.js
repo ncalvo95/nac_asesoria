@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
-import { crearRutina, obtenerRutinaActiva, reordenarEjercicios, sustituirEjercicio } from '../services/rutinaService.js';
+import { crearRutina, crearRutinaManual, obtenerRutinaActiva, reordenarEjercicios, sustituirEjercicio } from '../services/rutinaService.js';
 import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
 import { tagsDisponibles } from '../services/routineBuilder.js';
@@ -45,6 +45,43 @@ router.get('/usuarios/:usuarioId/rutina', (req, res) => {
   const rutina = obtenerRutinaActiva(usuarioId);
   if (!rutina) return res.status(404).json({ error: 'El usuario no tiene una rutina activa.' });
   res.json(rutina);
+});
+
+const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+
+// Alternativa a POST /usuarios/:usuarioId/rutina (auto-generada): el usuario
+// arma su propia rutina eligiendo los ejercicios del catalogo dia por dia
+// (ver GET /musculos y /ejercicios en catalogo.js), en vez de que el motor
+// los elija por equipamiento/exclusiones.
+router.post('/usuarios/:usuarioId/rutina/manual', (req, res, next) => {
+  const usuarioId = Number(req.params.usuarioId);
+  if (!checkAccesoUsuario(req, res, usuarioId)) return;
+
+  const { dias } = req.body || {};
+  if (!Array.isArray(dias) || dias.length < 2 || dias.length > 6) {
+    return res.status(400).json({ error: 'dias debe tener entre 2 y 6 elementos.' });
+  }
+  for (const dia of dias) {
+    if (!dia || !DIAS_VALIDOS.includes(dia.dia_semana)) {
+      return res.status(400).json({ error: `dia_semana invalido: ${dia?.dia_semana}` });
+    }
+    if (!Array.isArray(dia.ejercicios) || dia.ejercicios.length === 0) {
+      return res.status(400).json({ error: `El dia ${dia.dia_semana} necesita al menos un ejercicio.` });
+    }
+    if (new Set(dia.ejercicios).size !== dia.ejercicios.length) {
+      return res.status(400).json({ error: `El dia ${dia.dia_semana} tiene un ejercicio repetido.` });
+    }
+  }
+
+  try {
+    const rutina = crearRutinaManual(usuarioId, { dias });
+    res.status(201).json(rutina);
+  } catch (err) {
+    if (err.message.includes('objetivo') || err.message.includes('Ejercicio')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
 });
 
 router.patch('/dias/:diaRutinaId/orden', (req, res) => {

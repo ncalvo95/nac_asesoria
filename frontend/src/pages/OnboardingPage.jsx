@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
+import ArmadoManualRutina from '../components/ArmadoManualRutina.jsx';
 
 const DIAS = [
   { id: 'lunes', label: 'Lun' },
@@ -32,6 +33,9 @@ const MUSCULOS = [
 export default function OnboardingPage() {
   const { usuario } = useAuth();
   const navigate = useNavigate();
+
+  const [modo, setModo] = useState('auto');
+  const [diasManual, setDiasManual] = useState([]);
 
   const [tipo, setTipo] = useState('hipertrofia');
   const [subObjetivo, setSubObjetivo] = useState('');
@@ -65,10 +69,6 @@ export default function OnboardingPage() {
   async function onSubmit(e) {
     e.preventDefault();
     setError('');
-    if (dias.length < 2 || dias.length > 6) {
-      setError('Elegí entre 2 y 6 días.');
-      return;
-    }
     if (!subObjetivo.trim()) {
       setError('Contanos tu sub-objetivo.');
       return;
@@ -77,22 +77,43 @@ export default function OnboardingPage() {
       setError('Si el objetivo es rendimiento, indicá el deporte.');
       return;
     }
+    if (modo === 'auto' && (dias.length < 2 || dias.length > 6)) {
+      setError('Elegí entre 2 y 6 días.');
+      return;
+    }
+    if (modo === 'manual') {
+      if (diasManual.length < 2 || diasManual.length > 6) {
+        setError('Armá entre 2 y 6 días.');
+        return;
+      }
+      if (diasManual.some((d) => d.ejercicios.length === 0)) {
+        setError('Todos los días necesitan al menos un ejercicio.');
+        return;
+      }
+    }
 
     setEnviando(true);
     try {
       await api.put(`/usuarios/${usuario.id}/objetivo`, {
         tipo, sub_objetivo: subObjetivo, deporte: tipo === 'rendimiento' ? deporte : undefined,
       });
-      const duracionPorDia = Object.fromEntries(dias.map((d) => [d, Number(duracion)]));
-      await api.put(`/usuarios/${usuario.id}/disponibilidad`, {
-        dias_especificos: dias, duracion_sesion: duracionPorDia,
-      });
-      await api.put(`/usuarios/${usuario.id}/equipamiento`, {
-        tipo: equipoTipo,
-        checklist: equipoTipo === 'casa' || equipoTipo === 'mixto' ? checklist : [],
-        musculos_ubicacion: equipoTipo === 'mixto' ? musculosUbicacion : {},
-      });
-      await api.post(`/usuarios/${usuario.id}/rutina`);
+
+      if (modo === 'manual') {
+        await api.post(`/usuarios/${usuario.id}/rutina/manual`, {
+          dias: diasManual.map((d) => ({ dia_semana: d.dia_semana, ejercicios: d.ejercicios.map((ej) => ej.id) })),
+        });
+      } else {
+        const duracionPorDia = Object.fromEntries(dias.map((d) => [d, Number(duracion)]));
+        await api.put(`/usuarios/${usuario.id}/disponibilidad`, {
+          dias_especificos: dias, duracion_sesion: duracionPorDia,
+        });
+        await api.put(`/usuarios/${usuario.id}/equipamiento`, {
+          tipo: equipoTipo,
+          checklist: equipoTipo === 'casa' || equipoTipo === 'mixto' ? checklist : [],
+          musculos_ubicacion: equipoTipo === 'mixto' ? musculosUbicacion : {},
+        });
+        await api.post(`/usuarios/${usuario.id}/rutina`);
+      }
       navigate('/entrenamiento');
     } catch (err) {
       setError(err.message || 'No se pudo generar la rutina.');
@@ -109,6 +130,33 @@ export default function OnboardingPage() {
       </div>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-7">
+        <section className="flex flex-col gap-3">
+          <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Cómo querés armar tu rutina</span>
+          <div className="flex gap-2">
+            {[
+              { id: 'auto', label: 'Generarla automáticamente' },
+              { id: 'manual', label: 'Armarla yo mismo' },
+            ].map((op) => (
+              <button
+                type="button"
+                key={op.id}
+                onClick={() => setModo(op.id)}
+                className={`flex-1 h-14 rounded-lg border text-[12.5px] font-semibold px-2 ${
+                  modo === op.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                }`}
+              >
+                {op.label}
+              </button>
+            ))}
+          </div>
+          {modo === 'manual' && (
+            <p className="text-[12px] text-text-muted">
+              Elegís vos los ejercicios de cada día. Igual seguimos calculando el rango de reps, la
+              progresión semana a semana y el volumen por músculo.
+            </p>
+          )}
+        </section>
+
         <section className="flex flex-col gap-3">
           <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Objetivo</span>
           <div className="flex gap-2">
@@ -141,98 +189,109 @@ export default function OnboardingPage() {
           )}
         </section>
 
-        <section className="flex flex-col gap-3">
-          <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Días disponibles</span>
-          <div className="flex gap-1.5 flex-wrap">
-            {DIAS.map((d) => (
-              <button
-                type="button"
-                key={d.id}
-                onClick={() => toggleDia(d.id)}
-                className={`w-11 h-11 rounded-full border text-[12.5px] font-semibold ${
-                  dias.includes(d.id) ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-          <label className="flex items-center gap-3 text-[13px] text-text-muted">
-            Minutos por sesión
-            <input
-              type="number"
-              min={30}
-              max={90}
-              step={5}
-              value={duracion}
-              onChange={(e) => setDuracion(e.target.value)}
-              className="w-20 h-9 rounded-lg border border-border bg-surface px-2.5 tabular text-[13.5px] text-text outline-none focus:border-accent"
-            />
-          </label>
-        </section>
+        {modo === 'auto' && (
+          <>
+            <section className="flex flex-col gap-3">
+              <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Días disponibles</span>
+              <div className="flex gap-1.5 flex-wrap">
+                {DIAS.map((d) => (
+                  <button
+                    type="button"
+                    key={d.id}
+                    onClick={() => toggleDia(d.id)}
+                    className={`w-11 h-11 rounded-full border text-[12.5px] font-semibold ${
+                      dias.includes(d.id) ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-3 text-[13px] text-text-muted">
+                Minutos por sesión
+                <input
+                  type="number"
+                  min={30}
+                  max={90}
+                  step={5}
+                  value={duracion}
+                  onChange={(e) => setDuracion(e.target.value)}
+                  className="w-20 h-9 rounded-lg border border-border bg-surface px-2.5 tabular text-[13.5px] text-text outline-none focus:border-accent"
+                />
+              </label>
+            </section>
 
-        <section className="flex flex-col gap-3">
-          <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Equipamiento</span>
-          <div className="flex gap-2">
-            {['gimnasio', 'casa', 'mixto'].map((t) => (
-              <button
-                type="button"
-                key={t}
-                onClick={() => setEquipoTipo(t)}
-                className={`flex-1 h-10 rounded-lg border text-[13px] font-semibold capitalize ${
-                  equipoTipo === t ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-          {(equipoTipo === 'casa' || equipoTipo === 'mixto') && (
-            <div className="flex flex-col gap-2">
-              {equipoTipo === 'mixto' && (
-                <span className="text-[12px] text-text-muted">Qué tenés disponible en los músculos que entrenás en casa:</span>
+            <section className="flex flex-col gap-3">
+              <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Equipamiento</span>
+              <div className="flex gap-2">
+                {['gimnasio', 'casa', 'mixto'].map((t) => (
+                  <button
+                    type="button"
+                    key={t}
+                    onClick={() => setEquipoTipo(t)}
+                    className={`flex-1 h-10 rounded-lg border text-[13px] font-semibold capitalize ${
+                      equipoTipo === t ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+              {(equipoTipo === 'casa' || equipoTipo === 'mixto') && (
+                <div className="flex flex-col gap-2">
+                  {equipoTipo === 'mixto' && (
+                    <span className="text-[12px] text-text-muted">Qué tenés disponible en los músculos que entrenás en casa:</span>
+                  )}
+                  <div className="flex gap-1.5 flex-wrap">
+                    {EQUIPO_TAGS.map((tag) => (
+                      <button
+                        type="button"
+                        key={tag}
+                        onClick={() => toggleTag(tag)}
+                        className={`px-3 h-8 rounded-full border text-[12px] font-medium ${
+                          checklist.includes(tag) ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                        }`}
+                      >
+                        {tag.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
-              <div className="flex gap-1.5 flex-wrap">
-                {EQUIPO_TAGS.map((tag) => (
-                  <button
-                    type="button"
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className={`px-3 h-8 rounded-full border text-[12px] font-medium ${
-                      checklist.includes(tag) ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
-                    }`}
-                  >
-                    {tag.replace('_', ' ')}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {equipoTipo === 'mixto' && (
-            <div className="flex flex-col gap-2">
-              <span className="text-[12px] text-text-muted">
-                Elegí qué músculos entrenás en casa (opcional — el que no toques se asume en el gimnasio):
-              </span>
-              <div className="flex gap-1.5 flex-wrap">
-                {MUSCULOS.map((m) => (
-                  <button
-                    type="button"
-                    key={m.id}
-                    onClick={() => toggleMusculoEnCasa(m.id)}
-                    className={`px-3 h-8 rounded-full border text-[12px] font-medium ${
-                      musculosUbicacion[m.id] === 'casa'
-                        ? 'bg-accent text-accent-fg border-accent'
-                        : 'bg-surface border-border text-text-muted'
-                    }`}
-                  >
-                    {m.label} {musculosUbicacion[m.id] === 'casa' ? '(casa)' : '(gym)'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
+              {equipoTipo === 'mixto' && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-[12px] text-text-muted">
+                    Elegí qué músculos entrenás en casa (opcional — el que no toques se asume en el gimnasio):
+                  </span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {MUSCULOS.map((m) => (
+                      <button
+                        type="button"
+                        key={m.id}
+                        onClick={() => toggleMusculoEnCasa(m.id)}
+                        className={`px-3 h-8 rounded-full border text-[12px] font-medium ${
+                          musculosUbicacion[m.id] === 'casa'
+                            ? 'bg-accent text-accent-fg border-accent'
+                            : 'bg-surface border-border text-text-muted'
+                        }`}
+                      >
+                        {m.label} {musculosUbicacion[m.id] === 'casa' ? '(casa)' : '(gym)'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        {modo === 'manual' && (
+          <section className="flex flex-col gap-3">
+            <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Tus días y ejercicios</span>
+            <ArmadoManualRutina dias={diasManual} onChange={setDiasManual} />
+          </section>
+        )}
 
         {error && <p className="text-[13px] text-danger">{error}</p>}
 
@@ -241,7 +300,7 @@ export default function OnboardingPage() {
           disabled={enviando}
           className="h-12 rounded-[10px] bg-accent text-accent-fg text-[15px] font-semibold disabled:opacity-60"
         >
-          {enviando ? 'Generando rutina…' : 'Generar mi rutina'}
+          {enviando ? 'Guardando rutina…' : modo === 'manual' ? 'Guardar mi rutina' : 'Generar mi rutina'}
         </button>
       </form>
     </div>
