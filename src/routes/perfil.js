@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
+import { TODOS_MUSCULOS } from '../services/routineBuilder.js';
 
 const router = Router({ mergeParams: true });
 
@@ -70,20 +71,36 @@ router.put('/:usuarioId/disponibilidad', (req, res) => {
 
 // ---- Equipamiento ----
 const upsertEquipamiento = db.prepare(`
-  INSERT INTO equipamiento (usuario_id, tipo, checklist_json)
-  VALUES (@usuario_id, @tipo, @checklist_json)
-  ON CONFLICT(usuario_id) DO UPDATE SET tipo = excluded.tipo, checklist_json = excluded.checklist_json
+  INSERT INTO equipamiento (usuario_id, tipo, checklist_json, musculos_ubicacion_json)
+  VALUES (@usuario_id, @tipo, @checklist_json, @musculos_ubicacion_json)
+  ON CONFLICT(usuario_id) DO UPDATE SET
+    tipo = excluded.tipo, checklist_json = excluded.checklist_json,
+    musculos_ubicacion_json = excluded.musculos_ubicacion_json
 `);
 
 router.put('/:usuarioId/equipamiento', (req, res) => {
   const usuario_id = checkAcceso(req, res);
   if (usuario_id === null) return;
-  const { tipo, checklist } = req.body || {};
+  const { tipo, checklist, musculos_ubicacion } = req.body || {};
   if (!['gimnasio', 'casa', 'mixto'].includes(tipo)) {
     return res.status(400).json({ error: 'tipo debe ser gimnasio, casa o mixto.' });
   }
-  upsertEquipamiento.run({ usuario_id, tipo, checklist_json: JSON.stringify(checklist || []) });
-  res.json({ usuario_id, tipo, checklist: checklist || [] });
+  // No obligatorio: el musculo que no se especifica cae en "gimnasio" por
+  // default (ver routineBuilder.tagsDisponibles). Solo tiene efecto con
+  // tipo "mixto", pero se valida/guarda igual para no perderlo si el
+  // usuario vuelve a "mixto" mas adelante.
+  const musculosUbicacion = musculos_ubicacion && typeof musculos_ubicacion === 'object' ? musculos_ubicacion : {};
+  for (const [musculo, ubicacion] of Object.entries(musculosUbicacion)) {
+    if (!TODOS_MUSCULOS.includes(musculo) || !['gimnasio', 'casa'].includes(ubicacion)) {
+      return res.status(400).json({ error: `musculos_ubicacion invalido en "${musculo}": debe mapear un musculo valido a gimnasio o casa.` });
+    }
+  }
+  upsertEquipamiento.run({
+    usuario_id, tipo,
+    checklist_json: JSON.stringify(checklist || []),
+    musculos_ubicacion_json: JSON.stringify(musculosUbicacion),
+  });
+  res.json({ usuario_id, tipo, checklist: checklist || [], musculos_ubicacion: musculosUbicacion });
 });
 
 // ---- Perfil medico (opcional) ----

@@ -49,7 +49,11 @@ export const crearRutina = db.transaction((usuarioId) => {
   const rutinaPorDia = armarRutina({
     diasEspecificos,
     objetivo: objetivo.tipo,
-    equipamiento: { tipo: equipamiento.tipo, checklist: JSON.parse(equipamiento.checklist_json) },
+    equipamiento: {
+      tipo: equipamiento.tipo,
+      checklist: JSON.parse(equipamiento.checklist_json),
+      musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
+    },
     exclusiones,
   });
 
@@ -158,7 +162,13 @@ export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuario
   }
 
   const equipamiento = getEquipamiento.get(usuarioId);
-  const tags = tagsDisponibles({ tipo: equipamiento.tipo, checklist: JSON.parse(equipamiento.checklist_json) });
+  const musculoNombre = getMusculoNombrePorId.get(ea.musculo_objetivo_id).nombre;
+  const tags = tagsDisponibles({
+    tipo: equipamiento.tipo,
+    checklist: JSON.parse(equipamiento.checklist_json),
+    musculo: musculoNombre,
+    musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
+  });
   const requeridos = JSON.parse(nuevo.equipamiento_requerido_json);
   if (!requeridos.every((tag) => tags.has(tag))) {
     throw new Error('El nuevo ejercicio no es compatible con tu equipamiento disponible.');
@@ -169,7 +179,6 @@ export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuario
   if (!microciclo) throw new Error('No hay un microciclo en curso donde aplicar la sustitucion.');
 
   const objetivo = getObjetivo.get(usuarioId);
-  const musculoNombre = getMusculoNombrePorId.get(ea.musculo_objetivo_id).nombre;
   const rango = rangoRepsPara({
     musculo: musculoNombre,
     objetivo: objetivo.tipo,

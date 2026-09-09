@@ -91,7 +91,13 @@ router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;
   const equipamiento = db.prepare('SELECT * FROM equipamiento WHERE usuario_id = ?').get(ea.usuario_id);
-  const tags = tagsDisponibles({ tipo: equipamiento.tipo, checklist: JSON.parse(equipamiento.checklist_json) });
+  const musculoNombre = db.prepare('SELECT nombre FROM musculo WHERE id = ?').get(ea.musculo_objetivo_id).nombre;
+  const tags = tagsDisponibles({
+    tipo: equipamiento.tipo,
+    checklist: JSON.parse(equipamiento.checklist_json),
+    musculo: musculoNombre,
+    musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
+  });
   const candidatos = db.prepare(`
     SELECT id, nombre, tipo, equipamiento_requerido_json FROM ejercicio
     WHERE musculo_primario_id = ? AND activo = 1 AND id != ?

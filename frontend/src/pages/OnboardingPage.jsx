@@ -15,6 +15,20 @@ const DIAS = [
 
 const EQUIPO_TAGS = ['barra', 'mancuernas', 'banco', 'polea', 'maquina', 'banda', 'paralelas', 'barra_dominadas'];
 
+const MUSCULOS = [
+  { id: 'pecho', label: 'Pecho' },
+  { id: 'espalda', label: 'Espalda' },
+  { id: 'dorsales', label: 'Dorsales' },
+  { id: 'deltoides', label: 'Deltoides' },
+  { id: 'biceps', label: 'Bíceps' },
+  { id: 'triceps', label: 'Tríceps' },
+  { id: 'abdominales', label: 'Abdominales' },
+  { id: 'cuadriceps', label: 'Cuádriceps' },
+  { id: 'isquiotibiales', label: 'Isquiotibiales' },
+  { id: 'gluteos', label: 'Glúteos' },
+  { id: 'pantorrillas', label: 'Pantorrillas' },
+];
+
 export default function OnboardingPage() {
   const { usuario } = useAuth();
   const navigate = useNavigate();
@@ -26,6 +40,7 @@ export default function OnboardingPage() {
   const [duracion, setDuracion] = useState(60);
   const [equipoTipo, setEquipoTipo] = useState('gimnasio');
   const [checklist, setChecklist] = useState(EQUIPO_TAGS);
+  const [musculosUbicacion, setMusculosUbicacion] = useState({});
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -34,6 +49,17 @@ export default function OnboardingPage() {
   }
   function toggleTag(tag) {
     setChecklist((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
+  }
+  function toggleMusculoEnCasa(musculo) {
+    setMusculosUbicacion((prev) => {
+      // No obligatorio: si no esta en el mapa, cae en "gimnasio" por
+      // default (ver src/services/routineBuilder.js -> tagsDisponibles).
+      if (prev[musculo] === 'casa') {
+        const { [musculo]: _omit, ...resto } = prev;
+        return resto;
+      }
+      return { ...prev, [musculo]: 'casa' };
+    });
   }
 
   async function onSubmit(e) {
@@ -62,7 +88,9 @@ export default function OnboardingPage() {
         dias_especificos: dias, duracion_sesion: duracionPorDia,
       });
       await api.put(`/usuarios/${usuario.id}/equipamiento`, {
-        tipo: equipoTipo, checklist: equipoTipo === 'casa' || equipoTipo === 'mixto' ? checklist : [],
+        tipo: equipoTipo,
+        checklist: equipoTipo === 'casa' || equipoTipo === 'mixto' ? checklist : [],
+        musculos_ubicacion: equipoTipo === 'mixto' ? musculosUbicacion : {},
       });
       await api.post(`/usuarios/${usuario.id}/rutina`);
       navigate('/entrenamiento');
@@ -160,19 +188,48 @@ export default function OnboardingPage() {
             ))}
           </div>
           {(equipoTipo === 'casa' || equipoTipo === 'mixto') && (
-            <div className="flex gap-1.5 flex-wrap">
-              {EQUIPO_TAGS.map((tag) => (
-                <button
-                  type="button"
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className={`px-3 h-8 rounded-full border text-[12px] font-medium ${
-                    checklist.includes(tag) ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
-                  }`}
-                >
-                  {tag.replace('_', ' ')}
-                </button>
-              ))}
+            <div className="flex flex-col gap-2">
+              {equipoTipo === 'mixto' && (
+                <span className="text-[12px] text-text-muted">Qué tenés disponible en los músculos que entrenás en casa:</span>
+              )}
+              <div className="flex gap-1.5 flex-wrap">
+                {EQUIPO_TAGS.map((tag) => (
+                  <button
+                    type="button"
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    className={`px-3 h-8 rounded-full border text-[12px] font-medium ${
+                      checklist.includes(tag) ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                    }`}
+                  >
+                    {tag.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {equipoTipo === 'mixto' && (
+            <div className="flex flex-col gap-2">
+              <span className="text-[12px] text-text-muted">
+                Elegí qué músculos entrenás en casa (opcional — el que no toques se asume en el gimnasio):
+              </span>
+              <div className="flex gap-1.5 flex-wrap">
+                {MUSCULOS.map((m) => (
+                  <button
+                    type="button"
+                    key={m.id}
+                    onClick={() => toggleMusculoEnCasa(m.id)}
+                    className={`px-3 h-8 rounded-full border text-[12px] font-medium ${
+                      musculosUbicacion[m.id] === 'casa'
+                        ? 'bg-accent text-accent-fg border-accent'
+                        : 'bg-surface border-border text-text-muted'
+                    }`}
+                  >
+                    {m.label} {musculosUbicacion[m.id] === 'casa' ? '(casa)' : '(gym)'}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </section>

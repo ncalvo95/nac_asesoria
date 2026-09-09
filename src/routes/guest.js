@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { generarWorkbookInvitado } from '../services/excelGenerator.js';
+import { TODOS_MUSCULOS } from '../services/routineBuilder.js';
 
 const router = Router();
 
@@ -25,6 +26,14 @@ function validar(payload) {
 
   if (!equipamiento || !EQUIPO_VALIDOS.includes(equipamiento.tipo)) {
     errores.push('equipamiento.tipo debe ser gimnasio, casa o mixto.');
+  }
+  if (equipamiento?.musculos_ubicacion && typeof equipamiento.musculos_ubicacion === 'object') {
+    for (const [musculo, ubicacion] of Object.entries(equipamiento.musculos_ubicacion)) {
+      if (!TODOS_MUSCULOS.includes(musculo) || !['gimnasio', 'casa'].includes(ubicacion)) {
+        errores.push(`equipamiento.musculos_ubicacion invalido en "${musculo}": debe mapear un musculo valido a gimnasio o casa.`);
+        break;
+      }
+    }
   }
 
   if (!Array.isArray(dias_especificos) || dias_especificos.length < 2 || dias_especificos.length > 6) {

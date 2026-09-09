@@ -197,7 +197,7 @@ export function generarWorkbookInvitado(payload) {
   const rutinaPorDia = armarRutina({
     diasEspecificos: dias_especificos,
     objetivo: objetivo.tipo,
-    equipamiento,
+    equipamiento: { ...equipamiento, musculosUbicacion: equipamiento.musculos_ubicacion },
     exclusiones,
   });
   const diasUnicos = deduplicarDiasPorTipo(rutinaPorDia);

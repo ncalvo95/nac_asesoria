@@ -1,6 +1,6 @@
 import db from '../db/index.js';
 
-const TODOS_MUSCULOS = [
+export const TODOS_MUSCULOS = [
   'pecho', 'espalda', 'dorsales', 'deltoides', 'biceps', 'triceps',
   'abdominales', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas',
 ];
@@ -72,10 +72,15 @@ function sonConsecutivos(dias) {
 
 const TAGS_GIMNASIO = ['barra', 'mancuernas', 'banco', 'polea', 'maquina', 'paralelas', 'barra_dominadas', 'peso_corporal'];
 
-export function tagsDisponibles({ tipo, checklist }) {
+// Con equipamiento "mixto", cada musculo puede tener su propia ubicacion
+// (casa/gimnasio) via musculosUbicacion[musculo] - no es obligatorio
+// especificar todos: el que falta cae en "gimnasio" por default. Con
+// tipo "gimnasio"/"casa" (uniforme), musculo/musculosUbicacion se ignoran.
+export function tagsDisponibles({ tipo, checklist, musculo, musculosUbicacion }) {
   const base = new Set(checklist || []);
   base.add('peso_corporal');
-  if (tipo === 'gimnasio') TAGS_GIMNASIO.forEach((t) => base.add(t));
+  const ubicacionEfectiva = tipo === 'mixto' ? (musculosUbicacion?.[musculo] || 'gimnasio') : tipo;
+  if (ubicacionEfectiva === 'gimnasio') TAGS_GIMNASIO.forEach((t) => base.add(t));
   return base;
 }
 
@@ -104,7 +109,6 @@ const getEjerciciosPorMusculo = db.prepare(`
 // nombre de ejercicio dentro del mismo dia.
 export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusiones = [] }) {
   const secuencia = armarSecuenciaDeDias(diasEspecificos);
-  const tags = tagsDisponibles(equipamiento);
   const excluidos = new Set(exclusiones);
 
   return secuencia.map((diaInfo, numeroDia) => {
@@ -112,6 +116,7 @@ export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusion
     const ejercicios = [];
 
     for (const musculo of diaInfo.musculos) {
+      const tags = tagsDisponibles({ ...equipamiento, musculo });
       const candidatos = getEjerciciosPorMusculo.all(musculo).filter((ej) => {
         if (excluidos.has(ej.id)) return false;
         if (usadosEnElDia.has(ej.nombre)) return false;
