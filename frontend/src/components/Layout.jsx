@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const tabs = [
@@ -19,9 +19,16 @@ export default function Layout() {
           </svg>
           <span className="text-[15px] font-bold">Bitácora</span>
         </div>
-        <button onClick={logout} className="text-xs font-semibold text-text-muted">
-          {usuario?.nombre} · Salir
-        </button>
+        <div className="flex items-center gap-3">
+          {usuario?.rol !== 'cliente' && (
+            <Link to="/coach" className="text-xs font-semibold text-accent">
+              Panel de coach
+            </Link>
+          )}
+          <button onClick={logout} className="text-xs font-semibold text-text-muted">
+            {usuario?.nombre} · Salir
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto pb-20">

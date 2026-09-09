@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 
@@ -13,6 +13,7 @@ const TIPO_LABEL = {
 
 export default function CoachPage() {
   const { usuario, logout } = useAuth();
+  const navigate = useNavigate();
   const [usuarios, setUsuarios] = useState(null);
   const [solicitudes, setSolicitudes] = useState(null);
   const [invitesPendientes, setInvitesPendientes] = useState(null);
@@ -37,6 +38,19 @@ export default function CoachPage() {
 
   useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
+  // Un coach (o admin) tambien puede entrenar para si mismo, exactamente
+  // igual que un cliente - el backend ya lo permite (puedeAccederAUsuario
+  // deja que cualquier cuenta toque sus propios datos), pero HomePage.jsx
+  // manda a cualquier no-cliente derecho a /coach sin ofrecer este camino.
+  async function irAMiEntrenamiento() {
+    try {
+      await api.get(`/usuarios/${usuario.id}/rutina`);
+      navigate('/entrenamiento');
+    } catch {
+      navigate('/onboarding');
+    }
+  }
+
   async function resolverSolicitud(id, accion) {
     try {
       await api.post(`/solicitudes/${id}/${accion}`);
@@ -55,7 +69,12 @@ export default function CoachPage() {
           </svg>
           <span className="text-[15px] font-bold">Bitácora {usuario.rol === 'admin' ? '· Admin' : '· Coach'}</span>
         </div>
-        <button onClick={logout} className="text-xs font-semibold text-text-muted">{usuario.nombre} · Salir</button>
+        <div className="flex items-center gap-3">
+          <button onClick={irAMiEntrenamiento} className="text-xs font-semibold text-accent">
+            Mi entrenamiento
+          </button>
+          <button onClick={logout} className="text-xs font-semibold text-text-muted">{usuario.nombre} · Salir</button>
+        </div>
       </header>
 
       <div className="p-4 flex flex-col gap-6 max-w-xl w-full mx-auto">
