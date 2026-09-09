@@ -49,7 +49,9 @@ cierre de microciclo → progreso → export a Excel):
   y resumen de mesociclo, comparando peso/reps/volumen), pantalla de
   invitado sin cuenta (descarga el Excel de 6 meses directo desde el
   navegador), y un panel de coach/admin (listado de clientes, alta de
-  cuentas, ver la rutina/progreso/reportes de un cliente puntual).
+  cuentas, ver la rutina/progreso/reportes/preferencias de ejercicio de un
+  cliente puntual — excluir ejercicios, marcar preferidos, o agregar un
+  ejercicio propio al pool de sustitución de un músculo).
   Diseño mobile-first, paleta clínica/neutra con acento configurable
   (mismos tokens que la [vista previa visual](https://claude.ai/code/artifact/e2941d16-a51b-4dad-ad83-4921bfcfecfe)
   que se acordó antes de construirlo), tema oscuro automático por
@@ -63,6 +65,13 @@ Pendiente / simplificaciones conocidas:
   código.
 - Los reportes se generan a pedido (botón), no hay un cron real de "cada 6
   meses" - no hacía falta para el volumen de uso esperado.
+- El armado de la rutina hoy solo respeta las **exclusiones**. Las
+  preferencias ("preferir") y los ejercicios propios agregados todavía no
+  se usan al generar o sustituir - se guardan y se muestran, pero falta
+  conectarlos al pool de selección de `routineBuilder.js`.
+- El modelo de cuentas es cerrado a propósito (admin/coach dan de alta,
+  sin auto-registro ni invitación entre pares) - encaja con "un coach
+  gestiona a sus clientes", no con una app tipo marketplace.
 
 ## Setup
 

@@ -11,6 +11,7 @@ import EntrenamientoPage from './pages/EntrenamientoPage.jsx';
 import ProgresoPage from './pages/ProgresoPage.jsx';
 import CoachPage from './pages/CoachPage.jsx';
 import ReportesPage from './pages/ReportesPage.jsx';
+import PreferenciasPage from './pages/PreferenciasPage.jsx';
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="entrenamiento" element={<EntrenamientoPage />} />
             <Route path="progreso" element={<ProgresoPage />} />
             <Route path="reportes" element={<ReportesPage />} />
+            <Route path="preferencias" element={<PreferenciasPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -8,6 +8,7 @@ import perfilRouter from './routes/perfil.js';
 import rutinaRouter from './routes/rutina.js';
 import sesionesRouter from './routes/sesiones.js';
 import reportesRouter from './routes/reportes.js';
+import catalogoRouter from './routes/catalogo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
@@ -24,6 +25,7 @@ app.use('/api/usuarios', perfilRouter);
 app.use('/api', rutinaRouter);
 app.use('/api', sesionesRouter);
 app.use('/api', reportesRouter);
+app.use('/api/catalogo', catalogoRouter);
 
 app.use(express.static(frontendDist));
 app.get('*', (req, res, next) => {
