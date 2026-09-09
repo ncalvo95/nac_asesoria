@@ -15,6 +15,11 @@ Cloudflare Tunnel (ver Deployment).
 - **Auth:** bcryptjs (costo 10) + token opaco en cookie httpOnly, con su
   hash SHA-256 guardado en una tabla `sesiones_auth` (revocar una sesión es
   un `DELETE`, sin JWT ni blacklist). Roles: `admin`, `coach`, `cliente`.
+  Límite de 5 sesiones activas por usuario, "recordarme" (30 días) y
+  listar/revocar sesiones propias.
+- **PWA:** instalable en el teléfono o la PC ("Agregar a pantalla de
+  inicio") con ícono propio y arranque a pantalla completa, igual que Loot
+  Ledger (`frontend/public/manifest.webmanifest` + `sw.js`).
 
 ## Estado actual
 
@@ -26,11 +31,16 @@ cierre de microciclo → progreso → export a Excel):
 - Seed de catálogo: 11 grupos musculares con referencia MEV/MAV/MRV
   (`src/db/seed/musculos.js`) y 51 ejercicios (`src/db/seed/ejercicios.js`).
 - Auth con roles admin/coach/cliente (`src/routes/auth.js`).
-- Onboarding: objetivo, disponibilidad, equipamiento, perfil médico,
+- Onboarding: objetivo, disponibilidad, equipamiento (con la opción
+  "mixto" de elegir casa/gimnasio **por músculo**, no obligatorio - el que
+  no se especifica cae en gimnasio por default), perfil médico,
   antropometría, RM estimado, preferencias de ejercicio (`src/routes/perfil.js`).
 - Generación y persistencia de la rutina real por split según días/semana
   (`src/services/routineBuilder.js`, `src/services/rutinaService.js`,
   `src/routes/rutina.js`), con reordenamiento de ejercicios por el usuario.
+  Alternativa: **armado manual** (`POST /usuarios/:id/rutina/manual`) - el
+  usuario elige directamente los ejercicios de cada día desde el catálogo
+  en vez de que el motor los elija por equipamiento/exclusiones.
 - Semana 0 (testeo) y registro de sesión/serie (`src/services/progressionEngine.js`,
   `src/routes/sesiones.js`).
 - **Motor de cierre de microciclo** (el núcleo del sistema): calcula
@@ -44,9 +54,11 @@ cierre de microciclo → progreso → export a Excel):
   sirve como respaldo/continuación offline. Ambos comparten la misma lógica
   de generación (`src/services/excelGenerator.js`).
 
-- Frontend (`frontend/`): login, onboarding, "Día de entrenamiento" (semana
-  0 de testeo, registro de series por peso/reps/RIR, modo "lineal forzado"
-  por ejercicio, sustitución de ejercicio a mitad de rutina), Progreso
+- Frontend (`frontend/`): login (con "recordarme"), onboarding (con la
+  opción de generación automática o armado manual de la rutina), "Día de
+  entrenamiento" (semana 0 de testeo, registro de series por peso/reps/RIR,
+  modo "lineal forzado" por ejercicio, sustitución de ejercicio a mitad de
+  rutina), Progreso
   (volumen por músculo vs MAV, notas de estancamiento/mejora, cerrar
   microciclo, pedir descarga/deload, exportar a Excel), Reportes (semestral
   y resumen de mesociclo, comparando peso/reps/volumen), pantalla de
@@ -68,10 +80,12 @@ Pendiente / simplificaciones conocidas:
   código.
 - Los reportes se generan a pedido (botón), no hay un cron real de "cada 6
   meses" - no hacía falta para el volumen de uso esperado.
-- El armado de la rutina hoy solo respeta las **exclusiones**. Las
-  preferencias ("preferir") y los ejercicios propios agregados todavía no
-  se usan al generar o sustituir - se guardan y se muestran, pero falta
-  conectarlos al pool de selección de `routineBuilder.js`.
+- El armado **automático** de la rutina hoy solo respeta las
+  **exclusiones**. Las preferencias ("preferir") y los ejercicios propios
+  agregados todavía no se usan al generar o sustituir - se guardan y se
+  muestran, pero falta conectarlos al pool de selección de
+  `routineBuilder.js`. El armado **manual** no tiene este límite: el
+  usuario elige directamente cualquier ejercicio del catálogo.
 - El modelo de cuentas es cerrado a propósito (admin/coach dan de alta,
   sin auto-registro ni invitación entre pares) - encaja con "un coach
   gestiona a sus clientes", no con una app tipo marketplace.
@@ -190,6 +204,8 @@ PUT  /api/usuarios/:id/objetivo
 PUT  /api/usuarios/:id/disponibilidad
 PUT  /api/usuarios/:id/equipamiento
 POST /api/usuarios/:id/rutina                          (genera y persiste la rutina)
+  # alternativa manual (el usuario elige los ejercicios, ver arriba):
+  # POST /api/usuarios/:id/rutina/manual  {dias: [{dia_semana, ejercicios: [id,...]}]}
 POST /api/rutinas/:rutinaId/semana0    {resultados: [...]}
 POST /api/usuarios/:id/sesiones        {dia_rutina_id, microciclo_id, series: [...]}
 POST /api/rutinas/:rutinaId/microciclos/:numero/cerrar  (el nucleo: calcula piso/techo,
