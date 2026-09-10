@@ -45,7 +45,14 @@ cierre de microciclo → progreso → export a Excel):
   `src/routes/rutina.js`), con reordenamiento de ejercicios por el usuario.
   El armado automático llena el tiempo disponible por día (según la
   duración declarada) sumando más de un ejercicio por músculo cuando sobra
-  tiempo, no solo el mínimo. Alternativas al armado 100% automático:
+  tiempo, no solo el mínimo. El split por defecto según días/semana:
+  2 días → Full Body ×2; 3 días → Full Body ×3 (no consecutivos) o
+  Upper/Lower/Full Body (consecutivos); 4 y 5 días dejan elegir entre dos
+  variantes en el onboarding (`variante_split`: `upper_lower` por defecto,
+  todo el cuerpo a frecuencia 2×, o `push_pull`, más foco en torso a
+  frecuencia 2× - con 4 días deja piernas afuera, con 5 agrega un día de
+  Legs a frecuencia 1×); 6 días → Push/Pull/Legs ×2. Alternativas al
+  armado 100% automático:
   - **Armado manual** (`POST /usuarios/:id/rutina/manual`) - el usuario
     elige directamente los ejercicios de cada día desde el catálogo en vez
     de que el motor los elija por equipamiento/exclusiones.
@@ -99,7 +106,10 @@ cierre de microciclo → progreso → export a Excel):
   - el admin da de alta ejercicios nuevos (músculo, tipo, patrón de
   movimiento, equipamiento requerido) que quedan visibles para todos los
   usuarios al armar o sustituir, y puede activar/desactivar los existentes.
-  Diseño mobile-first, paleta clínica/neutra con acento configurable
+  Diseño mobile-first con la pantalla de "Día de entrenamiento" adaptada a
+  desktop (grilla de 2 columnas en pantallas medianas/grandes en vez de
+  una sola columna estirada, para aprovechar el espacio), paleta
+  clínica/neutra con acento configurable
   (mismos tokens que la [vista previa visual](https://claude.ai/code/artifact/e2941d16-a51b-4dad-ad83-4921bfcfecfe)
   que se acordó antes de construirlo), tema oscuro automático por
   `prefers-color-scheme`.

@@ -45,6 +45,7 @@ export default function OnboardingPage() {
   const [subObjetivo, setSubObjetivo] = useState('');
   const [deporte, setDeporte] = useState('');
   const [dias, setDias] = useState(['lunes', 'martes', 'jueves', 'viernes']);
+  const [varianteSplit, setVarianteSplit] = useState('upper_lower');
   const [duracion, setDuracion] = useState(60);
   const [equipoTipo, setEquipoTipo] = useState('gimnasio');
   const [checklist, setChecklist] = useState(EQUIPO_TAGS);
@@ -141,7 +142,9 @@ export default function OnboardingPage() {
           checklist: equipoTipo === 'casa' || equipoTipo === 'mixto' ? checklist : [],
           musculos_ubicacion: equipoTipo === 'mixto' ? musculosUbicacion : {},
         }));
-        marcar(await api.post(`/usuarios/${usuario.id}/rutina`));
+        marcar(await api.post(`/usuarios/${usuario.id}/rutina`, {
+          variante_split: (dias.length === 4 || dias.length === 5) ? varianteSplit : undefined,
+        }));
       }
 
       // Si algo quedo pendiente de aprobacion del coach, no hay rutina nueva
@@ -260,6 +263,40 @@ export default function OnboardingPage() {
                 className="w-20 h-9 rounded-lg border border-border bg-surface px-2.5 tabular text-[13.5px] text-text outline-none focus:border-accent"
               />
             </label>
+
+            {(dias.length === 4 || dias.length === 5) && (
+              <div className="flex flex-col gap-2">
+                <span className="text-[12px] text-text-muted">Cómo repartir la semana</span>
+                <div className="flex flex-col gap-1.5">
+                  {[
+                    {
+                      id: 'upper_lower',
+                      label: dias.length === 4 ? 'Upper / Lower ×2' : 'Push/Pull/Legs + Upper/Lower',
+                      hint: 'Todo el cuerpo con frecuencia 2×.',
+                    },
+                    {
+                      id: 'push_pull',
+                      label: dias.length === 4 ? 'Push / Pull ×2' : 'Push/Pull/Legs + Push/Pull',
+                      hint: dias.length === 4
+                        ? 'Solo torso (pecho, espalda, hombros, brazos) — sin piernas.'
+                        : 'Más foco en torso (frecuencia 2×); piernas queda en frecuencia 1×.',
+                    },
+                  ].map((v) => (
+                    <button
+                      type="button"
+                      key={v.id}
+                      onClick={() => setVarianteSplit(v.id)}
+                      className={`text-left rounded-lg border px-3 py-2 ${
+                        varianteSplit === v.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                      }`}
+                    >
+                      <div className="text-[12.5px] font-semibold">{v.label}</div>
+                      <div className={`text-[11px] ${varianteSplit === v.id ? 'opacity-90' : 'text-text-faint'}`}>{v.hint}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 

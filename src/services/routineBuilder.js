@@ -5,20 +5,24 @@ export const TODOS_MUSCULOS = [
   'abdominales', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas',
 ];
 
-const GRANDES = ['cuadriceps', 'isquiotibiales', 'gluteos', 'espalda', 'dorsales', 'pecho'];
-const SECUNDARIOS = ['deltoides', 'biceps', 'triceps', 'abdominales', 'pantorrillas'];
 const UPPER = ['pecho', 'espalda', 'dorsales', 'deltoides', 'biceps', 'triceps'];
 const LOWER = ['cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'abdominales'];
-const TORSO_GENERAL = ['pecho', 'espalda', 'dorsales', 'deltoides', 'biceps', 'triceps', 'abdominales'];
-const PIERNA_GENERAL = ['cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas'];
 const PUSH = ['pecho', 'deltoides', 'triceps'];
 const PULL = ['espalda', 'dorsales', 'biceps'];
 const LEGS = ['cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'abdominales'];
 
 // Determina la secuencia de "tipos de dia" (con sus musculos objetivo) segun
-// la cantidad de dias/semana disponibles, siguiendo la tabla de §3 del spec.
-// diasEspecificos debe venir ya ordenado cronologicamente (lunes -> domingo).
-export function armarSecuenciaDeDias(diasEspecificos) {
+// la cantidad de dias/semana disponibles. diasEspecificos debe venir ya
+// ordenado cronologicamente (lunes -> domingo).
+//
+// varianteSplit solo tiene efecto con 4 o 5 dias, donde hay dos formas
+// razonables de repartir la semana y se la dejamos elegir al usuario en el
+// onboarding (con un default sensato si no elige):
+//   - 'upper_lower' (default): todos los musculos con frecuencia 2x.
+//   - 'push_pull': mas foco en pecho/espalda/hombros/brazos (2x), piernas
+//     queda con menos frecuencia (1x con 4 dias, ninguna con... no, ver
+//     abajo) - pensado para quien ya entrena piernas por su cuenta aparte.
+export function armarSecuenciaDeDias(diasEspecificos, varianteSplit = 'upper_lower') {
   const n = diasEspecificos.length;
   const consecutivos = n === 3 && sonConsecutivos(diasEspecificos);
 
@@ -28,26 +32,43 @@ export function armarSecuenciaDeDias(diasEspecificos) {
   } else if (n === 3 && !consecutivos) {
     tipos = Array.from({ length: 3 }, () => ({ nombre: 'Full Body', musculos: TODOS_MUSCULOS }));
   } else if (n === 3 && consecutivos) {
+    // Upper/Lower/Full Body en vez de "grandes/secundarios/grandes": asi
+    // todos los musculos (no solo los grandes) quedan con frecuencia 2x.
     tipos = [
-      { nombre: 'Dia 1 (musculos grandes)', musculos: GRANDES },
-      { nombre: 'Dia 2 (musculos secundarios)', musculos: SECUNDARIOS },
-      { nombre: 'Dia 3 (musculos grandes)', musculos: GRANDES },
+      { nombre: 'Upper', musculos: UPPER },
+      { nombre: 'Lower', musculos: LOWER },
+      { nombre: 'Full Body', musculos: TODOS_MUSCULOS },
     ];
   } else if (n === 4) {
-    tipos = [
-      { nombre: 'Upper', musculos: UPPER },
-      { nombre: 'Lower', musculos: LOWER },
-      { nombre: 'Upper', musculos: UPPER },
-      { nombre: 'Lower', musculos: LOWER },
-    ];
+    tipos = varianteSplit === 'push_pull'
+      ? [
+        { nombre: 'Push', musculos: PUSH },
+        { nombre: 'Pull', musculos: PULL },
+        { nombre: 'Push', musculos: PUSH },
+        { nombre: 'Pull', musculos: PULL },
+      ]
+      : [
+        { nombre: 'Upper', musculos: UPPER },
+        { nombre: 'Lower', musculos: LOWER },
+        { nombre: 'Upper', musculos: UPPER },
+        { nombre: 'Lower', musculos: LOWER },
+      ];
   } else if (n === 5) {
-    tipos = [
-      { nombre: 'Torso', musculos: TORSO_GENERAL },
-      { nombre: 'Pierna', musculos: PIERNA_GENERAL },
-      { nombre: 'Push', musculos: PUSH },
-      { nombre: 'Pull', musculos: PULL },
-      { nombre: 'Legs', musculos: LEGS },
-    ];
+    tipos = varianteSplit === 'push_pull'
+      ? [
+        { nombre: 'Push', musculos: PUSH },
+        { nombre: 'Pull', musculos: PULL },
+        { nombre: 'Legs', musculos: LEGS },
+        { nombre: 'Push', musculos: PUSH },
+        { nombre: 'Pull', musculos: PULL },
+      ]
+      : [
+        { nombre: 'Push', musculos: PUSH },
+        { nombre: 'Pull', musculos: PULL },
+        { nombre: 'Legs', musculos: LEGS },
+        { nombre: 'Upper', musculos: UPPER },
+        { nombre: 'Lower', musculos: LOWER },
+      ];
   } else if (n === 6) {
     tipos = [
       { nombre: 'Push', musculos: PUSH },
@@ -122,10 +143,10 @@ export const MINUTOS_POR_EJERCICIO = 9;
 // fija de armarSecuenciaDeDias - el resto de la logica (filtro por
 // equipamiento, reparto del tiempo disponible, rango de reps) es identica
 // sin importar de donde salio la secuencia.
-export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusiones = [], duracionPorDia = {}, secuenciaPersonalizada = null }) {
+export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusiones = [], duracionPorDia = {}, secuenciaPersonalizada = null, varianteSplit = 'upper_lower' }) {
   const secuencia = secuenciaPersonalizada
     ? secuenciaPersonalizada.map((d) => ({ dia_semana: d.dia_semana, nombre: 'Personalizado', musculos: d.musculos }))
-    : armarSecuenciaDeDias(diasEspecificos);
+    : armarSecuenciaDeDias(diasEspecificos, varianteSplit);
   const excluidos = new Set(exclusiones);
 
   return secuencia.map((diaInfo, numeroDia) => {

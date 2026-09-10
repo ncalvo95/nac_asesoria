@@ -208,7 +208,7 @@ function Semana0Form({ rutina, usuario, onListo }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4 pb-24">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4 pb-24 md:max-w-5xl md:mx-auto">
       <div className="px-1 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
           <h1 className="text-[17px] font-bold">Semana 0 · Testeo</h1>
@@ -249,7 +249,7 @@ function Semana0Form({ rutina, usuario, onListo }) {
         })}
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
         {diaActual.ejercicios.map((ej, idx) => (
           <div key={ej.id} className="flex gap-2 items-stretch">
             <div className="flex flex-col justify-center gap-1 flex-none">
@@ -637,7 +637,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
   const dia = rutina.dias.find((d) => d.id === diaId) ?? rutina.dias[0];
 
   return (
-    <div className="flex flex-col gap-4 p-4 pb-6">
+    <div className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -768,7 +768,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
         {dia.ejercicios.map((ej, idx) => {
           const nota = notasPorEjercicio.get(ej.id);
           return (

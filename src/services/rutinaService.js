@@ -62,7 +62,7 @@ function persistirDias(rutinaId, rutinaPorDia) {
 // Genera y persiste una rutina nueva para el usuario, en base al perfil ya
 // cargado (objetivo, disponibilidad, equipamiento, exclusiones). Finaliza
 // cualquier rutina activa previa. Crea el microciclo 0 (semana de testeo).
-export const crearRutina = db.transaction((usuarioId) => {
+export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_lower') => {
   const objetivo = getObjetivo.get(usuarioId);
   const disponibilidad = getDisponibilidad.get(usuarioId);
   const equipamiento = getEquipamiento.get(usuarioId);
@@ -83,6 +83,7 @@ export const crearRutina = db.transaction((usuarioId) => {
     },
     exclusiones,
     duracionPorDia: JSON.parse(disponibilidad.duracion_sesion_json),
+    varianteSplit,
   });
 
   desactivarRutinasPrevias.run(usuarioId);
