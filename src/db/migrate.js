@@ -19,6 +19,10 @@ const columnasNuevas = [
   { tabla: 'dia_rutina', columna: 'activo', definicion: 'INTEGER NOT NULL DEFAULT 1' },
   { tabla: 'ejercicio_asignado', columna: 'descanso_segundos', definicion: 'INTEGER NOT NULL DEFAULT 90' },
   { tabla: 'musculo', columna: 'activo', definicion: 'INTEGER NOT NULL DEFAULT 1' },
+  { tabla: 'dia_rutina', columna: 'comentario', definicion: 'TEXT' },
+  { tabla: 'dia_rutina', columna: 'comentario_recordar', definicion: 'INTEGER NOT NULL DEFAULT 0' },
+  { tabla: 'ejercicio_asignado', columna: 'comentario', definicion: 'TEXT' },
+  { tabla: 'ejercicio_asignado', columna: 'comentario_recordar', definicion: 'INTEGER NOT NULL DEFAULT 0' },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

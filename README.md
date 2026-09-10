@@ -95,6 +95,18 @@ cierre de microciclo → progreso → export a Excel):
   instancia, solo cambia de día-, `POST /ejercicios/:id/copiar` arranca
   una instancia nueva a testear en el día destino).
 
+- Tanto un **ejercicio** como el **día en general** tienen un botón
+  "Comentario" que abre un panel con un textarea libre y un tick
+  "Recordarme en la próxima actualización de entrenamiento"
+  (`PATCH /ejercicios/:id/comentario` y `PATCH /dias/:id/comentario`,
+  columnas `comentario`/`comentario_recordar` en `ejercicio_asignado` y
+  `dia_rutina`). Si el tick queda marcado, el comentario se muestra solo
+  -sin que el usuario tenga que volver a abrir nada- como un aviso arriba
+  del ejercicio o del día la próxima vez que entra a esa pantalla; si no
+  se marca, el comentario queda guardado pero no se vuelve a mostrar solo
+  (el botón cambia a "Editar comentario" para poder revisarlo o
+  actualizarlo cuando haga falta).
+
   También se puede **agregar o quitar un día entero** de la rutina activa
   sin rehacerla desde cero (`POST /usuarios/:id/rutina/dias`,
   `GET /dias/:id/impacto`, `DELETE /dias/:id` en `rutinaService.js`) - a

@@ -206,7 +206,12 @@ CREATE TABLE IF NOT EXISTS dia_rutina (
   -- (tiene registro_sesion) - no se borra para no perder ese historial, pero
   -- deja de aparecer como dia activo (ver agregarDiaRutina/quitarDiaRutina en
   -- rutinaService.js). Si nunca llego a tener sesiones, se borra directo.
-  activo INTEGER NOT NULL DEFAULT 1
+  activo INTEGER NOT NULL DEFAULT 1,
+  comentario TEXT,
+  -- 1 = mostrar el comentario como recordatorio destacado la proxima vez
+  -- que se abra este dia en Entrenamiento (no solo accesible al tocar
+  -- "Comentario").
+  comentario_recordar INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_dia_rutina_rutina ON dia_rutina(rutina_id);
@@ -223,7 +228,9 @@ CREATE TABLE IF NOT EXISTS ejercicio_asignado (
   rango_reps_min INTEGER NOT NULL,
   rango_reps_max INTEGER NOT NULL,
   modo_lineal_forzado INTEGER NOT NULL DEFAULT 0,
-  descanso_segundos INTEGER NOT NULL DEFAULT 90
+  descanso_segundos INTEGER NOT NULL DEFAULT 90,
+  comentario TEXT,
+  comentario_recordar INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_ejercicio_asignado_dia ON ejercicio_asignado(dia_rutina_id, orden);

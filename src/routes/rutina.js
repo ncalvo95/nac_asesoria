@@ -274,6 +274,22 @@ router.patch('/dias/:diaRutinaId/orden', (req, res) => {
   res.status(204).end();
 });
 
+// Comentario libre del dia en general (no de un ejercicio puntual) - si
+// recordar=true, el frontend lo muestra como recordatorio destacado la
+// proxima vez que se abra este dia en Entrenamiento.
+router.patch('/dias/:diaRutinaId/comentario', (req, res) => {
+  const dia = db.prepare(`
+    SELECT dr.*, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?
+  `).get(req.params.diaRutinaId);
+  if (!dia) return res.status(404).json({ error: 'Dia no encontrado.' });
+  if (!checkAccesoUsuario(req, res, dia.usuario_id)) return;
+
+  const { comentario, recordar } = req.body || {};
+  db.prepare('UPDATE dia_rutina SET comentario = ?, comentario_recordar = ? WHERE id = ?')
+    .run(comentario || null, recordar ? 1 : 0, dia.id);
+  res.json({ id: dia.id, comentario: comentario || null, comentario_recordar: Boolean(recordar) });
+});
+
 function getEjercicioAsignadoOr404(req, res) {
   const ea = db.prepare(`
     SELECT ea.*, r.id AS rutina_id, r.usuario_id
@@ -369,6 +385,17 @@ router.post('/ejercicios/:ejercicioAsignadoId/copiar', (req, res, next) => {
     if (/no encontrado|misma rutina|ya esta/i.test(err.message)) return res.status(400).json({ error: err.message });
     next(err);
   }
+});
+
+// Comentario libre de un ejercicio puntual - mismo criterio que el del dia
+// (ver /dias/:diaRutinaId/comentario).
+router.patch('/ejercicios/:ejercicioAsignadoId/comentario', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { comentario, recordar } = req.body || {};
+  db.prepare('UPDATE ejercicio_asignado SET comentario = ?, comentario_recordar = ? WHERE id = ?')
+    .run(comentario || null, recordar ? 1 : 0, ea.id);
+  res.json({ id: ea.id, comentario: comentario || null, comentario_recordar: Boolean(recordar) });
 });
 
 router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {

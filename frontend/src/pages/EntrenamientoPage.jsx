@@ -680,14 +680,26 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
               + Agregar día
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setMostrarQuitarDia(true)}
-            className="text-[11.5px] font-medium text-danger underline underline-offset-2"
-          >
-            Quitar {CAPITALIZAR(dia.dia_semana)}
-          </button>
+          <div className="flex items-center gap-3">
+            <ComentarioBoton
+              endpoint={`/dias/${dia.id}/comentario`}
+              comentarioActual={dia.comentario}
+              recordarActual={dia.comentario_recordar}
+              onGuardado={onRutinaCambiada}
+              etiqueta="Comentario del día"
+            />
+            <button
+              type="button"
+              onClick={() => setMostrarQuitarDia(true)}
+              className="text-[11.5px] font-medium text-danger underline underline-offset-2"
+            >
+              Quitar {CAPITALIZAR(dia.dia_semana)}
+            </button>
+          </div>
         </div>
+        {Boolean(dia.comentario_recordar && dia.comentario) && (
+          <ComentarioRecordatorio comentario={dia.comentario} />
+        )}
       </div>
 
       {/* key={dia.id} fuerza un remount limpio del estado de series al cambiar de dia */}
@@ -863,6 +875,10 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 )}
               </div>
 
+              {Boolean(ej.comentario_recordar && ej.comentario) && (
+                <ComentarioRecordatorio comentario={ej.comentario} />
+              )}
+
               <div className="grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 text-[10px] font-semibold text-text-faint tracking-wide px-0.5">
                 <span>S</span><span>KG</span><span>REPS</span><span>RIR</span><span title="Reps efectivas">EF</span>
               </div>
@@ -1021,6 +1037,13 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
           )}
         </>
       )}
+
+      <ComentarioBoton
+        endpoint={`/ejercicios/${ejercicio.id}/comentario`}
+        comentarioActual={ejercicio.comentario}
+        recordarActual={ejercicio.comentario_recordar}
+        onGuardado={onCambiado}
+      />
 
       {error && <span className="text-[11px] text-danger">{error}</span>}
 
@@ -1218,6 +1241,85 @@ function MoverCopiarEjercicio({ ejercicioId, diasHermanos, onListo, onError }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Nota destacada cuando el comentario tiene "recordarme" activado - se
+// muestra sola, sin que haga falta abrir el formulario de comentario, la
+// proxima vez que se entra a esta pantalla (ver comentario_recordar en
+// dia_rutina/ejercicio_asignado).
+function ComentarioRecordatorio({ comentario }) {
+  return (
+    <div className="bg-warning-bg text-warning text-[12.5px] leading-relaxed rounded-lg px-3 py-2 border-l-2 border-warning">
+      {comentario}
+    </div>
+  );
+}
+
+// Comentario libre (dia o ejercicio, segun el endpoint que reciba) con un
+// tilde "recordarme" - si esta tildado, ComentarioRecordatorio lo muestra
+// destacado la proxima vez que se abra esta pantalla, sin necesidad de
+// tocar nada.
+function ComentarioBoton({ endpoint, comentarioActual, recordarActual, onGuardado, etiqueta }) {
+  const [abierto, setAbierto] = useState(false);
+  const [texto, setTexto] = useState(comentarioActual || '');
+  const [recordar, setRecordar] = useState(Boolean(recordarActual));
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState('');
+
+  async function guardar() {
+    setEnviando(true);
+    setError('');
+    try {
+      await api.patch(endpoint, { comentario: texto.trim() || null, recordar });
+      setAbierto(false);
+      onGuardado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
+      >
+        {comentarioActual ? 'Editar comentario' : (etiqueta || 'Comentario')}
+      </button>
+      {abierto && (
+        <div className="flex flex-col gap-2 bg-bg border border-border rounded-lg p-2.5 min-w-[220px]">
+          <textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            rows={3}
+            placeholder="Escribí un comentario…"
+            className="w-full rounded-md border border-border bg-surface px-2.5 py-2 text-[13px] outline-none focus:border-accent resize-none"
+          />
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={recordar}
+              onChange={(e) => setRecordar(e.target.checked)}
+              className="w-4 h-4 accent-accent"
+            />
+            <span className="text-[12px] text-text-muted">Recordarme en la próxima actualización de entrenamiento</span>
+          </label>
+          {error && <span className="text-[11px] text-danger">{error}</span>}
+          <button
+            type="button"
+            onClick={guardar}
+            disabled={enviando}
+            className="self-start h-8 px-3 rounded-md bg-accent text-accent-fg text-[12px] font-semibold disabled:opacity-60"
+          >
+            {enviando ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
