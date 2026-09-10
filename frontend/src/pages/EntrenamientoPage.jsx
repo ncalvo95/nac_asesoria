@@ -988,62 +988,68 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
 
       <AjusteSeries ejercicioId={ejercicio.id} seriesActuales={ejercicio.series_actuales} onAjustado={onCambiado} onError={setError} />
 
-      <button
-        type="button"
-        onClick={() => setMostrarPeso((v) => !v)}
-        className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
-      >
-        Ajustar peso base
-      </button>
-      {mostrarPeso && (
-        <AjustePeso
-          ejercicioId={ejercicio.id}
-          pesoActual={ejercicio.peso_actual}
-          onAjustado={() => { setMostrarPeso(false); onCambiado(); }}
-        />
-      )}
-
-      <button
-        type="button"
-        onClick={() => setMostrarDescanso((v) => !v)}
-        className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
-      >
-        Ajustar descanso
-      </button>
-      {mostrarDescanso && (
-        <AjusteDescanso
-          ejercicioId={ejercicio.id}
-          descansoSegundos={ejercicio.descanso_segundos}
-          onAjustado={() => { setMostrarDescanso(false); onCambiado(); }}
-        />
-      )}
-
-      {diasHermanos?.length > 0 && (
-        <>
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+        <div className="flex flex-col gap-1.5">
           <button
             type="button"
-            onClick={() => setMostrarMoverCopiar((v) => !v)}
+            onClick={() => setMostrarPeso((v) => !v)}
             className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
           >
-            Mover / copiar a otro día
+            Ajustar peso base
           </button>
-          {mostrarMoverCopiar && (
-            <MoverCopiarEjercicio
+          {mostrarPeso && (
+            <AjustePeso
               ejercicioId={ejercicio.id}
-              diasHermanos={diasHermanos}
-              onListo={() => { setMostrarMoverCopiar(false); onCambiado(); }}
-              onError={setError}
+              pesoActual={ejercicio.peso_actual}
+              onAjustado={() => { setMostrarPeso(false); onCambiado(); }}
             />
           )}
-        </>
-      )}
+        </div>
 
-      <ComentarioBoton
-        endpoint={`/ejercicios/${ejercicio.id}/comentario`}
-        comentarioActual={ejercicio.comentario}
-        recordarActual={ejercicio.comentario_recordar}
-        onGuardado={onCambiado}
-      />
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={() => setMostrarDescanso((v) => !v)}
+            className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
+          >
+            Ajustar descanso
+          </button>
+          {mostrarDescanso && (
+            <AjusteDescanso
+              ejercicioId={ejercicio.id}
+              descansoSegundos={ejercicio.descanso_segundos}
+              onAjustado={() => { setMostrarDescanso(false); onCambiado(); }}
+            />
+          )}
+        </div>
+
+        {diasHermanos?.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMostrarMoverCopiar((v) => !v)}
+              className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
+            >
+              Mover / copiar a otro día
+            </button>
+            {mostrarMoverCopiar && (
+              <MoverCopiarEjercicio
+                ejercicioId={ejercicio.id}
+                diasHermanos={diasHermanos}
+                onListo={() => { setMostrarMoverCopiar(false); onCambiado(); }}
+                onError={setError}
+              />
+            )}
+          </div>
+        )}
+
+        <ComentarioBoton
+          endpoint={`/ejercicios/${ejercicio.id}/comentario`}
+          comentarioActual={ejercicio.comentario}
+          recordarActual={ejercicio.comentario_recordar}
+          onGuardado={onCambiado}
+        />
+      </div>
 
       {error && <span className="text-[11px] text-danger">{error}</span>}
 
