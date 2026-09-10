@@ -6,7 +6,9 @@ import {
   crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva,
   quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
-import { aplicarDeload, cerrarMicrociclo, registrarSemana0, repsEfectivas } from '../services/progressionEngine.js';
+import {
+  cerrarMicrociclo, marcarNuevoTesteo, marcarSemanaDescarga, obtenerTesteos, registrarSemana0, repsEfectivas, saltearTesteo,
+} from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
 import { tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
 import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
@@ -552,14 +554,21 @@ router.delete('/ejercicios-asignados/:ejercicioAsignadoId', (req, res, next) => 
   }
 });
 
+// Transforma de verdad la semana en curso en una semana de descarga (no es
+// solo una sugerencia): cambia lo que el usuario ve para entrenar esta
+// semana, y al cerrarla la rutina se retoma exactamente donde estaba (ver
+// marcarSemanaDescarga/cerrarMicrociclo en progressionEngine.js). El
+// frontend pide confirmacion antes de llamar esto - no tiene vuelta atras.
 router.post('/rutinas/:rutinaId/deload', (req, res, next) => {
   const rutina = getRutinaOr404(req, res);
   if (!rutina) return;
   try {
-    const out = aplicarDeload(rutina.id);
+    const out = marcarSemanaDescarga(rutina.id);
     res.status(201).json(out);
   } catch (err) {
-    if (err.message.includes('No hay microciclo')) return res.status(400).json({ error: err.message });
+    if (err.message.includes('No hay microciclo') || err.message.includes('ya es tu semana') || err.message.includes('No se puede convertir')) {
+      return res.status(400).json({ error: err.message });
+    }
     next(err);
   }
 });
@@ -613,8 +622,51 @@ router.post('/rutinas/:rutinaId/semana0', (req, res, next) => {
     const out = registrarSemana0(rutina.id, rutina.usuario_id, resultados);
     res.status(201).json(out);
   } catch (err) {
+    if (err.message.includes('no tiene una semana de testeo')) return res.status(400).json({ error: err.message });
     next(err);
   }
+});
+
+// Saltea la semana de testeo en curso (la inicial o una repetida) y arranca
+// directo el siguiente microciclo con peso en blanco - para el usuario que
+// ya conoce sus pesos y no quiere pasar por las 2 series de prueba.
+router.post('/rutinas/:rutinaId/semana0/saltear', (req, res, next) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  try {
+    const out = saltearTesteo(rutina.id);
+    res.status(201).json(out);
+  } catch (err) {
+    if (err.message.includes('no tiene una semana de testeo')) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Convierte el microciclo en curso en una nueva semana de testeo (para
+// recalibrar sin perder la rutina) - el frontend, al ver tipo==='testeo',
+// muestra el mismo formulario de 2 series que la semana 0 y lo completa
+// contra POST /semana0 de arriba (que cierra este microciclo y crea el
+// siguiente con los resultados).
+router.post('/rutinas/:rutinaId/testeo', (req, res, next) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  try {
+    const out = marcarNuevoTesteo(rutina.id);
+    res.status(201).json(out);
+  } catch (err) {
+    if (err.message.includes('No hay microciclo') || err.message.includes('ya es una semana') || err.message.includes('No se puede convertir')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// Todas las semanas de testeo ya cerradas de esta rutina (la inicial y
+// cualquier repetida), para comparar peso/reps entre si.
+router.get('/rutinas/:rutinaId/testeos', (req, res) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  res.json(obtenerTesteos(rutina.id));
 });
 
 router.post('/rutinas/:rutinaId/microciclos/:numero/cerrar', (req, res, next) => {
@@ -624,7 +676,7 @@ router.post('/rutinas/:rutinaId/microciclos/:numero/cerrar', (req, res, next) =>
     const out = cerrarMicrociclo(rutina.id, Number(req.params.numero));
     res.json(out);
   } catch (err) {
-    if (err.message.includes('No existe') || err.message.includes('ya esta cerrado')) {
+    if (err.message.includes('No existe') || err.message.includes('ya esta cerrado') || err.message.includes('semana es de testeo')) {
       return res.status(400).json({ error: err.message });
     }
     next(err);

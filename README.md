@@ -148,7 +148,45 @@ cierre de microciclo → progreso → export a Excel):
   confirma. El piso de reps de referencia para la semana 1 (`piso_reps` en
   `progreso_ejercicio`) toma la más alta de las 2 series cargadas en el
   testeo, no siempre la serie 2 - a veces el peso elegido rinde mejor en
-  la primera serie que en la segunda.
+  la primera serie que en la segunda. Se puede **saltear el testeo**
+  (`POST /rutinas/:id/semana0/saltear`, botón "Saltear el testeo y empezar
+  directo con mi rutina" en el formulario) para quien ya conoce sus pesos:
+  arranca el primer microciclo con el peso en blanco (se carga en la
+  primera sesión real, como con cualquier ejercicio nuevo) y sin piso de
+  reps (0 - cualquier resultado real "supera" ese piso, así la base se
+  establece sola en el primer cierre en vez de compararse contra un testeo
+  que no pasó).
+- `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
+  especiales de los bloques de progresión regulares - antes esto vivía
+  implícito en `numero === 0`, que ya no alcanza porque una semana de
+  testeo se puede volver a pedir más adelante en la misma rutina:
+  - **Semana de descarga real** (`marcarSemanaDescarga` en
+    `progressionEngine.js`, botón "Marcar semana de descarga" en
+    Progreso, con confirmación explícita: *"Esta semana será transformada
+    en tu semana de descarga, esta acción no tiene marcha atrás. Luego de
+    la descarga, se retomará la rutina desde el último microciclo
+    completado."*) - a diferencia de una versión anterior (una sugerencia
+    meramente informativa), esto sí transforma la semana en curso: baja
+    series a la mitad (redondeando para arriba, mínimo 2) y el peso al
+    75% salvo la primera serie de cada ejercicio, y lo aplica de verdad
+    (`peso_actual`/`series_actuales` en `ejercicio_asignado`). El progreso
+    real (`progreso_ejercicio_microciclo`) de esa semana queda intacto a
+    propósito - son los valores del último microciclo normal cerrado -
+    así que al cerrar la descarga (mismo botón "Cerrar microciclo", sin
+    ninguno nuevo) la rutina retoma exactamente donde estaba, sin que la
+    descarga cuente para la progresión.
+  - **Nueva semana de testeo** dentro de la misma rutina
+    (`marcarNuevoTesteo` + `POST /rutinas/:id/testeo`, botón "Nueva semana
+    de testeo" en Progreso, con confirmación) - convierte el microciclo en
+    curso en una semana de testeo (2 series por ejercicio, igual que la
+    inicial) para recalibrar peso/reps sin perder la rutina ni el
+    historial; se completa en Entrenamiento con el mismo formulario que la
+    Semana 0 (`registrarSemana0` se generalizó para encontrar cualquier
+    microciclo `tipo='testeo'` en curso, no solo `numero=0`). Todas las
+    semanas de testeo ya cerradas de una rutina (la inicial y las
+    repetidas) se pueden **comparar entre sí** en Progreso
+    (`GET /rutinas/:id/testeos`, sección "Comparar semanas de testeo",
+    visible con 2 o más) - peso y reps de cada serie, por ejercicio.
 - **Motor de cierre de microciclo** (el núcleo del sistema): calcula
   piso/techo por ejercicio (mejor marca vs promedio), detecta estancamiento
   por músculo, aplica el tope MAV, suma serie al ejercicio top, ajusta peso
@@ -185,7 +223,11 @@ cierre de microciclo → progreso → export a Excel):
   rutina — en ambos casos con la opción de cargar uno "particular" que no
   está en el catálogo —, reordenar los ejercicios de un día con
   flechas, ajuste manual de series (+1/-1, respetando el piso y el tope
-  según objetivo) y del peso base sin esperar al cierre de microciclo, y
+  según objetivo - el ajuste se pisa también en `progreso_ejercicio_microciclo`
+  del microciclo en curso, no solo en `ejercicio_asignado`, así que se
+  mantiene microciclo tras microciclo hasta que el usuario lo cambie o
+  pida una descarga, en vez de perderse solo con que pase un cierre) y del
+  peso base sin esperar al cierre de microciclo, y
   descanso entre series editable por ejercicio (informativo, no lo toca el
   motor de progresión - default 90s, `descanso_segundos` en
   `ejercicio_asignado`),

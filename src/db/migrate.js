@@ -24,6 +24,7 @@ const columnasNuevas = [
   { tabla: 'dia_rutina', columna: 'comentario_recordar', definicion: 'INTEGER NOT NULL DEFAULT 0' },
   { tabla: 'ejercicio_asignado', columna: 'comentario', definicion: 'TEXT' },
   { tabla: 'ejercicio_asignado', columna: 'comentario_recordar', definicion: 'INTEGER NOT NULL DEFAULT 0' },
+  { tabla: 'microciclo', columna: 'tipo', definicion: "TEXT NOT NULL DEFAULT 'normal'" },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {
@@ -154,5 +155,42 @@ function agregarMusculosNuevos() {
   }
 }
 agregarMusculosNuevos();
+
+// El microciclo 0 siempre fue "la semana de testeo", pero recien ahora eso
+// quedo explicito en una columna (tipo) en vez de estar implicito en
+// numero===0 - hace falta para poder distinguir una semana de testeo
+// PEDIDA DE NUEVO mas adelante en la rutina (que no es numero 0) de un
+// microciclo normal. Retroactivo e idempotente.
+function marcarTesteoInicialRetroactivo() {
+  db.exec("UPDATE microciclo SET tipo = 'testeo' WHERE numero = 0 AND tipo != 'testeo'");
+}
+marcarTesteoInicialRetroactivo();
+
+// deload.microciclo_asociado_id no tenia ON DELETE CASCADE - borrar una
+// rutina que alguna vez tuvo una descarga marcada rompia con "FOREIGN KEY
+// constraint failed" (el microciclo se borraba en cascada desde rutina,
+// pero el deload que lo referenciaba quedaba huerfano bloqueando el borrado).
+// SQLite no deja alterar un FK existente, asi que hay que reconstruir la
+// tabla - solo si todavia no tiene el cascade (idempotente).
+function fixDeloadCascade() {
+  const yaTieneCascade = db.prepare('PRAGMA foreign_key_list(deload)').all()
+    .some((fk) => fk.table === 'microciclo' && fk.on_delete === 'CASCADE');
+  if (yaTieneCascade) return;
+
+  db.exec(`
+    ALTER TABLE deload RENAME TO deload_old;
+    CREATE TABLE deload (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      fecha TEXT NOT NULL DEFAULT (date('now')),
+      microciclo_asociado_id INTEGER REFERENCES microciclo(id) ON DELETE CASCADE,
+      detalle_json TEXT NOT NULL DEFAULT '{}'
+    );
+    INSERT INTO deload (id, usuario_id, fecha, microciclo_asociado_id, detalle_json)
+      SELECT id, usuario_id, fecha, microciclo_asociado_id, detalle_json FROM deload_old;
+    DROP TABLE deload_old;
+  `);
+}
+fixDeloadCascade();
 
 console.log('Migracion aplicada correctamente.');

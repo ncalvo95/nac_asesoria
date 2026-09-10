@@ -29,8 +29,10 @@ const insertEjercicioAsignado = db.prepare(`
     @series_actuales, NULL, @rango_reps_min, @rango_reps_max, 0
   )
 `);
+// Siempre numero=0, la semana de testeo inicial de una rutina recien creada
+// (las 3 formas de armar rutina la llaman igual) - tipo='testeo' fijo.
 const insertMicrociclo = db.prepare(`
-  INSERT INTO microciclo (rutina_id, numero, fecha_inicio, estado) VALUES (?, ?, date('now'), 'en_curso')
+  INSERT INTO microciclo (rutina_id, numero, fecha_inicio, estado, tipo) VALUES (?, ?, date('now'), 'en_curso', 'testeo')
 `);
 const desactivarRutinasPrevias = db.prepare(
   "UPDATE rutina SET estado = 'finalizada' WHERE usuario_id = ? AND estado = 'activa'"
@@ -407,7 +409,7 @@ export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuario
   return { ejercicio_asignado_id: ejercicioAsignadoId, nuevo_ejercicio_id: destinoId, nuevo_ejercicio_nombre: nuevo.nombre, rango_reps_min: rango.min, rango_reps_max: rango.max };
 });
 
-const getMicrociclo0EnCurso = db.prepare("SELECT * FROM microciclo WHERE rutina_id = ? AND numero = 0 AND estado = 'en_curso'");
+const getMicrociclo0EnCurso = db.prepare("SELECT * FROM microciclo WHERE rutina_id = ? AND tipo = 'testeo' AND estado = 'en_curso'");
 
 // Version simple de sustituirEjercicio para antes de guardar la semana 0:
 // todavia no hay ningun peso/reps cargado para este slot (el usuario los va
@@ -420,7 +422,7 @@ export const sustituirEjercicioPreTesteo = db.transaction(({ ejercicioAsignadoId
 
   const dia = db.prepare('SELECT rutina_id FROM dia_rutina WHERE id = ?').get(ea.dia_rutina_id);
   const microciclo0 = getMicrociclo0EnCurso.get(dia.rutina_id);
-  if (!microciclo0) throw new Error('Solo se puede cambiar el ejercicio antes de guardar la semana 0.');
+  if (!microciclo0) throw new Error('Solo se puede cambiar el ejercicio antes de guardar los resultados de la semana de testeo.');
 
   const objetivo = getObjetivo.get(usuarioId);
   const rango = rangoRepsPara({
@@ -568,6 +570,13 @@ const getUsuarioIdDeEjercicioAsignado = db.prepare(`
 // mismo piso (SERIES_MINIMO) y tope (topeSeriesPara segun objetivo/tipo de
 // ejercicio) que ya usa el motor de progresion, para no quedar inconsistente
 // con lo que haria el cierre automatico.
+const getMicrocicloEnCursoDeEjercicio = db.prepare(`
+  SELECT m.id FROM microciclo m
+  JOIN dia_rutina dr ON dr.rutina_id = m.rutina_id
+  JOIN ejercicio_asignado ea ON ea.dia_rutina_id = dr.id
+  WHERE ea.id = ? AND m.estado = 'en_curso'
+`);
+
 export function ajustarSeriesManual(ejercicioAsignadoId, delta) {
   const ea = getEjercicioAsignadoConTipo.get(ejercicioAsignadoId);
   if (!ea) throw new Error('Ejercicio asignado no encontrado.');
@@ -582,6 +591,20 @@ export function ajustarSeriesManual(ejercicioAsignadoId, delta) {
   if (nuevas > tope) throw new Error(`Este ejercicio ya esta en su tope de ${tope} series.`);
 
   db.prepare('UPDATE ejercicio_asignado SET series_actuales = ? WHERE id = ?').run(nuevas, ejercicioAsignadoId);
+
+  // Tambien hay que pisar el progreso_ejercicio_microciclo del microciclo EN
+  // CURSO - si no, esto quedaba solo cosmetico: al cerrar el microciclo,
+  // cerrarMicrociclo usa progreso.series_prescritas (no series_actuales)
+  // como base para el proximo, asi que un ajuste manual se perdia solo con
+  // que pasara un cierre. Con este update, el ajuste persiste microciclo
+  // tras microciclo hasta que el usuario lo cambie o pida una descarga.
+  const microciclo = getMicrocicloEnCursoDeEjercicio.get(ejercicioAsignadoId);
+  if (microciclo) {
+    db.prepare(
+      'UPDATE progreso_ejercicio_microciclo SET series_prescritas = ? WHERE ejercicio_asignado_id = ? AND microciclo_id = ?'
+    ).run(nuevas, ejercicioAsignadoId, microciclo.id);
+  }
+
   return { id: ejercicioAsignadoId, series_actuales: nuevas };
 }
 

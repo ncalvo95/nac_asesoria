@@ -105,8 +105,8 @@ export default function EntrenamientoPage() {
     return <div className="p-6 text-sm text-text-muted">No hay un microciclo activo. Avisale a tu coach.</div>;
   }
 
-  if (microcicloActual.numero === 0) {
-    return <Semana0Form rutina={rutina} usuario={usuario} onListo={cargar} todosMusculos={todosMusculos} />;
+  if (microcicloActual.tipo === 'testeo') {
+    return <Semana0Form rutina={rutina} usuario={usuario} microciclo={microcicloActual} onListo={cargar} todosMusculos={todosMusculos} />;
   }
 
   return (
@@ -142,7 +142,7 @@ function formatearFechaCorta(fecha) {
   return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
 }
 
-function Semana0Form({ rutina, usuario, onListo, todosMusculos }) {
+function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
   // Estado local mutable de los dias/ejercicios (independiente del prop
   // "rutina", que queda fijo desde que se monta la pantalla) - hace falta
   // porque sustituir un ejercicio antes del testeo cambia que ejercicio va
@@ -257,11 +257,26 @@ function Semana0Form({ rutina, usuario, onListo, todosMusculos }) {
     }
   }
 
+  async function saltear() {
+    if (!window.confirm('¿Saltear esta semana de testeo? Vas a arrancar directo tu rutina y cargar el peso vos mismo en la primera sesión real. Se descarta lo que hayas tipeado acá.')) return;
+    setError('');
+    setEnviando(true);
+    try {
+      await api.post(`/rutinas/${rutina.id}/semana0/saltear`);
+      borrarBorrador(borradorKey);
+      onListo();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto">
       <div className="px-1 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-[17px] font-bold">Semana 0 · Testeo</h1>
+          <h1 className="text-[17px] font-bold">{microciclo?.numero === 0 ? 'Semana 0 · Testeo' : 'Nueva semana de testeo'}</h1>
           <ExportarExcel rutinaId={rutina.id} />
         </div>
         <p className="text-[13px] text-text-muted leading-relaxed">
@@ -366,8 +381,19 @@ function Semana0Form({ rutina, usuario, onListo, todosMusculos }) {
         disabled={enviando}
         className="w-full h-12 rounded-[10px] bg-accent text-accent-fg text-[15px] font-semibold disabled:opacity-60"
       >
-        {enviando ? 'Guardando…' : 'Guardar testeo y arrancar semana 1'}
+        {enviando ? 'Guardando…' : microciclo?.numero === 0 ? 'Guardar testeo y arrancar semana 1' : 'Guardar testeo y continuar'}
       </button>
+
+      {microciclo?.numero === 0 && (
+        <button
+          type="button"
+          onClick={saltear}
+          disabled={enviando}
+          className="text-[12.5px] font-medium text-text-muted underline underline-offset-2 disabled:opacity-60 self-center"
+        >
+          Saltear el testeo y empezar directo con mi rutina
+        </button>
+      )}
     </form>
   );
 }

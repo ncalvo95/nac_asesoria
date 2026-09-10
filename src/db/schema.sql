@@ -239,7 +239,13 @@ CREATE INDEX IF NOT EXISTS idx_ejercicio_asignado_dia ON ejercicio_asignado(dia_
 -- Microciclos y progreso (nucleo del motor)
 -- ---------------------------------------------------------------------------
 
--- numero = 0 es la semana de testeo unica (no es un bloque de 2 semanas real).
+-- numero = 0 es siempre la semana de testeo inicial (no es un bloque de 2
+-- semanas real). tipo distingue microciclos "especiales" que puedan
+-- aparecer mas adelante en la rutina con cualquier numero: 'testeo' (el
+-- usuario pidio recalibrar peso/reps desde cero, numero=0 siempre lo es
+-- pero tambien puede pedirse de nuevo mas adelante - se comparan entre si
+-- en Progreso) o 'descarga' (semana de descarga real, no cuenta para la
+-- progresion - ver marcarSemanaDescarga en progressionEngine.js).
 CREATE TABLE IF NOT EXISTS microciclo (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   rutina_id INTEGER NOT NULL REFERENCES rutina(id) ON DELETE CASCADE,
@@ -247,6 +253,7 @@ CREATE TABLE IF NOT EXISTS microciclo (
   fecha_inicio TEXT NOT NULL,
   fecha_fin TEXT,
   estado TEXT NOT NULL DEFAULT 'en_curso' CHECK (estado IN ('en_curso', 'cerrado')),
+  tipo TEXT NOT NULL DEFAULT 'normal' CHECK (tipo IN ('normal', 'testeo', 'descarga')),
   UNIQUE (rutina_id, numero)
 );
 
@@ -311,7 +318,7 @@ CREATE TABLE IF NOT EXISTS deload (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   fecha TEXT NOT NULL DEFAULT (date('now')),
-  microciclo_asociado_id INTEGER REFERENCES microciclo(id),
+  microciclo_asociado_id INTEGER REFERENCES microciclo(id) ON DELETE CASCADE,
   detalle_json TEXT NOT NULL DEFAULT '{}'
 );
 
