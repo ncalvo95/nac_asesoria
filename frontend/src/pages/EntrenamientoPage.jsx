@@ -973,19 +973,56 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
           {linealForzado ? '✓ Lineal forzado' : 'Lineal forzado'}
         </button>
         <AjusteSeries ejercicioId={ejercicio.id} seriesActuales={ejercicio.series_actuales} onAjustado={onCambiado} onError={setError} />
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setMostrarSustituir((v) => !v)}
+            className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+          >
+            Cambiar ejercicio
+          </button>
+          {!ejercicio.es_top_de_musculo && (
+            <QuitarEjercicioBoton ejercicioAsignadoId={ejercicio.id} onQuitado={onCambiado} />
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col items-end gap-1.5">
+        <div className="flex flex-wrap items-start justify-end gap-x-3 gap-y-1.5">
+          <div className="flex flex-col items-end gap-1.5">
             <button
               type="button"
-              onClick={() => setMostrarSustituir((v) => !v)}
-              className="text-[11px] font-medium text-text-muted underline underline-offset-2"
+              onClick={() => setMostrarPeso((v) => !v)}
+              className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
             >
-              Cambiar ejercicio
+              Ajustar peso base
             </button>
-            {!ejercicio.es_top_de_musculo && (
-              <QuitarEjercicioBoton ejercicioAsignadoId={ejercicio.id} onQuitado={onCambiado} />
+            {mostrarPeso && (
+              <AjustePeso
+                ejercicioId={ejercicio.id}
+                pesoActual={ejercicio.peso_actual}
+                onAjustado={() => { setMostrarPeso(false); onCambiado(); }}
+              />
             )}
           </div>
+
+          <div className="flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMostrarDescanso((v) => !v)}
+              className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+            >
+              Ajustar descanso
+            </button>
+            {mostrarDescanso && (
+              <AjusteDescanso
+                ejercicioId={ejercicio.id}
+                descansoSegundos={ejercicio.descanso_segundos}
+                onAjustado={() => { setMostrarDescanso(false); onCambiado(); }}
+              />
+            )}
+          </div>
+
           <ComentarioBoton
             endpoint={`/ejercicios/${ejercicio.id}/comentario`}
             comentarioActual={ejercicio.comentario}
@@ -993,49 +1030,13 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
             onGuardado={onCambiado}
           />
         </div>
-      </div>
-
-      <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-        <div className="flex flex-col gap-1.5">
-          <button
-            type="button"
-            onClick={() => setMostrarPeso((v) => !v)}
-            className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
-          >
-            Ajustar peso base
-          </button>
-          {mostrarPeso && (
-            <AjustePeso
-              ejercicioId={ejercicio.id}
-              pesoActual={ejercicio.peso_actual}
-              onAjustado={() => { setMostrarPeso(false); onCambiado(); }}
-            />
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <button
-            type="button"
-            onClick={() => setMostrarDescanso((v) => !v)}
-            className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
-          >
-            Ajustar descanso
-          </button>
-          {mostrarDescanso && (
-            <AjusteDescanso
-              ejercicioId={ejercicio.id}
-              descansoSegundos={ejercicio.descanso_segundos}
-              onAjustado={() => { setMostrarDescanso(false); onCambiado(); }}
-            />
-          )}
-        </div>
 
         {diasHermanos?.length > 0 && (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col items-end gap-1.5">
             <button
               type="button"
               onClick={() => setMostrarMoverCopiar((v) => !v)}
-              className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
+              className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
             >
               Mover / copiar a otro día
             </button>
@@ -1293,7 +1294,7 @@ function ComentarioBoton({ endpoint, comentarioActual, recordarActual, onGuardad
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
-        className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
+        className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
       >
         {comentarioActual ? 'Editar comentario' : (etiqueta || 'Comentario')}
       </button>
