@@ -328,6 +328,20 @@ router.patch('/ejercicios/:ejercicioAsignadoId/peso', (req, res) => {
   res.json({ id: ea.id, peso_actual: peso });
 });
 
+// Descanso entre series (segundos), solo informativo/editable a mano -no lo
+// toca el motor de progresion- para que el usuario sepa cuanto descansar
+// entre series de cada ejercicio.
+router.patch('/ejercicios/:ejercicioAsignadoId/descanso', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { descanso_segundos } = req.body || {};
+  if (!Number.isInteger(descanso_segundos) || descanso_segundos < 10 || descanso_segundos > 600) {
+    return res.status(400).json({ error: 'descanso_segundos debe ser un entero entre 10 y 600.' });
+  }
+  db.prepare('UPDATE ejercicio_asignado SET descanso_segundos = ? WHERE id = ?').run(descanso_segundos, ea.id);
+  res.json({ id: ea.id, descanso_segundos });
+});
+
 router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;

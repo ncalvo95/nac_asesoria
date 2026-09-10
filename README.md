@@ -116,8 +116,11 @@ cierre de microciclo → progreso → export a Excel):
   forzado" por ejercicio, sustitución o agregado de ejercicio a mitad de
   rutina — en ambos casos con la opción de cargar uno "particular" que no
   está en el catálogo —, reordenar los ejercicios de un día con
-  flechas, y ajuste manual de series (+1/-1, respetando el piso y el tope
-  según objetivo) y del peso base, sin esperar al cierre de microciclo),
+  flechas, ajuste manual de series (+1/-1, respetando el piso y el tope
+  según objetivo) y del peso base sin esperar al cierre de microciclo, y
+  descanso entre series editable por ejercicio (informativo, no lo toca el
+  motor de progresión - default 90s, `descanso_segundos` en
+  `ejercicio_asignado`),
   "Mis rutinas" (historial de rutinas - solo una puede estar
   activa a la vez, se finaliza sola al crear o reactivar otra; desde acá se
   puede reactivar una vieja o borrarla para siempre), Progreso

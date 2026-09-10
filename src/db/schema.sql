@@ -222,7 +222,8 @@ CREATE TABLE IF NOT EXISTS ejercicio_asignado (
   peso_actual REAL,
   rango_reps_min INTEGER NOT NULL,
   rango_reps_max INTEGER NOT NULL,
-  modo_lineal_forzado INTEGER NOT NULL DEFAULT 0
+  modo_lineal_forzado INTEGER NOT NULL DEFAULT 0,
+  descanso_segundos INTEGER NOT NULL DEFAULT 90
 );
 
 CREATE INDEX IF NOT EXISTS idx_ejercicio_asignado_dia ON ejercicio_asignado(dia_rutina_id, orden);

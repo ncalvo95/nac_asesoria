@@ -16,6 +16,7 @@ db.exec(schema);
 // de nuevo sobre una base ya migrada no debe romper nada).
 const columnasNuevas = [
   { tabla: 'dia_rutina', columna: 'activo', definicion: 'INTEGER NOT NULL DEFAULT 1' },
+  { tabla: 'ejercicio_asignado', columna: 'descanso_segundos', definicion: 'INTEGER NOT NULL DEFAULT 90' },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

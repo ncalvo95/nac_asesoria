@@ -835,7 +835,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                       {ej.musculo_nombre}
                     </span>
                     <span className="text-[12px] text-text-faint">
-                      Objetivo {ej.rango_reps_min}–{ej.rango_reps_max} reps
+                      Objetivo {ej.rango_reps_min}–{ej.rango_reps_max} reps · Descanso {ej.descanso_segundos}s
                     </span>
                   </div>
                 </div>
@@ -909,6 +909,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado }) {
   const [linealForzado, setLinealForzado] = useState(Boolean(ejercicio.modo_lineal_forzado));
   const [mostrarSustituir, setMostrarSustituir] = useState(false);
   const [mostrarPeso, setMostrarPeso] = useState(false);
+  const [mostrarDescanso, setMostrarDescanso] = useState(false);
   const [error, setError] = useState('');
 
   async function toggleLineal() {
@@ -962,6 +963,21 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado }) {
           ejercicioId={ejercicio.id}
           pesoActual={ejercicio.peso_actual}
           onAjustado={() => { setMostrarPeso(false); onCambiado(); }}
+        />
+      )}
+
+      <button
+        type="button"
+        onClick={() => setMostrarDescanso((v) => !v)}
+        className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
+      >
+        Ajustar descanso
+      </button>
+      {mostrarDescanso && (
+        <AjusteDescanso
+          ejercicioId={ejercicio.id}
+          descansoSegundos={ejercicio.descanso_segundos}
+          onAjustado={() => { setMostrarDescanso(false); onCambiado(); }}
         />
       )}
 
@@ -1052,6 +1068,52 @@ function AjustePeso({ ejercicioId, pesoActual, onAjustado }) {
         onChange={(e) => setPeso(e.target.value)}
         className="w-20 h-8 rounded-md border border-border bg-bg px-2 tabular text-[13px] outline-none focus:border-accent"
       />
+      <button
+        type="button"
+        onClick={confirmar}
+        disabled={enviando}
+        className="h-8 px-3 rounded-md bg-accent text-accent-fg text-[12px] font-semibold disabled:opacity-60"
+      >
+        {enviando ? 'Guardando…' : 'Guardar'}
+      </button>
+      {error && <span className="text-[11px] text-danger">{error}</span>}
+    </div>
+  );
+}
+
+// Descanso entre series, en segundos - solo informativo (no lo toca el
+// motor de progresion), para que el usuario sepa cuanto descansar.
+function AjusteDescanso({ ejercicioId, descansoSegundos, onAjustado }) {
+  const [descanso, setDescanso] = useState(descansoSegundos ?? 90);
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  async function confirmar() {
+    const valor = Number(descanso);
+    if (!Number.isInteger(valor) || valor < 10 || valor > 600) {
+      setError('Ingresá un descanso entre 10 y 600 segundos.');
+      return;
+    }
+    setEnviando(true);
+    setError('');
+    try {
+      await api.patch(`/ejercicios/${ejercicioId}/descanso`, { descanso_segundos: valor });
+      onAjustado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="number" inputMode="numeric" step={5} min={10} max={600} value={descanso}
+        onChange={(e) => setDescanso(e.target.value)}
+        className="w-20 h-8 rounded-md border border-border bg-bg px-2 tabular text-[13px] outline-none focus:border-accent"
+      />
+      <span className="text-[11px] text-text-faint">segundos</span>
       <button
         type="button"
         onClick={confirmar}
