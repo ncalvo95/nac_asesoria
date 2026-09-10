@@ -961,7 +961,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
 
   return (
     <div className="flex flex-col gap-2 pt-1 border-t border-border -mx-4 px-4">
-      <div className="flex items-center justify-between pt-2">
+      <div className="flex items-start justify-between pt-2">
         <button
           type="button"
           onClick={toggleLineal}
@@ -972,17 +972,25 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
         >
           {linealForzado ? '✓ Lineal forzado' : 'Lineal forzado'}
         </button>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setMostrarSustituir((v) => !v)}
-            className="text-[11px] font-medium text-text-muted underline underline-offset-2"
-          >
-            Cambiar ejercicio
-          </button>
-          {!ejercicio.es_top_de_musculo && (
-            <QuitarEjercicioBoton ejercicioAsignadoId={ejercicio.id} onQuitado={onCambiado} />
-          )}
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMostrarSustituir((v) => !v)}
+              className="text-[11px] font-medium text-text-muted underline underline-offset-2"
+            >
+              Cambiar ejercicio
+            </button>
+            {!ejercicio.es_top_de_musculo && (
+              <QuitarEjercicioBoton ejercicioAsignadoId={ejercicio.id} onQuitado={onCambiado} />
+            )}
+          </div>
+          <ComentarioBoton
+            endpoint={`/ejercicios/${ejercicio.id}/comentario`}
+            comentarioActual={ejercicio.comentario}
+            recordarActual={ejercicio.comentario_recordar}
+            onGuardado={onCambiado}
+          />
         </div>
       </div>
 
@@ -1042,13 +1050,6 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
             )}
           </div>
         )}
-
-        <ComentarioBoton
-          endpoint={`/ejercicios/${ejercicio.id}/comentario`}
-          comentarioActual={ejercicio.comentario}
-          recordarActual={ejercicio.comentario_recordar}
-          onGuardado={onCambiado}
-        />
       </div>
 
       {error && <span className="text-[11px] text-danger">{error}</span>}
