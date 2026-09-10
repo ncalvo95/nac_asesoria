@@ -29,5 +29,14 @@ export const musculos = [
   { nombre: 'cuadriceps', region: 'pierna', mev: 8, mav: 14, mrv: 20 },
   { nombre: 'isquiotibiales', region: 'pierna', mev: 4, mav: 10, mrv: 16 },
   { nombre: 'gluteos', region: 'pierna', mev: 4, mav: 12, mrv: 16 },
+  // Abductores/aductores de cadera reciben bastante estimulo indirecto de
+  // sentadilla/zancadas/hip thrust, asi que su MEV es 0 - el trabajo
+  // aislado (maquina/banda) es un extra, no una base obligatoria.
+  { nombre: 'abductores', region: 'pierna', mev: 0, mav: 8, mrv: 16 },
+  { nombre: 'aductores', region: 'pierna', mev: 0, mav: 8, mrv: 16 },
   { nombre: 'pantorrillas', region: 'pierna', mev: 8, mav: 14, mrv: 20 },
+  // Zona lumbar (erectores): ya recibe carga indirecta de sentadilla/peso
+  // muerto, y el volumen directo se mantiene bajo a proposito por riesgo de
+  // lesion/fatiga sistemica si se pasa de rosca.
+  { nombre: 'lumbares', region: 'torso', mev: 0, mav: 6, mrv: 12 },
 ];

@@ -125,8 +125,12 @@ export const registrarSemana0 = db.transaction((rutinaId, usuarioId, resultados)
     insertRegistroSerie.run({ registro_sesion_id: sesionId, ejercicio_asignado_id, numero_serie: 1, peso, reps: reps_serie1, rir: null, molestia: null });
     insertRegistroSerie.run({ registro_sesion_id: sesionId, ejercicio_asignado_id, numero_serie: 2, peso, reps: reps_serie2, rir: null, molestia: null });
 
+    // Piso de referencia para la semana 1: la mas alta de las 2 series del
+    // testeo (no siempre la serie 2 - a veces la persona elige mal el peso
+    // y la serie 1 le sale mejor que la 2, o al reves).
+    const pisoReferencia = Math.max(reps_serie1, reps_serie2);
     upsertProgresoEjercicio.run({
-      ejercicio_asignado_id, microciclo_id: microciclo1.id, peso_prescrito: peso, piso_reps: reps_serie2, series_prescritas: SERIES_MINIMO,
+      ejercicio_asignado_id, microciclo_id: microciclo1.id, peso_prescrito: peso, piso_reps: pisoReferencia, series_prescritas: SERIES_MINIMO,
     });
     updateEjercicioAsignadoEstado.run(peso, SERIES_MINIMO, ejercicio_asignado_id);
   }

@@ -300,47 +300,57 @@ function Semana0Form({ rutina, usuario, onListo, todosMusculos }) {
       </div>
 
       <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
-        {diaActual.ejercicios.map((ej, idx) => (
-          <div key={ej.id} className="flex gap-2 items-stretch">
-            <div className="flex flex-col justify-center gap-1 flex-none">
-              <button
-                type="button"
-                onClick={() => moverEjercicioSemana0(idx, -1)}
-                disabled={idx === 0}
-                className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
-              >
-                ▲
-              </button>
-              <button
-                type="button"
-                onClick={() => moverEjercicioSemana0(idx, 1)}
-                disabled={idx === diaActual.ejercicios.length - 1}
-                className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
-              >
-                ▼
-              </button>
+        {diaActual.ejercicios.map((ej, idx) => {
+          const esUltimoDelMusculo = diaActual.ejercicios.filter(
+            (e) => e.musculo_objetivo_id === ej.musculo_objetivo_id
+          ).length === 1;
+          const advertencia = ej.es_top_de_musculo || esUltimoDelMusculo
+            ? `Este es el ejercicio ${ej.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ej.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
+            : null;
+          return (
+            <div key={ej.id} className="flex gap-2 items-stretch">
+              <div className="flex flex-col justify-center gap-1 flex-none">
+                <button
+                  type="button"
+                  onClick={() => moverEjercicioSemana0(idx, -1)}
+                  disabled={idx === 0}
+                  className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moverEjercicioSemana0(idx, 1)}
+                  disabled={idx === diaActual.ejercicios.length - 1}
+                  className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
+                >
+                  ▼
+                </button>
+              </div>
+              <div className="flex-1 bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-[14px] font-semibold">{ej.ejercicio_nombre}</span>
+                  <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
+                    {formatearMusculo(ej.musculo_nombre)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <NumberField label="Peso (kg)" value={valores[ej.id].peso} onChange={(v) => set(ej.id, 'peso', v)} />
+                  <NumberField label="Reps S1" value={valores[ej.id].reps1} onChange={(v) => set(ej.id, 'reps1', v)} />
+                  <NumberField label="Reps S2" value={valores[ej.id].reps2} onChange={(v) => set(ej.id, 'reps2', v)} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
+                  <QuitarEjercicioBoton
+                    ejercicioAsignadoId={ej.id}
+                    onQuitado={() => onQuitado(diaActual.id, ej.id)}
+                    advertencia={advertencia}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="flex-1 bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-[14px] font-semibold">{ej.ejercicio_nombre}</span>
-                <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
-                  {formatearMusculo(ej.musculo_nombre)}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <NumberField label="Peso (kg)" value={valores[ej.id].peso} onChange={(v) => set(ej.id, 'peso', v)} />
-                <NumberField label="Reps S1" value={valores[ej.id].reps1} onChange={(v) => set(ej.id, 'reps1', v)} />
-                <NumberField label="Reps S2" value={valores[ej.id].reps2} onChange={(v) => set(ej.id, 'reps2', v)} />
-              </div>
-              <div className="flex items-center justify-between">
-                <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
-                {!ej.es_top_de_musculo && (
-                  <QuitarEjercicioBoton ejercicioAsignadoId={ej.id} onQuitado={() => onQuitado(diaActual.id, ej.id)} />
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         <AgregarEjercicioDia
           diaRutinaId={diaActual.id}
@@ -624,11 +634,12 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
   );
 }
 
-function QuitarEjercicioBoton({ ejercicioAsignadoId, onQuitado }) {
+function QuitarEjercicioBoton({ ejercicioAsignadoId, onQuitado, advertencia }) {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
 
   async function quitar() {
+    if (advertencia && !window.confirm(advertencia)) return;
     setEnviando(true);
     setError('');
     try {
@@ -883,6 +894,9 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
       <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
         {dia.ejercicios.map((ej, idx) => {
           const nota = notasPorEjercicio.get(ej.id);
+          const esUltimoDelMusculo = dia.ejercicios.filter(
+            (e) => e.musculo_objetivo_id === ej.musculo_objetivo_id
+          ).length === 1;
           return (
             <div key={ej.id} className="flex gap-2 items-stretch">
               <div className="flex flex-col justify-center gap-1 flex-none">
@@ -936,6 +950,17 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
               </div>
               {series[ej.id].map((s, idx) => {
                 const efectivas = repsEfectivas(s.reps, s.rir);
+                // En modo lineal forzado, sugerimos un declive de 2 reps por
+                // serie (a los ~90s de descanso habituales entre series) en
+                // base a lo que REALMENTE se cargo en la serie anterior, no
+                // a otra sugerencia previa - encadenado, no un calculo fijo
+                // desde la serie 1. Es solo un placeholder en gris: no cuenta
+                // como cargado hasta que el usuario lo confirma o corrige.
+                const repsAnterior = idx > 0 ? Number(series[ej.id][idx - 1].reps) : null;
+                const sugerenciaReps = ej.modo_lineal_forzado && idx > 0
+                  && series[ej.id][idx - 1].reps !== '' && Number.isFinite(repsAnterior)
+                  ? String(Math.max(0, repsAnterior - 2))
+                  : undefined;
                 return (
                   <div key={idx} className="grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 items-center">
                     <span className="tabular text-[13px] text-text-muted text-center">{idx + 1}</span>
@@ -946,8 +971,9 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                     />
                     <input
                       type="number" inputMode="numeric" value={s.reps}
+                      placeholder={sugerenciaReps}
                       onChange={(e) => actualizarSerie(ej.id, idx, 'reps', e.target.value)}
-                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent"
+                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint"
                     />
                     <input
                       type="number" inputMode="numeric" min={0} max={4} value={s.rir}
@@ -962,7 +988,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 {series[ej.id].reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} reps efectivas en total
               </span>
 
-              <EjercicioAcciones ejercicio={ej} usuario={usuario} onCambiado={onRutinaCambiada} diasHermanos={diasHermanos} />
+              <EjercicioAcciones ejercicio={ej} usuario={usuario} onCambiado={onRutinaCambiada} diasHermanos={diasHermanos} esUltimoDelMusculo={esUltimoDelMusculo} />
               </div>
             </div>
           );
@@ -993,8 +1019,11 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   );
 }
 
-function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
+function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUltimoDelMusculo }) {
   const [linealForzado, setLinealForzado] = useState(Boolean(ejercicio.modo_lineal_forzado));
+  const advertenciaQuitar = ejercicio.es_top_de_musculo || esUltimoDelMusculo
+    ? `Este es el ejercicio ${ejercicio.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ejercicio.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
+    : null;
   const [mostrarSustituir, setMostrarSustituir] = useState(false);
   const [mostrarPeso, setMostrarPeso] = useState(false);
   const [mostrarDescanso, setMostrarDescanso] = useState(false);
@@ -1033,9 +1062,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
           >
             Cambiar ejercicio
           </button>
-          {!ejercicio.es_top_de_musculo && (
-            <QuitarEjercicioBoton ejercicioAsignadoId={ejercicio.id} onQuitado={onCambiado} />
-          )}
+          <QuitarEjercicioBoton ejercicioAsignadoId={ejercicio.id} onQuitado={onCambiado} advertencia={advertenciaQuitar} />
         </div>
       </div>
 

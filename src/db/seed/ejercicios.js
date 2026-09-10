@@ -80,4 +80,19 @@ export const ejercicios = [
   { nombre: 'Crunch en polea', musculo_primario: 'abdominales', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'flexion_tronco', equipamiento_requerido: ['polea'] },
   { nombre: 'Elevacion de piernas colgado', musculo_primario: 'abdominales', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'flexion_cadera', equipamiento_requerido: ['barra_dominadas'] },
   { nombre: 'Rueda abdominal', musculo_primario: 'abdominales', musculos_secundarios: ['deltoides_anterior'], tipo: 'aislado', patron_movimiento: 'anti_extension', equipamiento_requerido: ['peso_corporal'] },
+
+  // --- Abductores (cadera) ---
+  { nombre: 'Abduccion de cadera en maquina', musculo_primario: 'abductores', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'abduccion_cadera', equipamiento_requerido: ['maquina'] },
+  { nombre: 'Abduccion de cadera con banda', musculo_primario: 'abductores', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'abduccion_cadera', equipamiento_requerido: ['banda'] },
+  { nombre: 'Almeja con banda', musculo_primario: 'abductores', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'abduccion_cadera', equipamiento_requerido: ['banda'], es_unilateral: true },
+
+  // --- Aductores (cadera) ---
+  { nombre: 'Aduccion de cadera en maquina', musculo_primario: 'aductores', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'aduccion_cadera', equipamiento_requerido: ['maquina'] },
+  { nombre: 'Aduccion de cadera con banda', musculo_primario: 'aductores', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'aduccion_cadera', equipamiento_requerido: ['banda'] },
+  { nombre: 'Sentadilla sumo con mancuerna', musculo_primario: 'aductores', musculos_secundarios: ['gluteos', 'cuadriceps'], tipo: 'compuesto', patron_movimiento: 'sentadilla', equipamiento_requerido: ['mancuernas'] },
+
+  // --- Lumbares (zona lumbar / erectores) ---
+  { nombre: 'Peso muerto convencional con barra', musculo_primario: 'lumbares', musculos_secundarios: ['isquiotibiales', 'gluteos', 'espalda'], tipo: 'compuesto', patron_movimiento: 'bisagra_cadera', equipamiento_requerido: ['barra'], es_compuesto_principal_fuerza: true },
+  { nombre: 'Hiperextensiones en banco romano', musculo_primario: 'lumbares', musculos_secundarios: ['gluteos', 'isquiotibiales'], tipo: 'aislado', patron_movimiento: 'extension_tronco', equipamiento_requerido: ['banco'] },
+  { nombre: 'Superman en el piso', musculo_primario: 'lumbares', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'extension_tronco', equipamiento_requerido: ['peso_corporal'] },
 ];

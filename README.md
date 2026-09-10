@@ -39,8 +39,10 @@ onboarding → generación de rutina → semana 0 → registro de sesiones →
 cierre de microciclo → progreso → export a Excel):
 
 - Schema SQLite completo (`src/db/schema.sql`).
-- Seed de catálogo: 11 grupos musculares con referencia MEV/MAV/MRV
-  (`src/db/seed/musculos.js`) y 51 ejercicios (`src/db/seed/ejercicios.js`).
+- Seed de catálogo: 16 grupos musculares activos con referencia MEV/MAV/MRV
+  (`src/db/seed/musculos.js` - incluye abductores, aductores y lumbares
+  además de los grupos "grandes" habituales) y 60 ejercicios
+  (`src/db/seed/ejercicios.js`).
 - Auth con roles admin/coach/cliente (`src/routes/auth.js`).
 - Onboarding: objetivo, disponibilidad, equipamiento (con la opción
   "mixto" de elegir casa/gimnasio **por músculo**, no obligatorio - el que
@@ -89,11 +91,17 @@ cierre de microciclo → progreso → export a Excel):
   lo suma a `musculos_trabajados_json`), por si surge sobre la marcha
   durante el entrenamiento y no era parte del split original. También se
   puede **quitar** (`DELETE /ejercicios-asignados/:id` - no se puede
-  quitar el ejercicio "top" de un músculo ni uno que ya tenga series
-  registradas), **sustituir**, o **mover/copiar a otro día** de la misma
-  rutina (`POST /ejercicios/:id/mover` conserva peso/series -es la misma
-  instancia, solo cambia de día-, `POST /ejercicios/:id/copiar` arranca
-  una instancia nueva a testear en el día destino).
+  quitar uno que ya tenga series registradas, pero sí el ejercicio "top"
+  de un músculo o el único que le queda a ese músculo en el día: si era
+  top y quedan otros ejercicios del mismo músculo, uno pasa a ser el
+  nuevo top; si no queda ninguno, el músculo se cae de
+  `musculos_trabajados_json` - `reacomodarMusculoTrasQuitar()` en
+  `rutinaService.js`. El frontend no lo bloquea, pero pide confirmación
+  con una advertencia en esos dos casos), **sustituir**, o **mover/copiar
+  a otro día** de la misma rutina (`POST /ejercicios/:id/mover` conserva
+  peso/series -es la misma instancia, solo cambia de día-, `POST
+  /ejercicios/:id/copiar` arranca una instancia nueva a testear en el día
+  destino).
 
 - Tanto un **ejercicio** como el **día en general** tienen un botón
   "Comentario" que abre un panel con un textarea libre y un tick
@@ -137,7 +145,10 @@ cierre de microciclo → progreso → export a Excel):
   medio del entrenamiento (se va a background, se queda sin memoria) se
   perdía todo sin aviso. El borrador se recupera solo al volver a abrir la
   pantalla y se borra recién cuando el guardado real contra el backend
-  confirma.
+  confirma. El piso de reps de referencia para la semana 1 (`piso_reps` en
+  `progreso_ejercicio`) toma la más alta de las 2 series cargadas en el
+  testeo, no siempre la serie 2 - a veces el peso elegido rinde mejor en
+  la primera serie que en la segunda.
 - **Motor de cierre de microciclo** (el núcleo del sistema): calcula
   piso/techo por ejercicio (mejor marca vs promedio), detecta estancamiento
   por músculo, aplica el tope MAV, suma serie al ejercicio top, ajusta peso
@@ -163,7 +174,14 @@ cierre de microciclo → progreso → export a Excel):
   opción de generación automática, split personalizado o armado manual de
   la rutina), "Día de entrenamiento" (semana 0 de testeo con fecha de
   inicio elegible, registro de series por peso/reps/RIR, modo "lineal
-  forzado" por ejercicio, sustitución o agregado de ejercicio a mitad de
+  forzado" por ejercicio -con esto activo, a partir de la 2da serie el
+  campo de reps muestra en gris (placeholder, no un valor cargado) una
+  sugerencia de 2 reps menos que la serie anterior REAL (no la sugerencia
+  previa - si el usuario carga un numero distinto al sugerido, la
+  siguiente sugerencia se recalcula en cadena desde ese valor), pensado
+  para el declive tipico a ~90s de descanso entre series; el usuario
+  igual tiene que escribir lo que hizo de verdad, el placeholder no cuenta
+  como cargado-, sustitución o agregado de ejercicio a mitad de
   rutina — en ambos casos con la opción de cargar uno "particular" que no
   está en el catálogo —, reordenar los ejercicios de un día con
   flechas, ajuste manual de series (+1/-1, respetando el piso y el tope

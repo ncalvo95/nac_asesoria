@@ -536,16 +536,20 @@ export const agregarEjercicioPersonalizadoADia = db.transaction(({ diaRutinaId, 
 // sea el top de su musculo (el top se sustituye, nunca se saca sin
 // reemplazo) y que todavia no tenga ninguna serie registrada (si ya
 // entreno con el, sacarlo de golpe le haria perder ese historial).
-export function quitarEjercicioAsignado(ejercicioAsignadoId) {
+// Se puede quitar el ejercicio "top" (principal) de un musculo, o incluso el
+// unico ejercicio que le queda a ese musculo en el dia - el frontend avisa
+// con una confirmacion en esos casos, pero el backend no lo bloquea: si era
+// top y quedan otros ejercicios del mismo musculo, uno pasa a ser el nuevo
+// top (reacomodarMusculoTrasQuitar); si no queda ninguno, el musculo se cae
+// de musculos_trabajados_json.
+export const quitarEjercicioAsignado = db.transaction((ejercicioAsignadoId) => {
   const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
   if (!ea) throw new Error('Ejercicio asignado no encontrado.');
-  if (ea.es_top_de_musculo) {
-    throw new Error('No se puede quitar el ejercicio principal (top) de un musculo - sustituilo en cambio.');
-  }
   const tieneSeries = db.prepare('SELECT 1 FROM registro_serie WHERE ejercicio_asignado_id = ?').get(ejercicioAsignadoId);
   if (tieneSeries) throw new Error('Ese ejercicio ya tiene series registradas, no se puede quitar.');
   db.prepare('DELETE FROM ejercicio_asignado WHERE id = ?').run(ejercicioAsignadoId);
-}
+  reacomodarMusculoTrasQuitar(ea.dia_rutina_id, ea.musculo_objetivo_id, Boolean(ea.es_top_de_musculo));
+});
 
 const getEjercicioAsignadoConTipo = db.prepare(`
   SELECT ea.*, e.es_compuesto_principal_fuerza

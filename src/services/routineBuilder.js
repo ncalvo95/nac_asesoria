@@ -14,14 +14,17 @@ const DELT_POSTERIOR = 'deltoides_posterior';
 
 export const TODOS_MUSCULOS = [
   'pecho', 'espalda', 'dorsales', DELT_LATERAL, DELT_ANTERIOR, DELT_POSTERIOR, 'biceps', 'triceps',
-  'abdominales', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas',
+  'abdominales', 'cuadriceps', 'isquiotibiales', 'gluteos', 'abductores', 'aductores', 'pantorrillas', 'lumbares',
 ];
 
 const UPPER = ['pecho', 'espalda', 'dorsales', DELT_LATERAL, DELT_ANTERIOR, DELT_POSTERIOR, 'biceps', 'triceps'];
-const LOWER = ['cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'abdominales'];
+// Abductores/aductores/lumbares van con las piernas (LOWER/LEGS): son
+// musculos de cadera y zona lumbar, no tienen lugar en un dia de Upper/
+// Push/Pull.
+const LOWER = ['cuadriceps', 'isquiotibiales', 'gluteos', 'abductores', 'aductores', 'pantorrillas', 'abdominales', 'lumbares'];
 const PUSH = ['pecho', DELT_ANTERIOR, DELT_LATERAL, 'triceps'];
 const PULL = ['espalda', 'dorsales', DELT_POSTERIOR, 'biceps'];
-const LEGS = ['cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'abdominales'];
+const LEGS = ['cuadriceps', 'isquiotibiales', 'gluteos', 'abductores', 'aductores', 'pantorrillas', 'abdominales', 'lumbares'];
 
 // Determina la secuencia de "tipos de dia" (con sus musculos objetivo) segun
 // la cantidad de dias/semana disponibles. diasEspecificos debe venir ya

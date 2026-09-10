@@ -30,7 +30,10 @@ const MUSCULOS = [
   { id: 'cuadriceps', label: 'Cuádriceps' },
   { id: 'isquiotibiales', label: 'Isquiotibiales' },
   { id: 'gluteos', label: 'Glúteos' },
+  { id: 'abductores', label: 'Abductores' },
+  { id: 'aductores', label: 'Aductores' },
   { id: 'pantorrillas', label: 'Pantorrillas' },
+  { id: 'lumbares', label: 'Lumbares' },
 ];
 
 export default function OnboardingPage() {

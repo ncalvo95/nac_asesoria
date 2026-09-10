@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import db from './index.js';
 import { musculos } from './seed/musculos.js';
+import { ejercicios } from './seed/ejercicios.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.join(__dirname, 'schema.sql');
@@ -115,5 +116,43 @@ function migrarDeltoides() {
   }
 }
 migrarDeltoides();
+
+// Abductores/aductores/lumbares son musculos nuevos que no reemplazan nada
+// existente (a diferencia del deltoides) - solo hay que insertarlos junto
+// con sus ejercicios de catalogo si la base ya estaba seedeada antes de
+// este cambio. Idempotente igual que migrarDeltoides, corre en cada arranque.
+function agregarMusculosNuevos() {
+  const getMusculoPorNombre = db.prepare('SELECT id FROM musculo WHERE nombre = ?');
+  const insertMusculo = db.prepare('INSERT INTO musculo (nombre, region) VALUES (?, ?) ON CONFLICT(nombre) DO NOTHING');
+  const insertVolumen = db.prepare(
+    'INSERT INTO referencia_volumen_muscular (musculo_id, mev, mav, mrv) VALUES (?, ?, ?, ?) ON CONFLICT(musculo_id) DO NOTHING'
+  );
+
+  const nombresNuevos = ['abductores', 'aductores', 'lumbares'];
+  const idPorMusculo = {};
+  for (const nombre of nombresNuevos) {
+    const m = musculos.find((x) => x.nombre === nombre);
+    insertMusculo.run(m.nombre, m.region);
+    idPorMusculo[m.nombre] = getMusculoPorNombre.get(m.nombre).id;
+    insertVolumen.run(idPorMusculo[m.nombre], m.mev, m.mav, m.mrv);
+  }
+
+  const existeEjercicio = db.prepare('SELECT id FROM ejercicio WHERE nombre = ?');
+  const insertEjercicio = db.prepare(`
+    INSERT INTO ejercicio (
+      nombre, musculo_primario_id, musculos_secundarios_json, tipo, patron_movimiento,
+      equipamiento_requerido_json, es_unilateral, es_compuesto_principal_fuerza
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const e of ejercicios) {
+    if (!nombresNuevos.includes(e.musculo_primario) || existeEjercicio.get(e.nombre)) continue;
+    insertEjercicio.run(
+      e.nombre, idPorMusculo[e.musculo_primario], JSON.stringify(e.musculos_secundarios || []),
+      e.tipo, e.patron_movimiento, JSON.stringify(e.equipamiento_requerido || []),
+      e.es_unilateral ? 1 : 0, e.es_compuesto_principal_fuerza ? 1 : 0
+    );
+  }
+}
+agregarMusculosNuevos();
 
 console.log('Migracion aplicada correctamente.');
