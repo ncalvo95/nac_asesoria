@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { formatearMusculo } from '../utils/musculo.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -65,7 +66,7 @@ export default function QuitarDiaModal({ diaRutinaId, diaSemana, onClose, onQuit
                       Estos músculos se quedarían sin ningún día si no los redistribuís:
                     </span>
                     <span className="text-[12.5px] text-text-muted capitalize">
-                      {musculosSolo.map((m) => m.musculo_nombre).join(', ')}
+                      {musculosSolo.map((m) => formatearMusculo(m.musculo_nombre)).join(', ')}
                     </span>
                   </div>
                 )}
@@ -75,7 +76,7 @@ export default function QuitarDiaModal({ diaRutinaId, diaSemana, onClose, onQuit
                       Estos ya se entrenan en otro día (solo baja la frecuencia):
                     </span>
                     <span className="text-[12.5px] text-text-muted capitalize">
-                      {musculosCubiertos.map((m) => m.musculo_nombre).join(', ')}
+                      {musculosCubiertos.map((m) => formatearMusculo(m.musculo_nombre)).join(', ')}
                     </span>
                   </div>
                 )}

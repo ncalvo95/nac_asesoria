@@ -437,18 +437,37 @@ export const sustituirEjercicioPreTesteo = db.transaction(({ ejercicioAsignadoId
 });
 
 const getMaxOrdenDia = db.prepare('SELECT COALESCE(MAX(orden), 0) AS maxOrden FROM ejercicio_asignado WHERE dia_rutina_id = ?');
+const getDiaRutinaPorId = db.prepare('SELECT * FROM dia_rutina WHERE id = ?');
+const hayEjercicioDelMusculoEnElDia = db.prepare(
+  'SELECT 1 FROM ejercicio_asignado WHERE dia_rutina_id = ? AND musculo_objetivo_id = ?'
+);
 const insertEjercicioAsignadoExtra = db.prepare(`
   INSERT INTO ejercicio_asignado (
     dia_rutina_id, ejercicio_id, orden, es_top_de_musculo, musculo_objetivo_id,
     series_actuales, peso_actual, rango_reps_min, rango_reps_max, modo_lineal_forzado
-  ) VALUES (?, ?, ?, 0, ?, ?, NULL, ?, ?, 0)
+  ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)
 `);
 
-// Suma un ejercicio EXTRA a un musculo que ya esta presente ese dia (no
-// reemplaza nada, a diferencia de sustituir) - queda con es_top_de_musculo=0
-// (el "top" sigue siendo el que ya estaba, es el que suma la serie extra si
-// el musculo se estanca) y series_actuales = SERIES_MINIMO, como si fuera un
-// ejercicio recien agregado a testear.
+// Si el musculo ya esta presente ese dia, el nuevo ejercicio entra como
+// EXTRA (no reemplaza nada, el "top" sigue siendo el que ya estaba). Si el
+// musculo todavia no tenia ningun ejercicio ese dia -tipicamente porque no
+// era parte del split original y se decide sumarlo sobre la marcha, durante
+// el entrenamiento- el nuevo ejercicio pasa a ser el top de ese musculo ahi
+// (y se suma al musculos_trabajados_json del dia, solo a fines
+// informativos/exportacion). En cualquier caso arranca con
+// series_actuales = SERIES_MINIMO y sin peso (a testear), como cualquier
+// ejercicio agregado a mitad de rutina.
+function calcularTopYActualizarDia(diaRutinaId, musculoId, musculoNombre) {
+  const yaPresente = hayEjercicioDelMusculoEnElDia.get(diaRutinaId, musculoId);
+  if (!yaPresente) {
+    const dia = getDiaRutinaPorId.get(diaRutinaId);
+    const musculos = new Set(JSON.parse(dia.musculos_trabajados_json));
+    musculos.add(musculoNombre);
+    db.prepare('UPDATE dia_rutina SET musculos_trabajados_json = ? WHERE id = ?').run(JSON.stringify([...musculos]), diaRutinaId);
+  }
+  return !yaPresente;
+}
+
 export const agregarEjercicioADia = db.transaction(({ diaRutinaId, usuarioId, musculoId, ejercicioId }) => {
   const nuevo = getEjercicioCatalogo.get(ejercicioId);
   if (!nuevo) throw new Error('Ejercicio no encontrado.');
@@ -477,12 +496,13 @@ export const agregarEjercicioADia = db.transaction(({ diaRutinaId, usuarioId, mu
     region: nuevo.musculo_region,
   });
 
+  const esTop = calcularTopYActualizarDia(diaRutinaId, musculoId, nuevo.musculo_nombre);
   const { maxOrden } = getMaxOrdenDia.get(diaRutinaId);
-  const info = insertEjercicioAsignadoExtra.run(diaRutinaId, ejercicioId, maxOrden + 1, musculoId, SERIES_MINIMO, rango.min, rango.max);
+  const info = insertEjercicioAsignadoExtra.run(diaRutinaId, ejercicioId, maxOrden + 1, esTop ? 1 : 0, musculoId, SERIES_MINIMO, rango.min, rango.max);
   return {
     id: info.lastInsertRowid, ejercicio_id: ejercicioId, ejercicio_nombre: nuevo.nombre,
     musculo_objetivo_id: musculoId, rango_reps_min: rango.min, rango_reps_max: rango.max,
-    es_top_de_musculo: false, series_actuales: SERIES_MINIMO,
+    es_top_de_musculo: esTop, series_actuales: SERIES_MINIMO,
   };
 });
 
@@ -502,12 +522,13 @@ export const agregarEjercicioPersonalizadoADia = db.transaction(({ diaRutinaId, 
     region: nuevo.musculo_region,
   });
 
+  const esTop = calcularTopYActualizarDia(diaRutinaId, musculoId, nuevo.musculo_nombre);
   const { maxOrden } = getMaxOrdenDia.get(diaRutinaId);
-  const info = insertEjercicioAsignadoExtra.run(diaRutinaId, nuevo.id, maxOrden + 1, musculoId, SERIES_MINIMO, rango.min, rango.max);
+  const info = insertEjercicioAsignadoExtra.run(diaRutinaId, nuevo.id, maxOrden + 1, esTop ? 1 : 0, musculoId, SERIES_MINIMO, rango.min, rango.max);
   return {
     id: info.lastInsertRowid, ejercicio_id: nuevo.id, ejercicio_nombre: nuevo.nombre,
     musculo_objetivo_id: musculoId, rango_reps_min: rango.min, rango_reps_max: rango.max,
-    es_top_de_musculo: false, series_actuales: SERIES_MINIMO,
+    es_top_de_musculo: esTop, series_actuales: SERIES_MINIMO,
   };
 });
 
@@ -903,4 +924,90 @@ export const quitarDiaRutina = db.transaction((diaRutinaId, { redistribuir = fal
   }
 
   return obtenerRutinaActiva(usuarioId);
+});
+
+// ---------------------------------------------------------------------------
+// Mover / copiar un ejercicio ya asignado a otro dia de la MISMA rutina -
+// por si durante el entrenamiento se decide que un ejercicio queda mejor en
+// otro dia, o que conviene repetirlo en dos dias.
+// ---------------------------------------------------------------------------
+
+// Despues de sacar un ejercicio de un dia (mover a otro lado), si era el top
+// de su musculo y todavia queda algun otro ejercicio del mismo musculo en
+// ese dia, uno de ellos pasa a ser el nuevo top - nunca se deja un musculo
+// sin top mientras tenga al menos un ejercicio asignado ahi. Si no queda
+// ninguno, el musculo se saca de musculos_trabajados_json (cosmetico).
+function reacomodarMusculoTrasQuitar(diaRutinaId, musculoId, eraTop) {
+  const restantes = db.prepare(
+    'SELECT id FROM ejercicio_asignado WHERE dia_rutina_id = ? AND musculo_objetivo_id = ? ORDER BY orden'
+  ).all(diaRutinaId, musculoId);
+  if (restantes.length === 0) {
+    const dia = getDiaRutinaPorId.get(diaRutinaId);
+    const musculoNombre = getMusculoNombrePorId.get(musculoId).nombre;
+    const musculos = JSON.parse(dia.musculos_trabajados_json).filter((m) => m !== musculoNombre);
+    db.prepare('UPDATE dia_rutina SET musculos_trabajados_json = ? WHERE id = ?').run(JSON.stringify(musculos), diaRutinaId);
+  } else if (eraTop) {
+    db.prepare('UPDATE ejercicio_asignado SET es_top_de_musculo = 1 WHERE id = ?').run(restantes[0].id);
+  }
+}
+
+function validarDestinoMismaRutina(ea, diaRutinaIdDestino) {
+  const destino = getDiaRutinaPorId.get(diaRutinaIdDestino);
+  if (!destino) throw new Error('Dia destino no encontrado.');
+  const origen = getDiaRutinaPorId.get(ea.dia_rutina_id);
+  if (origen.rutina_id !== destino.rutina_id) throw new Error('El dia destino tiene que ser de la misma rutina.');
+  const yaUsado = db.prepare('SELECT 1 FROM ejercicio_asignado WHERE dia_rutina_id = ? AND ejercicio_id = ?')
+    .get(diaRutinaIdDestino, ea.ejercicio_id);
+  if (yaUsado) throw new Error('Ese ejercicio ya esta asignado en el dia destino.');
+  return { origen, destino };
+}
+
+// Mueve el ejercicio_asignado a otro dia, conservando su peso/series
+// actuales (es la misma instancia de progresion, solo cambia de dia).
+export const moverEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutinaIdDestino) => {
+  const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
+  if (!ea) throw new Error('Ejercicio asignado no encontrado.');
+  if (ea.dia_rutina_id === diaRutinaIdDestino) throw new Error('Ese ejercicio ya esta en ese dia.');
+  const { origen } = validarDestinoMismaRutina(ea, diaRutinaIdDestino);
+
+  const musculoNombre = getMusculoNombrePorId.get(ea.musculo_objetivo_id).nombre;
+  const esTopEnDestino = calcularTopYActualizarDia(diaRutinaIdDestino, ea.musculo_objetivo_id, musculoNombre);
+  const { maxOrden } = getMaxOrdenDia.get(diaRutinaIdDestino);
+
+  db.prepare('UPDATE ejercicio_asignado SET dia_rutina_id = ?, orden = ?, es_top_de_musculo = ? WHERE id = ?')
+    .run(diaRutinaIdDestino, maxOrden + 1, esTopEnDestino ? 1 : 0, ejercicioAsignadoId);
+
+  reacomodarMusculoTrasQuitar(origen.id, ea.musculo_objetivo_id, Boolean(ea.es_top_de_musculo));
+
+  const catalogo = getEjercicioCatalogo.get(ea.ejercicio_id);
+  return {
+    id: ejercicioAsignadoId, dia_rutina_id: diaRutinaIdDestino, ejercicio_id: ea.ejercicio_id,
+    ejercicio_nombre: catalogo.nombre, es_top_de_musculo: esTopEnDestino,
+  };
+});
+
+// Duplica el ejercicio en otro dia - a diferencia de mover, queda una
+// instancia nueva (peso_actual NULL, a testear) en vez de heredar el
+// peso/series del original, para no asumir que el mismo peso sirve ahora
+// con la frecuencia mas alta que implica repetirlo en dos dias.
+export const copiarEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutinaIdDestino) => {
+  const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
+  if (!ea) throw new Error('Ejercicio asignado no encontrado.');
+  validarDestinoMismaRutina(ea, diaRutinaIdDestino);
+
+  const musculoNombre = getMusculoNombrePorId.get(ea.musculo_objetivo_id).nombre;
+  const esTop = calcularTopYActualizarDia(diaRutinaIdDestino, ea.musculo_objetivo_id, musculoNombre);
+  const { maxOrden } = getMaxOrdenDia.get(diaRutinaIdDestino);
+
+  const info = insertEjercicioAsignadoExtra.run(
+    diaRutinaIdDestino, ea.ejercicio_id, maxOrden + 1, esTop ? 1 : 0, ea.musculo_objetivo_id,
+    SERIES_MINIMO, ea.rango_reps_min, ea.rango_reps_max
+  );
+  const catalogo = getEjercicioCatalogo.get(ea.ejercicio_id);
+  return {
+    id: info.lastInsertRowid, dia_rutina_id: diaRutinaIdDestino, ejercicio_id: ea.ejercicio_id,
+    ejercicio_nombre: catalogo.nombre, musculo_objetivo_id: ea.musculo_objetivo_id,
+    rango_reps_min: ea.rango_reps_min, rango_reps_max: ea.rango_reps_max,
+    es_top_de_musculo: esTop, series_actuales: SERIES_MINIMO,
+  };
 });

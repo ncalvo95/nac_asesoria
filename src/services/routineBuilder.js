@@ -1,14 +1,26 @@
 import db from '../db/index.js';
 
+// Deltoides separado por cabeza (lateral/anterior/posterior) en vez de un
+// unico "deltoides" (ver seed/musculos.js): el lateral casi no recibe
+// estimulo indirecto de nada mas, asi que va SIEMPRE en Push, Upper y Full
+// Body - las mismas categorias donde antes entraba "deltoides" a secas -
+// para no perder nunca su volumen directo. El anterior lo acompaña en esas
+// mismas categorias (ya viene cubierto por el empuje, pero da un lugar
+// donde colgar Press militar como top). El posterior va en Pull en vez de
+// Push, porque se entrena mejor con traccion (remo, face pull, pajaros).
+const DELT_LATERAL = 'deltoides_lateral';
+const DELT_ANTERIOR = 'deltoides_anterior';
+const DELT_POSTERIOR = 'deltoides_posterior';
+
 export const TODOS_MUSCULOS = [
-  'pecho', 'espalda', 'dorsales', 'deltoides', 'biceps', 'triceps',
+  'pecho', 'espalda', 'dorsales', DELT_LATERAL, DELT_ANTERIOR, DELT_POSTERIOR, 'biceps', 'triceps',
   'abdominales', 'cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas',
 ];
 
-const UPPER = ['pecho', 'espalda', 'dorsales', 'deltoides', 'biceps', 'triceps'];
+const UPPER = ['pecho', 'espalda', 'dorsales', DELT_LATERAL, DELT_ANTERIOR, DELT_POSTERIOR, 'biceps', 'triceps'];
 const LOWER = ['cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'abdominales'];
-const PUSH = ['pecho', 'deltoides', 'triceps'];
-const PULL = ['espalda', 'dorsales', 'biceps'];
+const PUSH = ['pecho', DELT_ANTERIOR, DELT_LATERAL, 'triceps'];
+const PULL = ['espalda', 'dorsales', DELT_POSTERIOR, 'biceps'];
 const LEGS = ['cuadriceps', 'isquiotibiales', 'gluteos', 'pantorrillas', 'abdominales'];
 
 // Determina la secuencia de "tipos de dia" (con sus musculos objetivo) segun

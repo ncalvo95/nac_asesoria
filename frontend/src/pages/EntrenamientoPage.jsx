@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api, API_BASE } from '../api/client.js';
 import AgregarDiaModal from '../components/AgregarDiaModal.jsx';
 import QuitarDiaModal from '../components/QuitarDiaModal.jsx';
+import { formatearMusculo } from '../utils/musculo.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -35,6 +36,7 @@ export default function EntrenamientoPage() {
   const usuario = usuarioIdParam ? { id: Number(usuarioIdParam) } : sesion;
   const [rutina, setRutina] = useState(null);
   const [progreso, setProgreso] = useState(null);
+  const [todosMusculos, setTodosMusculos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
 
@@ -57,6 +59,11 @@ export default function EntrenamientoPage() {
   const recargarSilencioso = () => cargar({ silencioso: true });
 
   useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [usuario.id]);
+  // Catalogo completo de musculos (no solo los del dia): permite agregar un
+  // ejercicio de un musculo que el dia todavia no entrenaba, por si surge
+  // durante el entrenamiento - se carga una sola vez acá y se pasa hacia
+  // abajo, en vez de que cada AgregarEjercicioDia lo pida por su cuenta.
+  useEffect(() => { api.get('/catalogo/musculos').then(setTodosMusculos).catch(() => {}); }, []);
 
   if (cargando) return <div className="p-6 text-sm text-text-muted">Cargando tu rutina…</div>;
   if (error) return <div className="p-6 text-sm text-danger">{error}</div>;
@@ -69,7 +76,7 @@ export default function EntrenamientoPage() {
   }
 
   if (microcicloActual.numero === 0) {
-    return <Semana0Form rutina={rutina} usuario={usuario} onListo={cargar} />;
+    return <Semana0Form rutina={rutina} usuario={usuario} onListo={cargar} todosMusculos={todosMusculos} />;
   }
 
   return (
@@ -80,6 +87,7 @@ export default function EntrenamientoPage() {
       progreso={progreso}
       onGuardado={recargarSilencioso}
       onRutinaCambiada={cargar}
+      todosMusculos={todosMusculos}
     />
   );
 }
@@ -104,7 +112,7 @@ function formatearFechaCorta(fecha) {
   return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
 }
 
-function Semana0Form({ rutina, usuario, onListo }) {
+function Semana0Form({ rutina, usuario, onListo, todosMusculos }) {
   // Estado local mutable de los dias/ejercicios (independiente del prop
   // "rutina", que queda fijo desde que se monta la pantalla) - hace falta
   // porque sustituir un ejercicio antes del testeo cambia que ejercicio va
@@ -125,14 +133,6 @@ function Semana0Form({ rutina, usuario, onListo }) {
   const [guardandoFecha, setGuardandoFecha] = useState(false);
 
   const diaActual = dias.find((d) => d.id === diaId) ?? dias[0];
-
-  const musculosDelDiaActual = useMemo(() => {
-    const vistos = new Map();
-    for (const e of diaActual.ejercicios) {
-      if (!vistos.has(e.musculo_objetivo_id)) vistos.set(e.musculo_objetivo_id, e.musculo_nombre);
-    }
-    return [...vistos.entries()].map(([id, nombre]) => ({ id, nombre }));
-  }, [diaActual]);
 
   function set(id, campo, valor) {
     setValores((v) => ({ ...v, [id]: { ...v[id], [campo]: valor } }));
@@ -287,7 +287,7 @@ function Semana0Form({ rutina, usuario, onListo }) {
               <div className="flex items-center justify-between">
                 <span className="text-[14px] font-semibold">{ej.ejercicio_nombre}</span>
                 <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
-                  {ej.musculo_nombre}
+                  {formatearMusculo(ej.musculo_nombre)}
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2">
@@ -307,7 +307,7 @@ function Semana0Form({ rutina, usuario, onListo }) {
 
         <AgregarEjercicioDia
           diaRutinaId={diaActual.id}
-          musculos={musculosDelDiaActual}
+          musculos={todosMusculos}
           onAgregado={(nuevo, musculoNombre) => onAgregado(diaActual.id, nuevo, musculoNombre)}
         />
       </div>
@@ -522,7 +522,7 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
                 Number(musculoId) === m.id ? 'bg-accent text-accent-fg border-accent' : 'bg-bg border-border text-text-muted'
               }`}
             >
-              {m.nombre}
+              {formatearMusculo(m.nombre)}
             </button>
           ))}
         </div>
@@ -634,7 +634,7 @@ function NumberField({ label, value, onChange }) {
   );
 }
 
-function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, onRutinaCambiada }) {
+function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos }) {
   const diasUnicos = useMemo(() => {
     const vistos = new Set();
     return rutina.dias.filter((d) => {
@@ -691,7 +691,17 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
       </div>
 
       {/* key={dia.id} fuerza un remount limpio del estado de series al cambiar de dia */}
-      <RegistroDia key={dia.id} dia={dia} microciclo={microciclo} usuario={usuario} progreso={progreso} onGuardado={onGuardado} onRutinaCambiada={onRutinaCambiada} />
+      <RegistroDia
+        key={dia.id}
+        dia={dia}
+        microciclo={microciclo}
+        usuario={usuario}
+        progreso={progreso}
+        onGuardado={onGuardado}
+        onRutinaCambiada={onRutinaCambiada}
+        todosMusculos={todosMusculos}
+        diasHermanos={diasUnicos.filter((d) => d.id !== dia.id)}
+      />
 
       {mostrarAgregarDia && (
         <AgregarDiaModal
@@ -713,19 +723,11 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
   );
 }
 
-function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada }) {
+function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos, diasHermanos }) {
   const [series, setSeries] = useState(() => construirEstadoInicial(dia));
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [ok, setOk] = useState(false);
-
-  const musculosDelDia = useMemo(() => {
-    const vistos = new Map();
-    for (const e of dia.ejercicios) {
-      if (!vistos.has(e.musculo_objetivo_id)) vistos.set(e.musculo_objetivo_id, e.musculo_nombre);
-    }
-    return [...vistos.entries()].map(([id, nombre]) => ({ id, nombre }));
-  }, [dia]);
 
   const notasPorEjercicio = useMemo(() => {
     const map = new Map();
@@ -843,7 +845,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                   <span className="text-[14.5px] font-semibold">{ej.ejercicio_nombre}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
-                      {ej.musculo_nombre}
+                      {formatearMusculo(ej.musculo_nombre)}
                     </span>
                     <span className="text-[12px] text-text-faint">
                       Objetivo {ej.rango_reps_min}–{ej.rango_reps_max} reps · Descanso {ej.descanso_segundos}s
@@ -892,13 +894,13 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 {series[ej.id].reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} reps efectivas en total
               </span>
 
-              <EjercicioAcciones ejercicio={ej} usuario={usuario} onCambiado={onRutinaCambiada} />
+              <EjercicioAcciones ejercicio={ej} usuario={usuario} onCambiado={onRutinaCambiada} diasHermanos={diasHermanos} />
               </div>
             </div>
           );
         })}
 
-        <AgregarEjercicioDia diaRutinaId={dia.id} musculos={musculosDelDia} onAgregado={onRutinaCambiada} />
+        <AgregarEjercicioDia diaRutinaId={dia.id} musculos={todosMusculos} onAgregado={onRutinaCambiada} />
       </div>
 
       {error && <p className="text-[13px] text-danger">{error}</p>}
@@ -923,11 +925,12 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   );
 }
 
-function EjercicioAcciones({ ejercicio, usuario, onCambiado }) {
+function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
   const [linealForzado, setLinealForzado] = useState(Boolean(ejercicio.modo_lineal_forzado));
   const [mostrarSustituir, setMostrarSustituir] = useState(false);
   const [mostrarPeso, setMostrarPeso] = useState(false);
   const [mostrarDescanso, setMostrarDescanso] = useState(false);
+  const [mostrarMoverCopiar, setMostrarMoverCopiar] = useState(false);
   const [error, setError] = useState('');
 
   async function toggleLineal() {
@@ -997,6 +1000,26 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado }) {
           descansoSegundos={ejercicio.descanso_segundos}
           onAjustado={() => { setMostrarDescanso(false); onCambiado(); }}
         />
+      )}
+
+      {diasHermanos?.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setMostrarMoverCopiar((v) => !v)}
+            className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
+          >
+            Mover / copiar a otro día
+          </button>
+          {mostrarMoverCopiar && (
+            <MoverCopiarEjercicio
+              ejercicioId={ejercicio.id}
+              diasHermanos={diasHermanos}
+              onListo={() => { setMostrarMoverCopiar(false); onCambiado(); }}
+              onError={setError}
+            />
+          )}
+        </>
       )}
 
       {error && <span className="text-[11px] text-danger">{error}</span>}
@@ -1141,6 +1164,60 @@ function AjusteDescanso({ ejercicioId, descansoSegundos, onAjustado }) {
         {enviando ? 'Guardando…' : 'Guardar'}
       </button>
       {error && <span className="text-[11px] text-danger">{error}</span>}
+    </div>
+  );
+}
+
+// Mueve (conserva peso/series, solo cambia de dia) o copia (queda una
+// instancia nueva a testear) un ejercicio ya asignado a otro dia de la
+// misma rutina - por si durante el entrenamiento se decide que queda mejor
+// en otro dia, o que conviene repetirlo en dos.
+function MoverCopiarEjercicio({ ejercicioId, diasHermanos, onListo, onError }) {
+  const [modo, setModo] = useState('mover');
+  const [enviando, setEnviando] = useState(null);
+
+  async function elegirDia(diaRutinaId) {
+    setEnviando(diaRutinaId);
+    onError('');
+    try {
+      await api.post(`/ejercicios/${ejercicioId}/${modo === 'mover' ? 'mover' : 'copiar'}`, { dia_rutina_id: diaRutinaId });
+      onListo();
+    } catch (err) {
+      onError(err.message);
+    } finally {
+      setEnviando(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-1.5">
+        {[{ id: 'mover', label: 'Mover' }, { id: 'copiar', label: 'Copiar' }].map((m) => (
+          <button
+            type="button"
+            key={m.id}
+            onClick={() => setModo(m.id)}
+            className={`px-2.5 h-7 rounded-full border text-[11.5px] font-medium ${
+              modo === m.id ? 'bg-accent text-accent-fg border-accent' : 'bg-bg border-border text-text-muted'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {diasHermanos.map((d) => (
+          <button
+            type="button"
+            key={d.id}
+            disabled={enviando !== null}
+            onClick={() => elegirDia(d.id)}
+            className="px-2.5 h-7 rounded-full border border-border bg-bg text-text-muted text-[11.5px] font-medium capitalize disabled:opacity-60"
+          >
+            {enviando === d.id ? 'Guardando…' : CAPITALIZAR(d.dia_semana)}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

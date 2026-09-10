@@ -2,8 +2,8 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
-  agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, crearRutina,
-  crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, obtenerImpactoQuitarDia, obtenerRutinaActiva,
+  agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, copiarEjercicioADia, crearRutina,
+  crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva,
   quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import { aplicarDeload, cerrarMicrociclo, registrarSemana0, repsEfectivas } from '../services/progressionEngine.js';
@@ -342,6 +342,35 @@ router.patch('/ejercicios/:ejercicioAsignadoId/descanso', (req, res) => {
   res.json({ id: ea.id, descanso_segundos });
 });
 
+// Mueve/copia un ejercicio ya asignado a otro dia de la misma rutina - ver
+// moverEjercicioADia/copiarEjercicioADia. dia_rutina_id destino se valida
+// que sea de la misma rutina adentro del servicio.
+router.post('/ejercicios/:ejercicioAsignadoId/mover', (req, res, next) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { dia_rutina_id } = req.body || {};
+  if (!dia_rutina_id) return res.status(400).json({ error: 'dia_rutina_id es obligatorio.' });
+  try {
+    res.json(moverEjercicioADia(ea.id, Number(dia_rutina_id)));
+  } catch (err) {
+    if (/no encontrado|misma rutina|ya esta/i.test(err.message)) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
+router.post('/ejercicios/:ejercicioAsignadoId/copiar', (req, res, next) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { dia_rutina_id } = req.body || {};
+  if (!dia_rutina_id) return res.status(400).json({ error: 'dia_rutina_id es obligatorio.' });
+  try {
+    res.status(201).json(copiarEjercicioADia(ea.id, Number(dia_rutina_id)));
+  } catch (err) {
+    if (/no encontrado|misma rutina|ya esta/i.test(err.message)) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
 router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;
@@ -428,17 +457,17 @@ function getDiaOr404(req, res) {
   return dia;
 }
 
-// Candidatos para AGREGAR (no sustituir) un ejercicio extra a un musculo que
-// ya esta presente ese dia - mismo filtro de equipamiento/duplicados que
-// sustituir, pero sin partir de un ejercicio_asignado existente.
+// Candidatos para AGREGAR (no sustituir) un ejercicio a un dia - el musculo
+// puede ser uno que el dia ya entrena (se suma como extra) o uno nuevo para
+// ese dia (se suma como top), por si surge la idea de sumarlo durante el
+// entrenamiento y no estaba en el split original - ver agregarEjercicioADia.
 router.get('/dias/:diaRutinaId/musculos/:musculoId/candidatos', (req, res) => {
   const dia = getDiaOr404(req, res);
   if (!dia) return;
   const musculoId = Number(req.params.musculoId);
-  const musculosDelDia = JSON.parse(dia.musculos_trabajados_json);
   const musculo = db.prepare('SELECT nombre FROM musculo WHERE id = ?').get(musculoId);
-  if (!musculo || !musculosDelDia.includes(musculo.nombre)) {
-    return res.status(400).json({ error: 'Ese musculo no esta asignado a este dia.' });
+  if (!musculo) {
+    return res.status(400).json({ error: 'Musculo no encontrado.' });
   }
 
   const equipamiento = db.prepare('SELECT * FROM equipamiento WHERE usuario_id = ?').get(dia.usuario_id);

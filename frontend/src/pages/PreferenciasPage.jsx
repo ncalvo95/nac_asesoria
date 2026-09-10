@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
+import { formatearMusculo } from '../utils/musculo.js';
 
 const TIPOS = [
   { id: 'exclusion', label: 'Excluir', hint: 'Este ejercicio nunca se le va a asignar.' },
@@ -77,7 +78,7 @@ export default function PreferenciasPage() {
                   {TIPOS.find((t) => t.id === p.tipo)?.label}
                 </span>
                 {p.tipo === 'agregado_personalizado' && (
-                  <span className="text-[11px] text-text-faint capitalize">{musculosPorId.get(p.musculo_asignado_id)?.nombre}</span>
+                  <span className="text-[11px] text-text-faint capitalize">{formatearMusculo(musculosPorId.get(p.musculo_asignado_id)?.nombre)}</span>
                 )}
               </div>
             </div>
@@ -151,7 +152,7 @@ function NuevaPreferencia({ usuarioId, ejercicios, musculos, onCreada }) {
         >
           <option value="">Elegí un ejercicio…</option>
           {ejercicios?.map((e) => (
-            <option key={e.id} value={e.id}>{e.nombre} ({e.musculo_nombre})</option>
+            <option key={e.id} value={e.id}>{e.nombre} ({formatearMusculo(e.musculo_nombre)})</option>
           ))}
         </select>
       ) : (
@@ -169,7 +170,7 @@ function NuevaPreferencia({ usuarioId, ejercicios, musculos, onCreada }) {
           >
             <option value="">Músculo objetivo…</option>
             {musculos?.map((m) => (
-              <option key={m.id} value={m.id} className="capitalize">{m.nombre}</option>
+              <option key={m.id} value={m.id} className="capitalize">{formatearMusculo(m.nombre)}</option>
             ))}
           </select>
         </>

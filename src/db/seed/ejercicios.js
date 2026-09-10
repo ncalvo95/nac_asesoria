@@ -7,18 +7,18 @@
 // tags que debe cumplir el usuario para que el ejercicio entre en su pool.
 export const ejercicios = [
   // --- Pecho ---
-  { nombre: 'Press banca plano con barra', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['barra', 'banco'], es_compuesto_principal_fuerza: true },
-  { nombre: 'Press banca plano con mancuernas', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['mancuernas', 'banco'] },
-  { nombre: 'Press banca inclinado con mancuernas', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['mancuernas', 'banco'] },
+  { nombre: 'Press banca plano con barra', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides_anterior'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['barra', 'banco'], es_compuesto_principal_fuerza: true },
+  { nombre: 'Press banca plano con mancuernas', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides_anterior'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['mancuernas', 'banco'] },
+  { nombre: 'Press banca inclinado con mancuernas', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides_anterior'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['mancuernas', 'banco'] },
   { nombre: 'Aperturas con mancuernas', musculo_primario: 'pecho', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'aduccion_horizontal', equipamiento_requerido: ['mancuernas', 'banco'] },
-  { nombre: 'Fondos en paralelas', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides'], tipo: 'compuesto', patron_movimiento: 'empuje_vertical', equipamiento_requerido: ['paralelas'] },
-  { nombre: 'Flexiones de brazos', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['peso_corporal'] },
-  { nombre: 'Press banca con banda', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['banda'] },
+  { nombre: 'Fondos en paralelas', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides_anterior'], tipo: 'compuesto', patron_movimiento: 'empuje_vertical', equipamiento_requerido: ['paralelas'] },
+  { nombre: 'Flexiones de brazos', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides_anterior'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['peso_corporal'] },
+  { nombre: 'Press banca con banda', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides_anterior'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['banda'] },
 
   // --- Espalda (alta / trapecio / romboides) ---
   { nombre: 'Remo con barra', musculo_primario: 'espalda', musculos_secundarios: ['dorsales', 'biceps'], tipo: 'compuesto', patron_movimiento: 'traccion_horizontal', equipamiento_requerido: ['barra'] },
   { nombre: 'Remo con mancuerna a un brazo', musculo_primario: 'espalda', musculos_secundarios: ['dorsales', 'biceps'], tipo: 'compuesto', patron_movimiento: 'traccion_horizontal', equipamiento_requerido: ['mancuernas', 'banco'], es_unilateral: true },
-  { nombre: 'Face pull en polea', musculo_primario: 'espalda', musculos_secundarios: ['deltoides'], tipo: 'aislado', patron_movimiento: 'traccion_horizontal', equipamiento_requerido: ['polea'] },
+  { nombre: 'Face pull en polea', musculo_primario: 'espalda', musculos_secundarios: ['deltoides_posterior'], tipo: 'aislado', patron_movimiento: 'traccion_horizontal', equipamiento_requerido: ['polea'] },
   { nombre: 'Encogimientos con barra', musculo_primario: 'espalda', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'elevacion', equipamiento_requerido: ['barra'] },
   { nombre: 'Remo con banda', musculo_primario: 'espalda', musculos_secundarios: ['dorsales', 'biceps'], tipo: 'compuesto', patron_movimiento: 'traccion_horizontal', equipamiento_requerido: ['banda'] },
 
@@ -29,12 +29,14 @@ export const ejercicios = [
   { nombre: 'Pull-over con mancuerna', musculo_primario: 'dorsales', musculos_secundarios: ['pecho'], tipo: 'aislado', patron_movimiento: 'traccion_vertical', equipamiento_requerido: ['mancuernas', 'banco'] },
   { nombre: 'Jalon con banda', musculo_primario: 'dorsales', musculos_secundarios: ['biceps', 'espalda'], tipo: 'compuesto', patron_movimiento: 'traccion_vertical', equipamiento_requerido: ['banda'] },
 
-  // --- Deltoides ---
-  { nombre: 'Press militar con barra', musculo_primario: 'deltoides', musculos_secundarios: ['triceps'], tipo: 'compuesto', patron_movimiento: 'empuje_vertical', equipamiento_requerido: ['barra'] },
-  { nombre: 'Press militar con mancuernas', musculo_primario: 'deltoides', musculos_secundarios: ['triceps'], tipo: 'compuesto', patron_movimiento: 'empuje_vertical', equipamiento_requerido: ['mancuernas'] },
-  { nombre: 'Elevaciones laterales con mancuernas', musculo_primario: 'deltoides', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'abduccion', equipamiento_requerido: ['mancuernas'] },
-  { nombre: 'Elevaciones posteriores (pajaro)', musculo_primario: 'deltoides', musculos_secundarios: ['espalda'], tipo: 'aislado', patron_movimiento: 'abduccion_horizontal', equipamiento_requerido: ['mancuernas'] },
-  { nombre: 'Elevaciones laterales con banda', musculo_primario: 'deltoides', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'abduccion', equipamiento_requerido: ['banda'] },
+  // --- Deltoides (separado por cabeza: lateral/anterior/posterior - ver
+  // nota en seed/musculos.js sobre por que el anterior casi no necesita
+  // trabajo directo y el lateral es el que mas se prioriza) ---
+  { nombre: 'Press militar con barra', musculo_primario: 'deltoides_anterior', musculos_secundarios: ['triceps'], tipo: 'compuesto', patron_movimiento: 'empuje_vertical', equipamiento_requerido: ['barra'] },
+  { nombre: 'Press militar con mancuernas', musculo_primario: 'deltoides_anterior', musculos_secundarios: ['triceps'], tipo: 'compuesto', patron_movimiento: 'empuje_vertical', equipamiento_requerido: ['mancuernas'] },
+  { nombre: 'Elevaciones laterales con mancuernas', musculo_primario: 'deltoides_lateral', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'abduccion', equipamiento_requerido: ['mancuernas'] },
+  { nombre: 'Elevaciones posteriores (pajaro)', musculo_primario: 'deltoides_posterior', musculos_secundarios: ['espalda'], tipo: 'aislado', patron_movimiento: 'abduccion_horizontal', equipamiento_requerido: ['mancuernas'] },
+  { nombre: 'Elevaciones laterales con banda', musculo_primario: 'deltoides_lateral', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'abduccion', equipamiento_requerido: ['banda'] },
 
   // --- Biceps ---
   { nombre: 'Curl con barra', musculo_primario: 'biceps', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'flexion_codo', equipamiento_requerido: ['barra'] },
@@ -46,7 +48,7 @@ export const ejercicios = [
   // --- Triceps ---
   { nombre: 'Press frances con barra', musculo_primario: 'triceps', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'extension_codo', equipamiento_requerido: ['barra', 'banco'] },
   { nombre: 'Extension de triceps en polea', musculo_primario: 'triceps', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'extension_codo', equipamiento_requerido: ['polea'] },
-  { nombre: 'Fondos entre bancos', musculo_primario: 'triceps', musculos_secundarios: ['pecho', 'deltoides'], tipo: 'compuesto', patron_movimiento: 'extension_codo', equipamiento_requerido: ['banco'] },
+  { nombre: 'Fondos entre bancos', musculo_primario: 'triceps', musculos_secundarios: ['pecho', 'deltoides_anterior'], tipo: 'compuesto', patron_movimiento: 'extension_codo', equipamiento_requerido: ['banco'] },
   { nombre: 'Patada de triceps con mancuerna', musculo_primario: 'triceps', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'extension_codo', equipamiento_requerido: ['mancuernas'], es_unilateral: true },
   { nombre: 'Extension de triceps con banda', musculo_primario: 'triceps', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'extension_codo', equipamiento_requerido: ['banda'] },
 
@@ -77,5 +79,5 @@ export const ejercicios = [
   { nombre: 'Plancha', musculo_primario: 'abdominales', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'anti_extension', equipamiento_requerido: ['peso_corporal'] },
   { nombre: 'Crunch en polea', musculo_primario: 'abdominales', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'flexion_tronco', equipamiento_requerido: ['polea'] },
   { nombre: 'Elevacion de piernas colgado', musculo_primario: 'abdominales', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'flexion_cadera', equipamiento_requerido: ['barra_dominadas'] },
-  { nombre: 'Rueda abdominal', musculo_primario: 'abdominales', musculos_secundarios: ['deltoides'], tipo: 'aislado', patron_movimiento: 'anti_extension', equipamiento_requerido: ['peso_corporal'] },
+  { nombre: 'Rueda abdominal', musculo_primario: 'abdominales', musculos_secundarios: ['deltoides_anterior'], tipo: 'aislado', patron_movimiento: 'anti_extension', equipamiento_requerido: ['peso_corporal'] },
 ];

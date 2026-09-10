@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api, API_BASE } from '../api/client.js';
+import { formatearMusculo } from '../utils/musculo.js';
 
 const TIPO_LABEL = {
   objetivo: 'Objetivo',
@@ -158,7 +159,7 @@ export default function ProgresoPage() {
               return (
                 <div key={m.nombre} className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-semibold capitalize">{m.nombre}</span>
+                    <span className="text-[13px] font-semibold capitalize">{formatearMusculo(m.nombre)}</span>
                     <span className={`tabular text-[12px] font-bold ${valueColor}`}>
                       {m.volumen_directo}<span className="text-text-faint font-medium"> / {m.mav} series</span>
                     </span>

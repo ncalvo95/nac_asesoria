@@ -5,8 +5,12 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
+// activo=0 son musculos "legacy" (ej. "deltoides" a secas, separado en
+// deltoides_lateral/anterior/posterior) que se dejan en la tabla por
+// integridad referencial con rutinas/historial viejo, pero ya no se
+// ofrecen para catalogar ejercicios nuevos ni armar rutinas nuevas.
 router.get('/musculos', (req, res) => {
-  res.json(db.prepare('SELECT id, nombre, region FROM musculo ORDER BY id').all());
+  res.json(db.prepare('SELECT id, nombre, region FROM musculo WHERE activo = 1 ORDER BY id').all());
 });
 
 router.get('/ejercicios', (req, res) => {

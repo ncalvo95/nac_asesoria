@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
+import { formatearMusculo } from '../utils/musculo.js';
 
 export default function ReportesPage() {
   const { usuario: sesion } = useAuth();
@@ -124,7 +125,7 @@ function DetalleReporte({ datos }) {
         <div className="flex flex-col gap-2">
           {datos.porMusculo.map((m) => (
             <div key={m.musculo} className="flex items-center justify-between gap-2">
-              <span className="text-[12.5px] capitalize">{m.musculo}</span>
+              <span className="text-[12.5px] capitalize">{formatearMusculo(m.musculo)}</span>
               <div className="flex flex-col items-end">
                 <span className="tabular text-[12px] text-text-muted">
                   {m.historial.map((h) => h.volumen_directo).join(' → ') || 'sin datos'}

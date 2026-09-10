@@ -57,8 +57,21 @@ cierre de microciclo → progreso → export a Excel):
   variantes en el onboarding (`variante_split`: `upper_lower` por defecto,
   todo el cuerpo a frecuencia 2×, o `push_pull`, más foco en torso a
   frecuencia 2× - con 4 días deja piernas afuera, con 5 agrega un día de
-  Legs a frecuencia 1×); 6 días → Push/Pull/Legs ×2. Alternativas al
-  armado 100% automático:
+  Legs a frecuencia 1×); 6 días → Push/Pull/Legs ×2. Deltoides está
+  separado en 3 músculos (`deltoides_lateral`, `deltoides_anterior`,
+  `deltoides_posterior` en vez de un "deltoides" único) porque cada cabeza
+  necesita volumen distinto: el lateral casi no recibe estímulo indirecto
+  de nada más, así que siempre entra en los días de Push/Upper/Full Body
+  (mismo lugar donde antes entraba "deltoides" a secas - nunca se lo
+  saltea); el anterior lo acompaña ahí (ya viene cubierto por el empuje,
+  MEV 0); el posterior va en Pull en vez de Push, porque responde mejor a
+  tracción (remo, face pull, pájaros) - ver `seed/musculos.js` para el
+  detalle de MEV/MAV/MRV por cabeza. El "deltoides" viejo queda en la
+  tabla `musculo` con `activo = 0` (no se ofrece más para catalogar ni
+  armar rutinas nuevas) por integridad referencial con historial ya
+  generado - `migrarDeltoides()` en `src/db/migrate.js` reasigna solo el
+  catálogo y las rutinas activas a la cabeza que corresponda, automático
+  en cada arranque. Alternativas al armado 100% automático:
   - **Armado manual** (`POST /usuarios/:id/rutina/manual`) - el usuario
     elige directamente los ejercicios de cada día desde el catálogo en vez
     de que el motor los elija por equipamiento/exclusiones.
@@ -68,12 +81,19 @@ cierre de microciclo → progreso → export a Excel):
     músculo). El frontend avisa (sin bloquear) si un músculo queda en dos
     días calendario consecutivos.
 
-  Ya generada la rutina, se puede **agregar un ejercicio extra** a un
-  músculo que ya está presente ese día (`POST /dias/:id/ejercicios`,
-  candidatos vía `GET /dias/:id/musculos/:id/candidatos`) o **quitarlo**
-  (`DELETE /ejercicios-asignados/:id` - no se puede quitar el ejercicio
-  "top" de un músculo ni uno que ya tenga series registradas), además de
-  la sustitución existente.
+  Ya generada la rutina, se puede **agregar un ejercicio** a cualquier
+  músculo del catálogo, no solo a los que ese día ya entrena (`POST
+  /dias/:id/ejercicios`, candidatos vía `GET
+  /dias/:id/musculos/:id/candidatos`) - si el músculo ya estaba presente
+  entra como extra, si es nuevo para ese día pasa a ser el top (y el día
+  lo suma a `musculos_trabajados_json`), por si surge sobre la marcha
+  durante el entrenamiento y no era parte del split original. También se
+  puede **quitar** (`DELETE /ejercicios-asignados/:id` - no se puede
+  quitar el ejercicio "top" de un músculo ni uno que ya tenga series
+  registradas), **sustituir**, o **mover/copiar a otro día** de la misma
+  rutina (`POST /ejercicios/:id/mover` conserva peso/series -es la misma
+  instancia, solo cambia de día-, `POST /ejercicios/:id/copiar` arranca
+  una instancia nueva a testear en el día destino).
 
   También se puede **agregar o quitar un día entero** de la rutina activa
   sin rehacerla desde cero (`POST /usuarios/:id/rutina/dias`,

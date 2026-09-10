@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import AccountMenu from '../components/AccountMenu.jsx';
+import { formatearMusculo } from '../utils/musculo.js';
 
 const EQUIPO_TAGS = ['barra', 'mancuernas', 'banco', 'polea', 'maquina', 'banda', 'paralelas', 'barra_dominadas', 'peso_corporal'];
 
@@ -81,7 +82,7 @@ export default function CatalogoPage() {
                 <span className={`text-[13.5px] font-semibold truncate ${!e.activo ? 'text-text-faint line-through' : ''}`}>{e.nombre}</span>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10.5px] font-semibold uppercase text-text-faint bg-bg border border-border rounded-md px-1.5 py-0.5">
-                    {e.musculo_nombre}
+                    {formatearMusculo(e.musculo_nombre)}
                   </span>
                   <span className="text-[10.5px] text-text-faint capitalize">{e.tipo}</span>
                 </div>
@@ -146,7 +147,7 @@ function AltaEjercicio({ musculos, onListo }) {
       <select value={musculoId} onChange={(e) => setMusculoId(e.target.value)}
         className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent capitalize">
         {musculos.map((m) => (
-          <option key={m.id} value={m.id}>{m.nombre}</option>
+          <option key={m.id} value={m.id}>{formatearMusculo(m.nombre)}</option>
         ))}
       </select>
 

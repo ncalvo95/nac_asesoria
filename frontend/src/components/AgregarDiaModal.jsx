@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { formatearMusculo } from '../utils/musculo.js';
 
 const DIAS = [
   { id: 'lunes', label: 'Lunes' },
@@ -202,7 +203,7 @@ export default function AgregarDiaModal({ usuarioId, diasActivos, onClose, onCre
                         musculoAbierto === m.id ? 'bg-accent text-accent-fg border-accent' : 'bg-bg border-border text-text-muted'
                       }`}
                     >
-                      {m.nombre}
+                      {formatearMusculo(m.nombre)}
                     </button>
                   ))}
                 </div>
