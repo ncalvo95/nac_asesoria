@@ -102,6 +102,16 @@ cierre de microciclo → progreso → export a Excel):
   piso/techo por ejercicio (mejor marca vs promedio), detecta estancamiento
   por músculo, aplica el tope MAV, suma serie al ejercicio top, ajusta peso
   por rango de reps, y encadena el siguiente microciclo.
+- **Reps efectivas** (`repsEfectivas` en `progressionEngine.js`): de las
+  reps hechas en una serie, cuántas caen dentro de la ventana de las
+  últimas `REPS_EFECTIVAS_UMBRAL` (3) reps antes del fallo -
+  `max(0, min(reps, 3 − RIR))`. Se recalcula siempre a partir de las series
+  reales cargadas (`registro_serie`, con su RIR), no de lo prescripto, así
+  que una serie sin RIR (hoy solo pasa en Semana 0, que no lo pide) no suma
+  nada en vez de inventar un valor. Se muestra en vivo mientras se carga la
+  sesión (columna "EF" por serie + total por ejercicio), agregado por
+  músculo/ejercicio en Progreso (del último microciclo cerrado) y su
+  evolución en Reportes.
 - Generador de Excel para invitados, sin cuenta ni persistencia
   (`src/routes/guest.js`) y **exportación a Excel para usuarios registrados**
   (`GET /api/rutinas/:rutinaId/export.xlsx`) que precarga el historial real
@@ -124,9 +134,10 @@ cierre de microciclo → progreso → export a Excel):
   "Mis rutinas" (historial de rutinas - solo una puede estar
   activa a la vez, se finaliza sola al crear o reactivar otra; desde acá se
   puede reactivar una vieja o borrarla para siempre), Progreso
-  (volumen por músculo vs MAV, notas de estancamiento/mejora, cerrar
-  microciclo, pedir descarga/deload, exportar a Excel), Reportes (semestral
-  y resumen de mesociclo, comparando peso/reps/volumen), pantalla de
+  (volumen por músculo vs MAV, **reps efectivas** por músculo y por
+  ejercicio, notas de estancamiento/mejora, cerrar microciclo, pedir
+  descarga/deload, exportar a Excel), Reportes (semestral y resumen de
+  mesociclo, comparando peso/reps/volumen/reps efectivas), pantalla de
   invitado sin cuenta (descarga el Excel de 6 meses directo desde el
   navegador), y un panel de coach/admin (listado de clientes, alta de
   cuentas, ver la rutina/progreso/reportes/preferencias de ejercicio de un

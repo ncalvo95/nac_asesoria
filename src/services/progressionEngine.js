@@ -7,6 +7,20 @@ const UMBRAL_VARIACION_PORCENTUAL = 0.2;
 const UMBRAL_VARIACION_REPS_ABS = 3;
 const UMBRAL_SERIE_LARGA = 12;
 
+// "Repeticiones efectivas": de las reps hechas en una serie, cuantas caen
+// dentro de la ventana de las ultimas REPS_EFECTIVAS_UMBRAL reps antes del
+// fallo (el resto son reps de "calentamiento" dentro de la propia serie,
+// que aportan poco estimulo). Si hiciste `reps` y terminaste a `rir` reps
+// del fallo, el fallo habria sido en la repeticion (reps + rir); las
+// efectivas son las que caen en [fallo - umbral + 1, fallo] Y ademas se
+// llegaron a hacer de verdad (<= reps). Sin RIR cargado (ej. series de
+// Semana 0, que no lo piden) no hay forma de calcularlo -> null.
+export const REPS_EFECTIVAS_UMBRAL = 3;
+export function repsEfectivas(reps, rir) {
+  if (reps == null || rir == null) return null;
+  return Math.max(0, Math.min(reps, REPS_EFECTIVAS_UMBRAL - rir));
+}
+
 function techoDesde(sem1, sem2) {
   if (sem1 == null || sem2 == null) return null;
   const max = Math.max(sem1, sem2);

@@ -6,7 +6,7 @@ import {
   crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, obtenerImpactoQuitarDia, obtenerRutinaActiva,
   quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
-import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
+import { aplicarDeload, cerrarMicrociclo, registrarSemana0, repsEfectivas } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
 import { tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
 import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
@@ -604,7 +604,32 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
     ORDER BY ea.orden
   `).all(ultimoCerrado.id);
 
-  res.json({ microciclo: ultimoCerrado, musculos, ejercicios });
+  // Reps efectivas (ver repsEfectivas en progressionEngine.js) del bloque:
+  // se recalculan a partir de las series reales cargadas (registro_serie),
+  // no de lo prescripto - series sin RIR cargado (ej. semana 0) no suman.
+  const seriesDelBloque = db.prepare(`
+    SELECT rs.reps, rs.rir, ea.id AS ejercicio_asignado_id, m.nombre AS musculo_nombre
+    FROM registro_serie rs
+    JOIN registro_sesion rses ON rses.id = rs.registro_sesion_id
+    JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
+    JOIN musculo m ON m.id = ea.musculo_objetivo_id
+    WHERE rses.microciclo_id = ?
+  `).all(ultimoCerrado.id);
+
+  const repsEfectivasPorMusculo = new Map();
+  const repsEfectivasPorEjercicio = new Map();
+  for (const s of seriesDelBloque) {
+    const efectivas = repsEfectivas(s.reps, s.rir);
+    if (efectivas == null) continue;
+    repsEfectivasPorMusculo.set(s.musculo_nombre, (repsEfectivasPorMusculo.get(s.musculo_nombre) || 0) + efectivas);
+    repsEfectivasPorEjercicio.set(s.ejercicio_asignado_id, (repsEfectivasPorEjercicio.get(s.ejercicio_asignado_id) || 0) + efectivas);
+  }
+
+  res.json({
+    microciclo: ultimoCerrado,
+    musculos: musculos.map((m) => ({ ...m, reps_efectivas: repsEfectivasPorMusculo.get(m.nombre) || 0 })),
+    ejercicios: ejercicios.map((e) => ({ ...e, reps_efectivas: repsEfectivasPorEjercicio.get(e.id) || 0 })),
+  });
 });
 
 router.get('/rutinas/:rutinaId/export.xlsx', async (req, res) => {

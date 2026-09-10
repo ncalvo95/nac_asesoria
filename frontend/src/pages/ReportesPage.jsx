@@ -103,14 +103,20 @@ function DetalleReporte({ datos }) {
       <section className="flex flex-col gap-2">
         <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">Por ejercicio</span>
         <div className="flex flex-col gap-2">
-          {datos.porEjercicio.map((e) => (
-            <div key={e.ejercicio_asignado_id} className="flex items-center justify-between gap-2">
-              <span className="text-[12.5px]">{e.ejercicio_nombre}</span>
-              <span className="tabular text-[12px] text-text-muted whitespace-nowrap">
-                {e.peso_inicial}kg×{e.reps_piso_inicial} → <span className="text-text font-semibold">{e.peso_actual}kg×{e.reps_techo_actual}</span>
-              </span>
-            </div>
-          ))}
+          {datos.porEjercicio.map((e) => {
+            const totalEfectivas = e.historial.reduce((acc, h) => acc + (h.reps_efectivas || 0), 0);
+            return (
+              <div key={e.ejercicio_asignado_id} className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px]">{e.ejercicio_nombre}</span>
+                <div className="flex flex-col items-end">
+                  <span className="tabular text-[12px] text-text-muted whitespace-nowrap">
+                    {e.peso_inicial}kg×{e.reps_piso_inicial} → <span className="text-text font-semibold">{e.peso_actual}kg×{e.reps_techo_actual}</span>
+                  </span>
+                  <span className="tabular text-[11px] text-text-faint">{totalEfectivas} reps efectivas totales</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
       <section className="flex flex-col gap-2">
@@ -119,9 +125,14 @@ function DetalleReporte({ datos }) {
           {datos.porMusculo.map((m) => (
             <div key={m.musculo} className="flex items-center justify-between gap-2">
               <span className="text-[12.5px] capitalize">{m.musculo}</span>
-              <span className="tabular text-[12px] text-text-muted">
-                {m.historial.map((h) => h.volumen_directo).join(' → ') || 'sin datos'}
-              </span>
+              <div className="flex flex-col items-end">
+                <span className="tabular text-[12px] text-text-muted">
+                  {m.historial.map((h) => h.volumen_directo).join(' → ') || 'sin datos'}
+                </span>
+                <span className="tabular text-[11px] text-text-faint">
+                  {m.historial.map((h) => h.reps_efectivas).join(' → ') || 'sin datos'} reps efectivas
+                </span>
+              </div>
             </div>
           ))}
         </div>

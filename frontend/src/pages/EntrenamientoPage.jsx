@@ -7,6 +7,17 @@ import QuitarDiaModal from '../components/QuitarDiaModal.jsx';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Espejo del repsEfectivas de src/services/progressionEngine.js (mismo
+// umbral) para mostrarlo en vivo mientras se carga la serie, sin ida y
+// vuelta al backend.
+const REPS_EFECTIVAS_UMBRAL = 3;
+function repsEfectivas(reps, rir) {
+  const r = Number(reps);
+  const i = Number(rir);
+  if (reps === '' || rir === '' || !Number.isFinite(r) || !Number.isFinite(i)) return null;
+  return Math.max(0, Math.min(r, REPS_EFECTIVAS_UMBRAL - i));
+}
+
 function ExportarExcel({ rutinaId }) {
   return (
     <a
@@ -850,29 +861,36 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 )}
               </div>
 
-              <div className="grid grid-cols-[24px_1fr_1fr_1fr] gap-2 text-[10px] font-semibold text-text-faint tracking-wide px-0.5">
-                <span>S</span><span>KG</span><span>REPS</span><span>RIR</span>
+              <div className="grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 text-[10px] font-semibold text-text-faint tracking-wide px-0.5">
+                <span>S</span><span>KG</span><span>REPS</span><span>RIR</span><span title="Reps efectivas">EF</span>
               </div>
-              {series[ej.id].map((s, idx) => (
-                <div key={idx} className="grid grid-cols-[24px_1fr_1fr_1fr] gap-2 items-center">
-                  <span className="tabular text-[13px] text-text-muted">{idx + 1}</span>
-                  <input
-                    type="number" inputMode="decimal" value={s.peso}
-                    onChange={(e) => actualizarSerie(ej.id, idx, 'peso', e.target.value)}
-                    className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] outline-none focus:border-accent"
-                  />
-                  <input
-                    type="number" inputMode="numeric" value={s.reps}
-                    onChange={(e) => actualizarSerie(ej.id, idx, 'reps', e.target.value)}
-                    className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] outline-none focus:border-accent"
-                  />
-                  <input
-                    type="number" inputMode="numeric" min={0} max={4} value={s.rir}
-                    onChange={(e) => actualizarSerie(ej.id, idx, 'rir', e.target.value)}
-                    className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] outline-none focus:border-accent"
-                  />
-                </div>
-              ))}
+              {series[ej.id].map((s, idx) => {
+                const efectivas = repsEfectivas(s.reps, s.rir);
+                return (
+                  <div key={idx} className="grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 items-center">
+                    <span className="tabular text-[13px] text-text-muted">{idx + 1}</span>
+                    <input
+                      type="number" inputMode="decimal" value={s.peso}
+                      onChange={(e) => actualizarSerie(ej.id, idx, 'peso', e.target.value)}
+                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] outline-none focus:border-accent"
+                    />
+                    <input
+                      type="number" inputMode="numeric" value={s.reps}
+                      onChange={(e) => actualizarSerie(ej.id, idx, 'reps', e.target.value)}
+                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] outline-none focus:border-accent"
+                    />
+                    <input
+                      type="number" inputMode="numeric" min={0} max={4} value={s.rir}
+                      onChange={(e) => actualizarSerie(ej.id, idx, 'rir', e.target.value)}
+                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] outline-none focus:border-accent"
+                    />
+                    <span className="tabular text-[12.5px] text-text-faint text-center">{efectivas ?? '—'}</span>
+                  </div>
+                );
+              })}
+              <span className="tabular text-[11px] text-text-faint -mt-1">
+                {series[ej.id].reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} reps efectivas en total
+              </span>
 
               <EjercicioAcciones ejercicio={ej} usuario={usuario} onCambiado={onRutinaCambiada} />
               </div>

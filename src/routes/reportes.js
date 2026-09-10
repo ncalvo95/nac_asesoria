@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
+import { repsEfectivas } from '../services/progressionEngine.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -37,6 +38,39 @@ const getMicrociclosCerrados = db.prepare(
   "SELECT numero, fecha_inicio, fecha_fin FROM microciclo WHERE rutina_id = ? AND estado = 'cerrado' ORDER BY numero"
 );
 
+// Series reales cargadas (registro_serie), para recalcular reps efectivas
+// (ver repsEfectivas en progressionEngine.js) por microciclo - a diferencia
+// del resto del reporte, esto no sale de progreso_ejercicio_microciclo
+// porque esa tabla guarda lo PRESCRIPTO, no lo que realmente se hizo.
+const getSeriesEjercicio = db.prepare(`
+  SELECT mc.numero, rs.reps, rs.rir
+  FROM registro_serie rs
+  JOIN registro_sesion rses ON rses.id = rs.registro_sesion_id
+  JOIN microciclo mc ON mc.id = rses.microciclo_id
+  WHERE rs.ejercicio_asignado_id = ?
+`);
+const getSeriesMusculo = db.prepare(`
+  SELECT mc.numero, rs.reps, rs.rir
+  FROM registro_serie rs
+  JOIN registro_sesion rses ON rses.id = rs.registro_sesion_id
+  JOIN microciclo mc ON mc.id = rses.microciclo_id
+  JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
+  JOIN musculo m ON m.id = ea.musculo_objetivo_id
+  WHERE mc.rutina_id = ? AND m.nombre = ?
+`);
+
+// Suma repsEfectivas(reps, rir) de "series", agrupado por numero de
+// microciclo -> Map<numero, total>.
+function repsEfectivasPorMicrociclo(series) {
+  const porNumero = new Map();
+  for (const s of series) {
+    const efectivas = repsEfectivas(s.reps, s.rir);
+    if (efectivas == null) continue;
+    porNumero.set(s.numero, (porNumero.get(s.numero) || 0) + efectivas);
+  }
+  return porNumero;
+}
+
 // Compara la evolucion de peso/reps por ejercicio y de volumen por musculo,
 // desde el primer microciclo con datos hasta el mas reciente. Se genera a
 // pedido (semestral o resumen liviano de mesociclo), no en un cron: no hay
@@ -54,6 +88,7 @@ function generarDatosReporte(usuarioId) {
       if (historial.length === 0) return null;
       const primero = historial[0];
       const ultimo = historial[historial.length - 1];
+      const repsEfectivasPorNumero = repsEfectivasPorMicrociclo(getSeriesEjercicio.all(ej.id));
       return {
         ejercicio_asignado_id: ej.id,
         ejercicio_nombre: ej.ejercicio_nombre,
@@ -62,13 +97,24 @@ function generarDatosReporte(usuarioId) {
         peso_actual: ultimo.peso_prescrito,
         reps_piso_inicial: primero.piso_reps,
         reps_techo_actual: ultimo.techo_reps ?? ultimo.piso_reps,
-        historial: historial.map((h) => ({ microciclo: h.numero, peso: h.peso_prescrito, piso_reps: h.piso_reps, techo_reps: h.techo_reps })),
+        historial: historial.map((h) => ({
+          microciclo: h.numero, peso: h.peso_prescrito, piso_reps: h.piso_reps, techo_reps: h.techo_reps,
+          reps_efectivas: repsEfectivasPorNumero.get(h.numero) || 0,
+        })),
       };
     })
     .filter(Boolean);
 
   const musculos = [...new Set(ejercicios.map((e) => e.musculo_nombre))];
-  const porMusculo = musculos.map((m) => ({ musculo: m, historial: getHistorialMusculo.all(usuarioId, m) }));
+  const porMusculo = musculos.map((m) => {
+    const repsEfectivasPorNumero = repsEfectivasPorMicrociclo(getSeriesMusculo.all(rutina.id, m));
+    return {
+      musculo: m,
+      historial: getHistorialMusculo.all(usuarioId, m).map((h) => ({
+        ...h, reps_efectivas: repsEfectivasPorNumero.get(h.numero) || 0,
+      })),
+    };
+  });
 
   const cerrados = getMicrociclosCerrados.all(rutina.id);
   const periodo = cerrados.length

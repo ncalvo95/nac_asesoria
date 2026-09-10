@@ -166,6 +166,7 @@ export default function ProgresoPage() {
                   <div className="h-2 rounded-full bg-track overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
                   </div>
+                  <span className="tabular text-[11px] text-text-faint">{m.reps_efectivas} reps efectivas en el bloque</span>
                 </div>
               );
             })}
@@ -189,6 +190,7 @@ export default function ProgresoPage() {
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[13px] font-semibold">{e.ejercicio_nombre}</span>
                   <span className="text-[12px] text-text-muted leading-relaxed">{e.nota}</span>
+                  <span className="tabular text-[11px] text-text-faint">{e.reps_efectivas} reps efectivas</span>
                 </div>
               </div>
             ))}
