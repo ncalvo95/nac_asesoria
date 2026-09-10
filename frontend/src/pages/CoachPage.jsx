@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import AccountMenu from '../components/AccountMenu.jsx';
@@ -15,7 +15,6 @@ const TIPO_LABEL = {
 
 export default function CoachPage() {
   const { usuario } = useAuth();
-  const navigate = useNavigate();
   const [usuarios, setUsuarios] = useState(null);
   const [solicitudes, setSolicitudes] = useState(null);
   const [invitesPendientes, setInvitesPendientes] = useState(null);
@@ -39,19 +38,6 @@ export default function CoachPage() {
   }
 
   useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
-
-  // Un coach (o admin) tambien puede entrenar para si mismo, exactamente
-  // igual que un cliente - el backend ya lo permite (puedeAccederAUsuario
-  // deja que cualquier cuenta toque sus propios datos), pero HomePage.jsx
-  // manda a cualquier no-cliente derecho a /coach sin ofrecer este camino.
-  async function irAMiEntrenamiento() {
-    try {
-      await api.get(`/usuarios/${usuario.id}/rutina`);
-      navigate('/entrenamiento');
-    } catch {
-      navigate('/onboarding');
-    }
-  }
 
   async function resolverSolicitud(id, accion) {
     try {
@@ -82,9 +68,8 @@ export default function CoachPage() {
       <div className="p-4 flex flex-col gap-6 max-w-xl w-full mx-auto">
         {error && <p className="text-[13px] text-danger">{error}</p>}
 
-        <button
-          type="button"
-          onClick={irAMiEntrenamiento}
+        <Link
+          to="/rutinas"
           className="bg-surface border border-accent rounded-xl p-4 flex items-center justify-between gap-3 text-left"
         >
           <div className="flex flex-col gap-0.5">
@@ -94,7 +79,7 @@ export default function CoachPage() {
             </span>
           </div>
           <span className="flex-none text-[13px] font-semibold text-accent whitespace-nowrap">Ir →</span>
-        </button>
+        </Link>
 
         {solicitudes?.length > 0 && (
           <section className="flex flex-col gap-2">
