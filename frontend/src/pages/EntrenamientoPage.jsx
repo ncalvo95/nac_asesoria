@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api, API_BASE } from '../api/client.js';
+import AgregarDiaModal from '../components/AgregarDiaModal.jsx';
+import QuitarDiaModal from '../components/QuitarDiaModal.jsx';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -633,6 +635,8 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
 
   const [diaId, setDiaId] = useState(diasUnicos[0]?.id ?? rutina.dias[0].id);
   const dia = rutina.dias.find((d) => d.id === diaId) ?? rutina.dias[0];
+  const [mostrarAgregarDia, setMostrarAgregarDia] = useState(false);
+  const [mostrarQuitarDia, setMostrarQuitarDia] = useState(false);
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto">
@@ -644,23 +648,56 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           </div>
           <ExportarExcel rutinaId={rutina.id} />
         </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {diasUnicos.map((d) => (
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap">
+            {diasUnicos.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => setDiaId(d.id)}
+                className={`px-3 h-8 rounded-full border text-[12.5px] font-semibold ${
+                  d.id === dia.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                }`}
+              >
+                {CAPITALIZAR(d.dia_semana)}
+              </button>
+            ))}
             <button
-              key={d.id}
-              onClick={() => setDiaId(d.id)}
-              className={`px-3 h-8 rounded-full border text-[12.5px] font-semibold ${
-                d.id === dia.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
-              }`}
+              type="button"
+              onClick={() => setMostrarAgregarDia(true)}
+              className="px-3 h-8 rounded-full border border-dashed border-border text-[12.5px] font-semibold text-text-muted"
             >
-              {CAPITALIZAR(d.dia_semana)}
+              + Agregar día
             </button>
-          ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMostrarQuitarDia(true)}
+            className="text-[11.5px] font-medium text-danger underline underline-offset-2"
+          >
+            Quitar {CAPITALIZAR(dia.dia_semana)}
+          </button>
         </div>
       </div>
 
       {/* key={dia.id} fuerza un remount limpio del estado de series al cambiar de dia */}
       <RegistroDia key={dia.id} dia={dia} microciclo={microciclo} usuario={usuario} progreso={progreso} onGuardado={onGuardado} onRutinaCambiada={onRutinaCambiada} />
+
+      {mostrarAgregarDia && (
+        <AgregarDiaModal
+          usuarioId={usuario.id}
+          diasActivos={diasUnicos.map((d) => d.dia_semana)}
+          onClose={() => setMostrarAgregarDia(false)}
+          onCreado={() => { setMostrarAgregarDia(false); onRutinaCambiada(); }}
+        />
+      )}
+      {mostrarQuitarDia && (
+        <QuitarDiaModal
+          diaRutinaId={dia.id}
+          diaSemana={dia.dia_semana}
+          onClose={() => setMostrarQuitarDia(false)}
+          onQuitado={() => { setMostrarQuitarDia(false); onRutinaCambiada(); }}
+        />
+      )}
     </div>
   );
 }

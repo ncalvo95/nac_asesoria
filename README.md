@@ -74,6 +74,28 @@ cierre de microciclo → progreso → export a Excel):
   (`DELETE /ejercicios-asignados/:id` - no se puede quitar el ejercicio
   "top" de un músculo ni uno que ya tenga series registradas), además de
   la sustitución existente.
+
+  También se puede **agregar o quitar un día entero** de la rutina activa
+  sin rehacerla desde cero (`POST /usuarios/:id/rutina/dias`,
+  `GET /dias/:id/impacto`, `DELETE /dias/:id` en `rutinaService.js`) - a
+  diferencia de generar una rutina nueva, esto no reinicia el microciclo en
+  curso ni el peso/series ya cargados de los días que no cambian:
+  - **Agregar día**: tres modos - `manual` (el usuario elige los
+    ejercicios), `auto_solo_dia` (el motor arma solo el día nuevo según el
+    split actual, sin tocar el resto) o `auto_reorganizar` (recalcula el
+    split completo para la nueva cantidad de días, pero reutilizando los
+    ejercicios ya asignados - donde un músculo se sigue entrenando el mismo
+    día, no lo toca; donde cambia de día, mueve el ejercicio existente con
+    su peso intacto; solo arma un ejercicio nuevo -a testear- para un
+    músculo que quedó sin ninguno asignado).
+  - **Quitar día**: antes de confirmar, el frontend muestra qué músculos se
+    quedarían sin ningún día activo (`GET /dias/:id/impacto`) vs cuáles ya
+    se entrenan en otro día (solo baja la frecuencia). El usuario elige
+    redistribuir esos músculos (se les arma un ejercicio nuevo en el día
+    con menos carga) o sacarlos nomás. El día en sí se borra directo si
+    nunca tuvo una sesión registrada, o se desactiva (columna `activo` en
+    `dia_rutina`, no aparece más como día activo) si ya tiene historial -
+    así Reportes y la exportación a Excel no pierden esas sesiones viejas.
 - Semana 0 (testeo) y registro de sesión/serie (`src/services/progressionEngine.js`,
   `src/routes/sesiones.js`).
 - **Motor de cierre de microciclo** (el núcleo del sistema): calcula

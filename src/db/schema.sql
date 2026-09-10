@@ -201,7 +201,12 @@ CREATE TABLE IF NOT EXISTS dia_rutina (
   rutina_id INTEGER NOT NULL REFERENCES rutina(id) ON DELETE CASCADE,
   numero_dia INTEGER NOT NULL,
   dia_semana TEXT NOT NULL,
-  musculos_trabajados_json TEXT NOT NULL DEFAULT '[]'
+  musculos_trabajados_json TEXT NOT NULL DEFAULT '[]',
+  -- 0 = el usuario quito este dia de la rutina despues de haber entrenado ahi
+  -- (tiene registro_sesion) - no se borra para no perder ese historial, pero
+  -- deja de aparecer como dia activo (ver agregarDiaRutina/quitarDiaRutina en
+  -- rutinaService.js). Si nunca llego a tener sesiones, se borra directo.
+  activo INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX IF NOT EXISTS idx_dia_rutina_rutina ON dia_rutina(rutina_id);

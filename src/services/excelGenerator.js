@@ -228,7 +228,7 @@ export function generarWorkbookUsuario(usuarioId) {
   const disponibilidad = db.prepare('SELECT * FROM disponibilidad WHERE usuario_id = ?').get(usuarioId);
   const diasEspecificos = JSON.parse(disponibilidad.dias_especificos_json);
 
-  const dias = db.prepare('SELECT * FROM dia_rutina WHERE rutina_id = ? ORDER BY numero_dia').all(rutina.id);
+  const dias = db.prepare('SELECT * FROM dia_rutina WHERE rutina_id = ? AND activo = 1 ORDER BY numero_dia').all(rutina.id);
   const ejStmt = db.prepare(`
     SELECT ea.*, e.nombre AS ejercicio_nombre, m.nombre AS musculo_nombre, e.es_compuesto_principal_fuerza
     FROM ejercicio_asignado ea

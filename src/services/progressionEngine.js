@@ -22,7 +22,7 @@ const getEjerciciosDeRutina = db.prepare(`
   JOIN dia_rutina dr ON dr.id = ea.dia_rutina_id
   JOIN ejercicio e ON e.id = ea.ejercicio_id
   JOIN musculo m ON m.id = ea.musculo_objetivo_id
-  WHERE dr.rutina_id = ?
+  WHERE dr.rutina_id = ? AND dr.activo = 1
 `);
 const getMicrociclo = db.prepare('SELECT * FROM microciclo WHERE rutina_id = ? AND numero = ?');
 const insertMicrociclo = db.prepare(`INSERT INTO microciclo (rutina_id, numero, fecha_inicio, estado) VALUES (?, ?, ?, 'en_curso')`);

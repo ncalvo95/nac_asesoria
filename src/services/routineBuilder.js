@@ -85,7 +85,7 @@ export function armarSecuenciaDeDias(diasEspecificos, varianteSplit = 'upper_low
   return diasEspecificos.map((dia, i) => ({ dia_semana: dia, ...tipos[i] }));
 }
 
-const ORDEN_DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+export const ORDEN_DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 function sonConsecutivos(dias) {
   const indices = dias.map((d) => ORDEN_DIAS.indexOf(d)).sort((a, b) => a - b);
   return indices.every((idx, i) => i === 0 || idx === indices[i - 1] + 1);
@@ -130,14 +130,101 @@ const getEjerciciosPorMusculo = db.prepare(`
 // siempre uno solo sin importar cuantos minutos declaro el usuario.
 export const MINUTOS_POR_EJERCICIO = 9;
 
-// Arma la lista final de ejercicios asignados. Por cada dia: primero
-// garantiza 1 ejercicio (el compuesto tiene prioridad - "top" del musculo,
-// ver supuesto #2 del prompt original) por cada musculo objetivo; despues,
-// con el tiempo que sobre segun duracionPorDia, va sumando ejercicios extra
-// -musculo por musculo, siempre al que menos tiene hasta ahora- hasta
-// agotar el tiempo disponible o quedarse sin candidatos. Asi la cantidad de
-// ejercicios por dia refleja los minutos que el usuario dijo tener, en vez
-// de un tope fijo de "1 por musculo" sin importar cuanto tiempo declaro.
+function candidatosPara(musculo, equipamiento, excluidos) {
+  const tags = tagsDisponibles({ ...equipamiento, musculo });
+  const candidatos = getEjerciciosPorMusculo.all(musculo).filter((ej) => {
+    if (excluidos.has(ej.id)) return false;
+    const requeridos = JSON.parse(ej.equipamiento_requerido_json);
+    return requeridos.every((tag) => tags.has(tag));
+  });
+  const compuestos = candidatos.filter((c) => c.tipo === 'compuesto');
+  const aislados = candidatos.filter((c) => c.tipo !== 'compuesto');
+  return [...compuestos, ...aislados];
+}
+
+// El ejercicio "top" de un musculo (compuesto con prioridad, ver supuesto
+// #2 del prompt original) dado el equipamiento disponible - usado tanto al
+// armar un dia entero (armarDia) como al agregar un musculo nuevo a una
+// rutina ya existente (agregar/reorganizar dias, ver rutinaService.js).
+// Devuelve null si no hay ningun candidato compatible.
+export function elegirEjercicioTop({ musculo, equipamiento, exclusiones = [] }) {
+  const ordenados = candidatosPara(musculo, equipamiento, new Set(exclusiones));
+  return ordenados[0] || null;
+}
+
+// Arma los ejercicios de UN dia: primero garantiza 1 ejercicio (el top) por
+// cada musculo objetivo; despues, con el tiempo que sobre segun
+// minutosDisponibles, va sumando ejercicios extra -musculo por musculo,
+// siempre al que menos tiene hasta ahora- hasta agotar el tiempo disponible
+// o quedarse sin candidatos. Asi la cantidad de ejercicios por dia refleja
+// los minutos que el usuario dijo tener, en vez de un tope fijo de "1 por
+// musculo" sin importar cuanto tiempo declaro. Compartido por armarRutina
+// (arma la semana entera) y por agregarDiaRutina/reorganizarRutina en
+// rutinaService.js (arman o reacomodan un dia suelto de una rutina ya
+// existente).
+export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], minutosDisponibles = 60 }) {
+  const excluidos = new Set(exclusiones);
+  const usadosEnElDia = new Set();
+  const elegidosPorMusculo = new Map();
+  const restantesPorMusculo = new Map();
+
+  for (const musculo of musculos) {
+    const ordenados = candidatosPara(musculo, equipamiento, excluidos);
+    if (ordenados.length === 0) {
+      elegidosPorMusculo.set(musculo, []);
+      restantesPorMusculo.set(musculo, []);
+      continue;
+    }
+    const top = ordenados[0];
+    usadosEnElDia.add(top.nombre);
+    elegidosPorMusculo.set(musculo, [{ ejercicio: top, esTop: true }]);
+    restantesPorMusculo.set(musculo, ordenados.slice(1));
+  }
+
+  let minutosUsados = [...elegidosPorMusculo.values()].reduce((acc, arr) => acc + arr.length, 0) * MINUTOS_POR_EJERCICIO;
+
+  while (minutosDisponibles - minutosUsados >= MINUTOS_POR_EJERCICIO) {
+    const musculoElegido = musculos
+      .filter((m) => restantesPorMusculo.get(m)?.length > 0)
+      .sort((a, b) => elegidosPorMusculo.get(a).length - elegidosPorMusculo.get(b).length)[0];
+    if (!musculoElegido) break;
+
+    const cola = restantesPorMusculo.get(musculoElegido);
+    const siguiente = cola.find((c) => !usadosEnElDia.has(c.nombre));
+    if (!siguiente) {
+      restantesPorMusculo.set(musculoElegido, []);
+      continue;
+    }
+    usadosEnElDia.add(siguiente.nombre);
+    elegidosPorMusculo.get(musculoElegido).push({ ejercicio: siguiente, esTop: false });
+    restantesPorMusculo.set(musculoElegido, cola.filter((c) => c !== siguiente));
+    minutosUsados += MINUTOS_POR_EJERCICIO;
+  }
+
+  const ejercicios = [];
+  for (const musculo of musculos) {
+    for (const { ejercicio, esTop } of elegidosPorMusculo.get(musculo) || []) {
+      const rango = rangoRepsPara({
+        musculo,
+        objetivo,
+        esCompuestoPrincipalFuerza: Boolean(ejercicio.es_compuesto_principal_fuerza),
+        region: ejercicio.musculo_region,
+      });
+      ejercicios.push({
+        orden: ejercicios.length + 1,
+        ejercicio_id: ejercicio.id,
+        nombre: ejercicio.nombre,
+        musculo,
+        es_top_de_musculo: esTop,
+        rango_reps_min: rango.min,
+        rango_reps_max: rango.max,
+        tope_series: topeSeriesPara({ objetivo, esCompuestoPrincipalFuerza: Boolean(ejercicio.es_compuesto_principal_fuerza) }),
+      });
+    }
+  }
+  return ejercicios;
+}
+
 // secuenciaPersonalizada (opcional): [{ dia_semana, musculos }] armado por el
 // propio usuario (ver "elegir mi split" en el onboarding) en vez de la tabla
 // fija de armarSecuenciaDeDias - el resto de la logica (filtro por
@@ -147,77 +234,17 @@ export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusion
   const secuencia = secuenciaPersonalizada
     ? secuenciaPersonalizada.map((d) => ({ dia_semana: d.dia_semana, nombre: 'Personalizado', musculos: d.musculos }))
     : armarSecuenciaDeDias(diasEspecificos, varianteSplit);
-  const excluidos = new Set(exclusiones);
 
-  return secuencia.map((diaInfo, numeroDia) => {
-    const usadosEnElDia = new Set();
-    const elegidosPorMusculo = new Map();
-    const restantesPorMusculo = new Map();
-
-    for (const musculo of diaInfo.musculos) {
-      const tags = tagsDisponibles({ ...equipamiento, musculo });
-      const candidatos = getEjerciciosPorMusculo.all(musculo).filter((ej) => {
-        if (excluidos.has(ej.id)) return false;
-        const requeridos = JSON.parse(ej.equipamiento_requerido_json);
-        return requeridos.every((tag) => tags.has(tag));
-      });
-      if (candidatos.length === 0) {
-        elegidosPorMusculo.set(musculo, []);
-        restantesPorMusculo.set(musculo, []);
-        continue;
-      }
-      const compuestos = candidatos.filter((c) => c.tipo === 'compuesto');
-      const aislados = candidatos.filter((c) => c.tipo !== 'compuesto');
-      const ordenados = [...compuestos, ...aislados];
-      const top = ordenados[0];
-      usadosEnElDia.add(top.nombre);
-      elegidosPorMusculo.set(musculo, [{ ejercicio: top, esTop: true }]);
-      restantesPorMusculo.set(musculo, ordenados.slice(1));
-    }
-
-    const minutosDisponibles = duracionPorDia[diaInfo.dia_semana] || 60;
-    let minutosUsados = [...elegidosPorMusculo.values()].reduce((acc, arr) => acc + arr.length, 0) * MINUTOS_POR_EJERCICIO;
-
-    while (minutosDisponibles - minutosUsados >= MINUTOS_POR_EJERCICIO) {
-      const musculoElegido = diaInfo.musculos
-        .filter((m) => restantesPorMusculo.get(m)?.length > 0)
-        .sort((a, b) => elegidosPorMusculo.get(a).length - elegidosPorMusculo.get(b).length)[0];
-      if (!musculoElegido) break;
-
-      const cola = restantesPorMusculo.get(musculoElegido);
-      const siguiente = cola.find((c) => !usadosEnElDia.has(c.nombre));
-      if (!siguiente) {
-        restantesPorMusculo.set(musculoElegido, []);
-        continue;
-      }
-      usadosEnElDia.add(siguiente.nombre);
-      elegidosPorMusculo.get(musculoElegido).push({ ejercicio: siguiente, esTop: false });
-      restantesPorMusculo.set(musculoElegido, cola.filter((c) => c !== siguiente));
-      minutosUsados += MINUTOS_POR_EJERCICIO;
-    }
-
-    const ejercicios = [];
-    for (const musculo of diaInfo.musculos) {
-      for (const { ejercicio, esTop } of elegidosPorMusculo.get(musculo) || []) {
-        const rango = rangoRepsPara({
-          musculo,
-          objetivo,
-          esCompuestoPrincipalFuerza: Boolean(ejercicio.es_compuesto_principal_fuerza),
-          region: ejercicio.musculo_region,
-        });
-        ejercicios.push({
-          orden: ejercicios.length + 1,
-          ejercicio_id: ejercicio.id,
-          nombre: ejercicio.nombre,
-          musculo,
-          es_top_de_musculo: esTop,
-          rango_reps_min: rango.min,
-          rango_reps_max: rango.max,
-          tope_series: topeSeriesPara({ objetivo, esCompuestoPrincipalFuerza: Boolean(ejercicio.es_compuesto_principal_fuerza) }),
-        });
-      }
-    }
-
-    return { numero_dia: numeroDia + 1, dia_semana: diaInfo.dia_semana, nombre_tipo: diaInfo.nombre, ejercicios };
-  });
+  return secuencia.map((diaInfo, numeroDia) => ({
+    numero_dia: numeroDia + 1,
+    dia_semana: diaInfo.dia_semana,
+    nombre_tipo: diaInfo.nombre,
+    ejercicios: armarDia({
+      musculos: diaInfo.musculos,
+      objetivo,
+      equipamiento,
+      exclusiones,
+      minutosDisponibles: duracionPorDia[diaInfo.dia_semana] || 60,
+    }),
+  }));
 }

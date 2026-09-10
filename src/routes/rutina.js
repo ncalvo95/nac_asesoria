@@ -2,9 +2,9 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
-  agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, crearRutina,
-  crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, obtenerRutinaActiva,
-  quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
+  agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, crearRutina,
+  crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, obtenerImpactoQuitarDia, obtenerRutinaActiva,
+  quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
@@ -168,6 +168,91 @@ router.post('/usuarios/:usuarioId/rutina/split', (req, res, next) => {
     res.status(201).json(rutina);
   } catch (err) {
     if (err.message.includes('objetivo') || err.message.includes('equipamiento')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// Suma un dia nuevo a la rutina activa sin rehacerla entera (a diferencia
+// de POST /usuarios/:usuarioId/rutina y compania, que finalizan la rutina
+// actual y arrancan todo de nuevo en Semana 0) - ver agregarDiaRutina.
+router.post('/usuarios/:usuarioId/rutina/dias', (req, res, next) => {
+  const usuarioId = Number(req.params.usuarioId);
+  if (!checkAccesoUsuario(req, res, usuarioId)) return;
+
+  const { dia_semana, duracion_minutos, modo, variante_split, ejercicios } = req.body || {};
+  if (!DIAS_VALIDOS.includes(dia_semana)) {
+    return res.status(400).json({ error: 'dia_semana invalido.' });
+  }
+  if (!['manual', 'auto_solo_dia', 'auto_reorganizar'].includes(modo)) {
+    return res.status(400).json({ error: 'modo debe ser manual, auto_solo_dia o auto_reorganizar.' });
+  }
+  if (variante_split && !['upper_lower', 'push_pull'].includes(variante_split)) {
+    return res.status(400).json({ error: 'variante_split debe ser upper_lower o push_pull.' });
+  }
+  if (modo === 'manual' && (!Array.isArray(ejercicios) || ejercicios.length === 0)) {
+    return res.status(400).json({ error: 'ejercicios es obligatorio en modo manual.' });
+  }
+  if (duracion_minutos != null && (!Number.isFinite(duracion_minutos) || duracion_minutos <= 0)) {
+    return res.status(400).json({ error: 'duracion_minutos debe ser un numero mayor a 0.' });
+  }
+
+  const payload = { diaSemana: dia_semana, duracionMinutos: duracion_minutos, modo, varianteSplit: variante_split, ejercicios };
+
+  if (debeQuedarPendiente(req.usuario, usuarioId)) {
+    const s = crearSolicitudCambio({ usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'dia_agregar', payload });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
+  }
+
+  try {
+    const rutina = agregarDiaRutina(usuarioId, payload);
+    res.status(201).json(rutina);
+  } catch (err) {
+    if (/rutina activa|dia|objetivo|equipamiento|Ejercicio|Elegi/i.test(err.message)) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+router.get('/dias/:diaRutinaId/impacto', (req, res, next) => {
+  const dia = db.prepare(`
+    SELECT dr.*, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?
+  `).get(req.params.diaRutinaId);
+  if (!dia) return res.status(404).json({ error: 'Dia no encontrado.' });
+  if (!checkAccesoUsuario(req, res, dia.usuario_id)) return;
+
+  try {
+    res.json(obtenerImpactoQuitarDia(req.params.diaRutinaId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Inversa del POST de arriba - ver quitarDiaRutina (redistribuir opcional).
+router.delete('/dias/:diaRutinaId', (req, res, next) => {
+  const dia = db.prepare(`
+    SELECT dr.*, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?
+  `).get(req.params.diaRutinaId);
+  if (!dia) return res.status(404).json({ error: 'Dia no encontrado.' });
+  if (!checkAccesoUsuario(req, res, dia.usuario_id)) return;
+
+  const { redistribuir } = req.body || {};
+
+  if (debeQuedarPendiente(req.usuario, dia.usuario_id)) {
+    const s = crearSolicitudCambio({
+      usuario_id: dia.usuario_id, coach_id: req.usuario.coach_id, tipo: 'dia_quitar',
+      payload: { dia_rutina_id: Number(req.params.diaRutinaId), redistribuir: Boolean(redistribuir) },
+    });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
+  }
+
+  try {
+    const rutina = quitarDiaRutina(req.params.diaRutinaId, { redistribuir: Boolean(redistribuir) });
+    res.json(rutina);
+  } catch (err) {
+    if (/Dia|dias activos|quitado/i.test(err.message)) {
       return res.status(400).json({ error: err.message });
     }
     next(err);

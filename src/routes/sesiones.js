@@ -20,9 +20,12 @@ router.post('/usuarios/:usuarioId/sesiones', (req, res) => {
     return res.status(400).json({ error: 'series es obligatorio salvo que la sesion este salteada.' });
   }
 
-  const dia = db.prepare('SELECT dr.id, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?').get(dia_rutina_id);
+  const dia = db.prepare('SELECT dr.id, dr.activo, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?').get(dia_rutina_id);
   if (!dia || dia.usuario_id !== usuarioId) {
     return res.status(400).json({ error: 'dia_rutina_id invalido para este usuario.' });
+  }
+  if (!dia.activo) {
+    return res.status(400).json({ error: 'Ese dia ya no esta activo en la rutina.' });
   }
 
   const sesionId = registrarSesion({ usuarioId, diaRutinaId: dia_rutina_id, microcicloId: microciclo_id, fecha, salteada, series });
