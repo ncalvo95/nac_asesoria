@@ -880,27 +880,27 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
               )}
 
               <div className="grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 text-[10px] font-semibold text-text-faint tracking-wide px-0.5">
-                <span>S</span><span>KG</span><span>REPS</span><span>RIR</span><span title="Reps efectivas">EF</span>
+                <span className="text-center">S</span><span className="text-center">KG</span><span className="text-center">REPS</span><span className="text-center">RIR</span><span title="Reps efectivas" className="text-center">RE</span>
               </div>
               {series[ej.id].map((s, idx) => {
                 const efectivas = repsEfectivas(s.reps, s.rir);
                 return (
                   <div key={idx} className="grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 items-center">
-                    <span className="tabular text-[13px] text-text-muted">{idx + 1}</span>
+                    <span className="tabular text-[13px] text-text-muted text-center">{idx + 1}</span>
                     <input
                       type="number" inputMode="decimal" value={s.peso}
                       onChange={(e) => actualizarSerie(ej.id, idx, 'peso', e.target.value)}
-                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] outline-none focus:border-accent"
+                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent"
                     />
                     <input
                       type="number" inputMode="numeric" value={s.reps}
                       onChange={(e) => actualizarSerie(ej.id, idx, 'reps', e.target.value)}
-                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] outline-none focus:border-accent"
+                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent"
                     />
                     <input
                       type="number" inputMode="numeric" min={0} max={4} value={s.rir}
                       onChange={(e) => actualizarSerie(ej.id, idx, 'rir', e.target.value)}
-                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] outline-none focus:border-accent"
+                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent"
                     />
                     <span className="tabular text-[12.5px] text-text-faint text-center">{efectivas ?? '—'}</span>
                   </div>
@@ -961,17 +961,18 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
 
   return (
     <div className="flex flex-col gap-2 pt-1 border-t border-border -mx-4 px-4">
-      <div className="flex items-start justify-between pt-2">
+      <div className="flex items-start justify-between gap-2 pt-2">
         <button
           type="button"
           onClick={toggleLineal}
           title="Si lo activás, el peso no baja automáticamente aunque no llegues al mínimo de reps."
-          className={`text-[11px] font-medium px-2.5 py-1 rounded-md border ${
+          className={`text-[11px] font-medium px-2 py-1 rounded-md border whitespace-nowrap ${
             linealForzado ? 'border-accent text-accent bg-bg' : 'border-border text-text-faint bg-transparent'
           }`}
         >
           {linealForzado ? '✓ Lineal forzado' : 'Lineal forzado'}
         </button>
+        <AjusteSeries ejercicioId={ejercicio.id} seriesActuales={ejercicio.series_actuales} onAjustado={onCambiado} onError={setError} />
         <div className="flex flex-col items-end gap-1.5">
           <div className="flex items-center gap-3">
             <button
@@ -993,8 +994,6 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos }) {
           />
         </div>
       </div>
-
-      <AjusteSeries ejercicioId={ejercicio.id} seriesActuales={ejercicio.series_actuales} onAjustado={onCambiado} onError={setError} />
 
       <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
         <div className="flex flex-col gap-1.5">
@@ -1084,13 +1083,13 @@ function AjusteSeries({ ejercicioId, seriesActuales, onAjustado, onError }) {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] text-text-faint">Series</span>
+    <div className="flex items-center gap-1.5 shrink-0">
+      <span className="text-[11px] text-text-faint whitespace-nowrap">Series</span>
       <button
         type="button"
         onClick={() => ajustar(-1)}
         disabled={enviando}
-        className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[13px] leading-none disabled:opacity-40"
+        className="w-6 h-6 rounded-md border border-border bg-surface text-text-muted text-[13px] leading-none disabled:opacity-40"
       >
         −
       </button>
@@ -1099,7 +1098,7 @@ function AjusteSeries({ ejercicioId, seriesActuales, onAjustado, onError }) {
         type="button"
         onClick={() => ajustar(1)}
         disabled={enviando}
-        className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[13px] leading-none disabled:opacity-40"
+        className="w-6 h-6 rounded-md border border-border bg-surface text-text-muted text-[13px] leading-none disabled:opacity-40"
       >
         +
       </button>
