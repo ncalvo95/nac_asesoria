@@ -81,7 +81,6 @@ router.delete('/rutinas/:rutinaId', (req, res, next) => {
     eliminarRutina(rutina.id);
     res.status(204).end();
   } catch (err) {
-    if (err.message.includes('activa')) return res.status(400).json({ error: err.message });
     next(err);
   }
 });

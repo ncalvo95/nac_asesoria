@@ -186,12 +186,22 @@ export default function CoachPage() {
                   </div>
                 </div>
                 {u.rol === 'cliente' && (
-                  <Link
-                    to={`/coach/clientes/${u.id}/${u.tiene_rutina_activa ? 'entrenamiento' : 'onboarding'}`}
-                    className="text-[12.5px] font-semibold text-accent whitespace-nowrap"
-                  >
-                    {u.tiene_rutina_activa ? 'Ver →' : 'Armar rutina →'}
-                  </Link>
+                  <div className="flex flex-col items-end gap-1 flex-none">
+                    <Link
+                      to={`/coach/clientes/${u.id}/${u.tiene_rutina_activa ? 'entrenamiento' : 'onboarding'}`}
+                      className="text-[12.5px] font-semibold text-accent whitespace-nowrap"
+                    >
+                      {u.tiene_rutina_activa ? 'Ver →' : 'Armar rutina →'}
+                    </Link>
+                    {u.tiene_rutina_activa && (
+                      <Link
+                        to={`/coach/clientes/${u.id}/rutinas`}
+                        className="text-[11px] text-text-muted underline underline-offset-2 whitespace-nowrap"
+                      >
+                        Rutinas
+                      </Link>
+                    )}
+                  </div>
                 )}
               </div>
             ))}

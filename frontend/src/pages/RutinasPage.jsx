@@ -52,8 +52,11 @@ export default function RutinasPage() {
     }
   }
 
-  async function borrar(rutinaId) {
-    if (!confirm('¿Borrar esta rutina para siempre? No se puede deshacer.')) return;
+  async function borrar(rutinaId, activa) {
+    const aviso = activa
+      ? '¿Borrar esta rutina para siempre? Es la rutina activa - vas a quedarte sin ninguna, como si nunca hubieras generado una. No se puede deshacer.'
+      : '¿Borrar esta rutina para siempre? No se puede deshacer.';
+    if (!confirm(aviso)) return;
     setOcupada(rutinaId);
     setError('');
     try {
@@ -117,8 +120,8 @@ export default function RutinasPage() {
                 <span>{descripcionMicrociclo(r)}</span>
               </div>
 
-              {!activa && (
-                <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1">
+                {!activa && (
                   <button
                     type="button"
                     onClick={() => reactivar(r.id)}
@@ -127,16 +130,16 @@ export default function RutinasPage() {
                   >
                     {ocupada === r.id ? 'Reactivando…' : 'Reactivar'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => borrar(r.id)}
-                    disabled={ocupada === r.id}
-                    className="flex-1 h-9 rounded-lg border border-danger text-danger text-[12.5px] font-semibold disabled:opacity-60"
-                  >
-                    {ocupada === r.id ? 'Borrando…' : 'Borrar'}
-                  </button>
-                </div>
-              )}
+                )}
+                <button
+                  type="button"
+                  onClick={() => borrar(r.id, activa)}
+                  disabled={ocupada === r.id}
+                  className="flex-1 h-9 rounded-lg border border-danger text-danger text-[12.5px] font-semibold disabled:opacity-60"
+                >
+                  {ocupada === r.id ? 'Borrando…' : 'Borrar'}
+                </button>
+              </div>
             </div>
           );
         })}

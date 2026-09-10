@@ -252,16 +252,14 @@ export const reactivarRutina = db.transaction((rutinaId, usuarioId) => {
   db.prepare("UPDATE rutina SET estado = 'activa' WHERE id = ?").run(rutinaId);
 });
 
-// Borra una rutina finalizada para siempre (dias, ejercicios asignados,
-// microciclos e historial de sesiones/series caen en cascada). Nunca se
-// puede borrar la rutina activa - hay que reactivar otra o crear una nueva
-// antes.
+// Borra una rutina para siempre (dias, ejercicios asignados, microciclos e
+// historial de sesiones/series caen en cascada). Se puede borrar tambien la
+// activa - si era la unica, el usuario simplemente queda sin rutina, que ya
+// es un estado que el resto de la app maneja bien (HomePage/CoachPage lo
+// mandan a onboarding, igual que a alguien que nunca genero una).
 export function eliminarRutina(rutinaId) {
   const rutina = db.prepare('SELECT * FROM rutina WHERE id = ?').get(rutinaId);
   if (!rutina) throw new Error('Rutina no encontrada.');
-  if (rutina.estado === 'activa') {
-    throw new Error('No se puede borrar la rutina activa - reactiva otra o crea una nueva primero.');
-  }
   db.prepare('DELETE FROM rutina WHERE id = ?').run(rutinaId);
 }
 
