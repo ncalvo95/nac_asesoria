@@ -27,6 +27,7 @@ export default function RutinasPage() {
   const [ocupada, setOcupada] = useState(null);
 
   const linkNuevaRutina = usuarioIdParam ? `/coach/clientes/${usuarioIdParam}/onboarding` : '/onboarding';
+  const linkEntrenamiento = usuarioIdParam ? `/coach/clientes/${usuarioIdParam}/entrenamiento` : '/entrenamiento';
 
   async function cargar() {
     try {
@@ -121,6 +122,15 @@ export default function RutinasPage() {
               </div>
 
               <div className="flex gap-2 pt-1">
+                {activa && (
+                  <button
+                    type="button"
+                    onClick={() => navigate(linkEntrenamiento)}
+                    className="flex-1 h-9 rounded-lg bg-accent text-accent-fg text-[12.5px] font-semibold"
+                  >
+                    Ver rutina
+                  </button>
+                )}
                 {!activa && (
                   <button
                     type="button"
