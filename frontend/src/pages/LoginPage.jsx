@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import InstallButton from '../components/InstallButton.jsx';
 
 export default function LoginPage() {
   const { usuario, login } = useAuth();
@@ -36,9 +37,12 @@ export default function LoginPage() {
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6.5 7v10M17.5 7v10M2 10v4M22 10v4M6.5 12h11" />
             </svg>
-            <span className="text-xl font-bold tracking-tight">Bitácora</span>
+            <span className="text-xl font-bold tracking-tight">NAC Asesoria</span>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <InstallButton />
+            <ThemeToggle />
+          </div>
         </div>
         <p className="text-[13.5px] text-text-muted leading-relaxed">
           Programación de entrenamientos con progresión automática.

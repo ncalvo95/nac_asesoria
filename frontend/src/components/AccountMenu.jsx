@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
+import { useInstallPrompt } from '../context/InstallPromptContext.jsx';
 import ChangePasswordModal from './ChangePasswordModal.jsx';
 import SessionsModal from './SessionsModal.jsx';
 
@@ -17,6 +18,7 @@ const TEMAS = [
 export default function AccountMenu() {
   const { usuario, logout } = useAuth();
   const { tema, setTema } = useTheme();
+  const { puedeInstalar, instalar } = useInstallPrompt();
   const [abierto, setAbierto] = useState(false);
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [mostrarSesiones, setMostrarSesiones] = useState(false);
@@ -65,6 +67,15 @@ export default function AccountMenu() {
             ))}
           </div>
 
+          {puedeInstalar && (
+            <button
+              type="button"
+              onClick={() => { setAbierto(false); instalar(); }}
+              className="text-left h-9 rounded-lg px-2 text-[12.5px] font-medium text-accent hover:bg-bg"
+            >
+              Instalar app
+            </button>
+          )}
           <button
             type="button"
             onClick={() => { setAbierto(false); setMostrarPassword(true); }}

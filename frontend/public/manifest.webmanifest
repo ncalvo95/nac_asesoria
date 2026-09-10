@@ -1,6 +1,6 @@
 {
-  "name": "Bitácora",
-  "short_name": "Bitácora",
+  "name": "NAC Asesoria",
+  "short_name": "NAC Asesoria",
   "description": "Programación de entrenamientos con progresión automática por microciclos.",
   "start_url": "./",
   "scope": "./",

@@ -208,7 +208,7 @@ function Semana0Form({ rutina, usuario, onListo }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4 pb-24 md:max-w-5xl md:mx-auto">
+    <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto">
       <div className="px-1 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
           <h1 className="text-[17px] font-bold">Semana 0 · Testeo</h1>
@@ -301,15 +301,13 @@ function Semana0Form({ rutina, usuario, onListo }) {
 
       {error && <p className="text-[13px] text-danger px-1">{error}</p>}
 
-      <div className="fixed bottom-16 left-0 right-0 p-4 bg-surface border-t border-border">
-        <button
-          type="submit"
-          disabled={enviando}
-          className="w-full h-12 rounded-[10px] bg-accent text-accent-fg text-[15px] font-semibold disabled:opacity-60 max-w-md mx-auto block"
-        >
-          {enviando ? 'Guardando…' : 'Guardar testeo y arrancar semana 1'}
-        </button>
-      </div>
+      <button
+        type="submit"
+        disabled={enviando}
+        className="w-full h-12 rounded-[10px] bg-accent text-accent-fg text-[15px] font-semibold disabled:opacity-60"
+      >
+        {enviando ? 'Guardando…' : 'Guardar testeo y arrancar semana 1'}
+      </button>
     </form>
   );
 }

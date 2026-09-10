@@ -24,7 +24,13 @@ Cloudflare Tunnel (ver Deployment).
   aprobación manual extra.
 - **PWA:** instalable en el teléfono o la PC ("Agregar a pantalla de
   inicio") con ícono propio y arranque a pantalla completa, igual que Loot
-  Ledger (`frontend/public/manifest.webmanifest` + `sw.js`).
+  Ledger (`frontend/public/manifest.webmanifest` + `sw.js`). Además tiene su
+  propio botón "Instalar app" (`InstallPromptContext.jsx`) que captura el
+  evento `beforeinstallprompt` y dispara el prompt nativo del navegador a
+  pedido, en vez de depender solo del ícono pasivo del navegador - visible
+  en el menú de cuenta y en las pantallas de login/invitación cuando el
+  navegador lo soporta (no aparece en iOS Safari, que nunca dispara ese
+  evento).
 
 ## Estado actual
 
