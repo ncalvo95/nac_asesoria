@@ -79,7 +79,11 @@ cierre de microciclo → progreso → export a Excel):
   la rutina), "Día de entrenamiento" (semana 0 de testeo con fecha de
   inicio elegible, registro de series por peso/reps/RIR, modo "lineal
   forzado" por ejercicio, sustitución o agregado de ejercicio a mitad de
-  rutina), "Mis rutinas" (historial de rutinas - solo una puede estar
+  rutina — en ambos casos con la opción de cargar uno "particular" que no
+  está en el catálogo —, reordenar los ejercicios de un día con
+  flechas, y ajuste manual de series (+1/-1, respetando el piso y el tope
+  según objetivo) y del peso base, sin esperar al cierre de microciclo),
+  "Mis rutinas" (historial de rutinas - solo una puede estar
   activa a la vez, se finaliza sola al crear o reactivar otra; desde acá se
   puede reactivar una vieja o borrarla para siempre), Progreso
   (volumen por músculo vs MAV, notas de estancamiento/mejora, cerrar

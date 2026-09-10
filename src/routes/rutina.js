@@ -2,9 +2,9 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
-  agregarEjercicioADia, agregarEjercicioPersonalizadoADia, crearRutina, crearRutinaConSplit,
-  crearRutinaManual, eliminarRutina, listarRutinas, obtenerRutinaActiva, quitarEjercicioAsignado,
-  reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
+  agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, crearRutina,
+  crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, obtenerRutinaActiva,
+  quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import { aplicarDeload, cerrarMicrociclo, registrarSemana0 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
@@ -210,6 +210,35 @@ router.patch('/ejercicios/:ejercicioAsignadoId/lineal-forzado', (req, res) => {
   res.json({ id: ea.id, modo_lineal_forzado: activo });
 });
 
+// Ajuste manual de series (+1/-1), sin esperar al cierre de microciclo.
+router.patch('/ejercicios/:ejercicioAsignadoId/series', (req, res, next) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { delta } = req.body || {};
+  if (delta !== 1 && delta !== -1) return res.status(400).json({ error: 'delta debe ser 1 o -1.' });
+  try {
+    const out = ajustarSeriesManual(ea.id, delta);
+    res.json(out);
+  } catch (err) {
+    if (err.message.includes('series')) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Ajuste manual del peso base (el que se precarga en la proxima sesion),
+// independiente del modo lineal forzado y sin esperar al cierre de
+// microciclo - el usuario/coach puede cambiarlo cuando quiera.
+router.patch('/ejercicios/:ejercicioAsignadoId/peso', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { peso } = req.body || {};
+  if (typeof peso !== 'number' || !Number.isFinite(peso) || peso <= 0) {
+    return res.status(400).json({ error: 'peso debe ser un numero mayor a 0.' });
+  }
+  db.prepare('UPDATE ejercicio_asignado SET peso_actual = ? WHERE id = ?').run(peso, ea.id);
+  res.json({ id: ea.id, peso_actual: peso });
+});
+
 router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;
@@ -243,15 +272,18 @@ router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {
 router.post('/ejercicios/:ejercicioAsignadoId/sustituir', (req, res, next) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;
-  const { nuevo_ejercicio_id, peso, reps_serie1, reps_serie2 } = req.body || {};
-  if (!nuevo_ejercicio_id || peso == null || reps_serie1 == null || reps_serie2 == null) {
-    return res.status(400).json({ error: 'nuevo_ejercicio_id, peso, reps_serie1 y reps_serie2 son obligatorios.' });
+  const { nuevo_ejercicio_id, nombre_personalizado, peso, reps_serie1, reps_serie2 } = req.body || {};
+  if ((!nuevo_ejercicio_id && !nombre_personalizado) || peso == null || reps_serie1 == null || reps_serie2 == null) {
+    return res.status(400).json({ error: '(nuevo_ejercicio_id o nombre_personalizado), peso, reps_serie1 y reps_serie2 son obligatorios.' });
   }
   try {
-    const out = sustituirEjercicio({ ejercicioAsignadoId: ea.id, usuarioId: ea.usuario_id, nuevoEjercicioId: nuevo_ejercicio_id, peso, repsSerie1: reps_serie1, repsSerie2: reps_serie2 });
+    const out = sustituirEjercicio({
+      ejercicioAsignadoId: ea.id, usuarioId: ea.usuario_id, nuevoEjercicioId: nuevo_ejercicio_id,
+      nombrePersonalizado: nombre_personalizado, peso, repsSerie1: reps_serie1, repsSerie2: reps_serie2,
+    });
     res.json(out);
   } catch (err) {
-    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('microciclo')) {
+    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('microciclo') || err.message.includes('nombre')) {
       return res.status(400).json({ error: err.message });
     }
     next(err);
@@ -264,13 +296,17 @@ router.post('/ejercicios/:ejercicioAsignadoId/sustituir', (req, res, next) => {
 router.post('/ejercicios/:ejercicioAsignadoId/sustituir-pre-testeo', (req, res, next) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;
-  const { nuevo_ejercicio_id } = req.body || {};
-  if (!nuevo_ejercicio_id) return res.status(400).json({ error: 'nuevo_ejercicio_id es obligatorio.' });
+  const { nuevo_ejercicio_id, nombre_personalizado } = req.body || {};
+  if (!nuevo_ejercicio_id && !nombre_personalizado) {
+    return res.status(400).json({ error: 'nuevo_ejercicio_id o nombre_personalizado es obligatorio.' });
+  }
   try {
-    const out = sustituirEjercicioPreTesteo({ ejercicioAsignadoId: ea.id, usuarioId: ea.usuario_id, nuevoEjercicioId: nuevo_ejercicio_id });
+    const out = sustituirEjercicioPreTesteo({
+      ejercicioAsignadoId: ea.id, usuarioId: ea.usuario_id, nuevoEjercicioId: nuevo_ejercicio_id, nombrePersonalizado: nombre_personalizado,
+    });
     res.json(out);
   } catch (err) {
-    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('semana 0')) {
+    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('semana 0') || err.message.includes('nombre')) {
       return res.status(400).json({ error: err.message });
     }
     next(err);

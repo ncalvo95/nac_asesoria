@@ -1,5 +1,5 @@
 import db from '../db/index.js';
-import { armarRutina, rangoRepsPara, tagsDisponibles, SERIES_MINIMO } from './routineBuilder.js';
+import { armarRutina, rangoRepsPara, tagsDisponibles, topeSeriesPara, SERIES_MINIMO } from './routineBuilder.js';
 
 const getObjetivo = db.prepare('SELECT * FROM objetivo WHERE usuario_id = ?');
 const getDisponibilidad = db.prepare('SELECT * FROM disponibilidad WHERE usuario_id = ?');
@@ -296,6 +296,27 @@ const upsertProgresoEjercicioSustitucion = db.prepare(`
     sem1_reps = NULL, sem2_reps = NULL, techo_reps = NULL, mejoro = NULL, serie_agregada = 0, nota = NULL
 `);
 
+const insertEjercicioPersonalizado = db.prepare(`
+  INSERT INTO ejercicio (nombre, musculo_primario_id, tipo, patron_movimiento, equipamiento_requerido_json, activo)
+  VALUES (?, ?, 'aislado', 'personalizado', '[]', 1)
+`);
+const getMusculoPorId = db.prepare('SELECT nombre, region FROM musculo WHERE id = ?');
+
+// Da de alta un ejercicio "particular" (no esta en el catalogo global ni en
+// el de preferencias) con equipamiento_requerido_json vacio (siempre
+// compatible), para el musculo indicado. Devuelve el mismo shape que
+// getEjercicioCatalogo (con musculo_nombre/musculo_region via JOIN) para que
+// el resto del codigo (rangoRepsPara, etc.) no tenga que distinguir de donde
+// salio el ejercicio.
+function crearEjercicioPersonalizado(nombre, musculoId) {
+  const nombreLimpio = (nombre || '').trim();
+  if (!nombreLimpio) throw new Error('El nombre del ejercicio no puede estar vacio.');
+  const musculo = getMusculoPorId.get(musculoId);
+  if (!musculo) throw new Error('Musculo no encontrado.');
+  const { lastInsertRowid: ejercicioId } = insertEjercicioPersonalizado.run(nombreLimpio, musculoId);
+  return getEjercicioCatalogo.get(ejercicioId);
+}
+
 // Validaciones compartidas por las dos variantes de sustitucion: el nuevo
 // ejercicio existe, es del mismo musculo objetivo, y es compatible con el
 // equipamiento actual del usuario.
@@ -332,13 +353,26 @@ function validarNuevoEjercicio(ea, usuarioId, nuevoEjercicioId) {
   return { nuevo, musculoNombre };
 }
 
+// Resuelve el ejercicio destino de una sustitucion: si viene nombrePersonalizado
+// se da de alta un ejercicio nuevo para el mismo musculo objetivo (sin las
+// validaciones de equipamiento/duplicado, que no aplican a uno recien
+// creado); si no, es el flujo normal de elegir uno del catalogo.
+function resolverEjercicioDestino({ ea, usuarioId, nuevoEjercicioId, nombrePersonalizado }) {
+  if (nombrePersonalizado) {
+    const nuevo = crearEjercicioPersonalizado(nombrePersonalizado, ea.musculo_objetivo_id);
+    return { nuevo, musculoNombre: nuevo.musculo_nombre, nuevoEjercicioId: nuevo.id };
+  }
+  const { nuevo, musculoNombre } = validarNuevoEjercicio(ea, usuarioId, nuevoEjercicioId);
+  return { nuevo, musculoNombre, nuevoEjercicioId };
+}
+
 // Sustituye un ejercicio a mitad de rutina por otro del pool (mismo musculo,
 // dentro del equipamiento disponible). Pasa por su propio mini-testeo de 2
 // series: el piso resultante rige el resto del microciclo en curso, tal
 // como si fuera una semana 0 acotada a ese ejercicio.
-export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuarioId, nuevoEjercicioId, peso, repsSerie1, repsSerie2 }) => {
+export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuarioId, nuevoEjercicioId, nombrePersonalizado, peso, repsSerie1, repsSerie2 }) => {
   const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
-  const { nuevo, musculoNombre } = validarNuevoEjercicio(ea, usuarioId, nuevoEjercicioId);
+  const { nuevo, musculoNombre, nuevoEjercicioId: destinoId } = resolverEjercicioDestino({ ea, usuarioId, nuevoEjercicioId, nombrePersonalizado });
 
   const dia = db.prepare('SELECT dr.rutina_id, dr.id AS dia_rutina_id FROM dia_rutina dr WHERE dr.id = ?').get(ea.dia_rutina_id);
   const microciclo = getMicrocicloEnCurso.get(dia.rutina_id);
@@ -353,7 +387,7 @@ export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuario
   });
 
   db.prepare('UPDATE ejercicio_asignado SET ejercicio_id = ?, rango_reps_min = ?, rango_reps_max = ?, peso_actual = ? WHERE id = ?')
-    .run(nuevoEjercicioId, rango.min, rango.max, peso, ejercicioAsignadoId);
+    .run(destinoId, rango.min, rango.max, peso, ejercicioAsignadoId);
 
   const seriesActuales = ea.series_actuales || SERIES_MINIMO;
   upsertProgresoEjercicioSustitucion.run({
@@ -365,7 +399,7 @@ export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuario
   insertRegistroSerieSustitucion.run(sesionId, ejercicioAsignadoId, 1, peso, repsSerie1);
   insertRegistroSerieSustitucion.run(sesionId, ejercicioAsignadoId, 2, peso, repsSerie2);
 
-  return { ejercicio_asignado_id: ejercicioAsignadoId, nuevo_ejercicio_id: nuevoEjercicioId, rango_reps_min: rango.min, rango_reps_max: rango.max };
+  return { ejercicio_asignado_id: ejercicioAsignadoId, nuevo_ejercicio_id: destinoId, nuevo_ejercicio_nombre: nuevo.nombre, rango_reps_min: rango.min, rango_reps_max: rango.max };
 });
 
 const getMicrociclo0EnCurso = db.prepare("SELECT * FROM microciclo WHERE rutina_id = ? AND numero = 0 AND estado = 'en_curso'");
@@ -375,9 +409,9 @@ const getMicrociclo0EnCurso = db.prepare("SELECT * FROM microciclo WHERE rutina_
 // a completar el mismo, para el ejercicio nuevo, en el propio formulario de
 // semana 0), asi que solo hace falta cambiar el ejercicio_id y recalcular su
 // rango de reps - sin mini-testeo ni registro_sesion.
-export const sustituirEjercicioPreTesteo = db.transaction(({ ejercicioAsignadoId, usuarioId, nuevoEjercicioId }) => {
+export const sustituirEjercicioPreTesteo = db.transaction(({ ejercicioAsignadoId, usuarioId, nuevoEjercicioId, nombrePersonalizado }) => {
   const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
-  const { nuevo, musculoNombre } = validarNuevoEjercicio(ea, usuarioId, nuevoEjercicioId);
+  const { nuevo, musculoNombre, nuevoEjercicioId: destinoId } = resolverEjercicioDestino({ ea, usuarioId, nuevoEjercicioId, nombrePersonalizado });
 
   const dia = db.prepare('SELECT rutina_id FROM dia_rutina WHERE id = ?').get(ea.dia_rutina_id);
   const microciclo0 = getMicrociclo0EnCurso.get(dia.rutina_id);
@@ -392,9 +426,9 @@ export const sustituirEjercicioPreTesteo = db.transaction(({ ejercicioAsignadoId
   });
 
   db.prepare('UPDATE ejercicio_asignado SET ejercicio_id = ?, rango_reps_min = ?, rango_reps_max = ? WHERE id = ?')
-    .run(nuevoEjercicioId, rango.min, rango.max, ejercicioAsignadoId);
+    .run(destinoId, rango.min, rango.max, ejercicioAsignadoId);
 
-  return { ejercicio_asignado_id: ejercicioAsignadoId, nuevo_ejercicio_id: nuevoEjercicioId, rango_reps_min: rango.min, rango_reps_max: rango.max };
+  return { ejercicio_asignado_id: ejercicioAsignadoId, nuevo_ejercicio_id: destinoId, nuevo_ejercicio_nombre: nuevo.nombre, rango_reps_min: rango.min, rango_reps_max: rango.max };
 });
 
 const getMaxOrdenDia = db.prepare('SELECT COALESCE(MAX(orden), 0) AS maxOrden FROM ejercicio_asignado WHERE dia_rutina_id = ?');
@@ -447,38 +481,26 @@ export const agregarEjercicioADia = db.transaction(({ diaRutinaId, usuarioId, mu
   };
 });
 
-const insertEjercicioPersonalizado = db.prepare(`
-  INSERT INTO ejercicio (nombre, musculo_primario_id, tipo, patron_movimiento, equipamiento_requerido_json, activo)
-  VALUES (?, ?, 'aislado', 'personalizado', '[]', 1)
-`);
-const getMusculoPorId = db.prepare('SELECT nombre, region FROM musculo WHERE id = ?');
-
 // Igual que agregarEjercicioADia, pero para cuando el ejercicio que se
 // quiere sumar no esta en el catalogo (ni el global del admin ni el de
 // preferencias) - lo da de alta con equipamiento_requerido_json vacio
 // (siempre compatible) y lo asigna en el mismo paso. Queda en el catalogo
 // para poder reutilizarlo despues.
 export const agregarEjercicioPersonalizadoADia = db.transaction(({ diaRutinaId, usuarioId, musculoId, nombre }) => {
-  const nombreLimpio = (nombre || '').trim();
-  if (!nombreLimpio) throw new Error('El nombre del ejercicio no puede estar vacio.');
-
-  const musculo = getMusculoPorId.get(musculoId);
-  if (!musculo) throw new Error('Musculo no encontrado.');
-
-  const { lastInsertRowid: ejercicioId } = insertEjercicioPersonalizado.run(nombreLimpio, musculoId);
+  const nuevo = crearEjercicioPersonalizado(nombre, musculoId);
 
   const objetivo = getObjetivo.get(usuarioId);
   const rango = rangoRepsPara({
-    musculo: musculo.nombre,
+    musculo: nuevo.musculo_nombre,
     objetivo: objetivo.tipo,
     esCompuestoPrincipalFuerza: false,
-    region: musculo.region,
+    region: nuevo.musculo_region,
   });
 
   const { maxOrden } = getMaxOrdenDia.get(diaRutinaId);
-  const info = insertEjercicioAsignadoExtra.run(diaRutinaId, ejercicioId, maxOrden + 1, musculoId, SERIES_MINIMO, rango.min, rango.max);
+  const info = insertEjercicioAsignadoExtra.run(diaRutinaId, nuevo.id, maxOrden + 1, musculoId, SERIES_MINIMO, rango.min, rango.max);
   return {
-    id: info.lastInsertRowid, ejercicio_id: ejercicioId, ejercicio_nombre: nombreLimpio,
+    id: info.lastInsertRowid, ejercicio_id: nuevo.id, ejercicio_nombre: nuevo.nombre,
     musculo_objetivo_id: musculoId, rango_reps_min: rango.min, rango_reps_max: rango.max,
     es_top_de_musculo: false, series_actuales: SERIES_MINIMO,
   };
@@ -497,4 +519,38 @@ export function quitarEjercicioAsignado(ejercicioAsignadoId) {
   const tieneSeries = db.prepare('SELECT 1 FROM registro_serie WHERE ejercicio_asignado_id = ?').get(ejercicioAsignadoId);
   if (tieneSeries) throw new Error('Ese ejercicio ya tiene series registradas, no se puede quitar.');
   db.prepare('DELETE FROM ejercicio_asignado WHERE id = ?').run(ejercicioAsignadoId);
+}
+
+const getEjercicioAsignadoConTipo = db.prepare(`
+  SELECT ea.*, e.es_compuesto_principal_fuerza
+  FROM ejercicio_asignado ea JOIN ejercicio e ON e.id = ea.ejercicio_id
+  WHERE ea.id = ?
+`);
+const getUsuarioIdDeEjercicioAsignado = db.prepare(`
+  SELECT r.usuario_id FROM ejercicio_asignado ea
+  JOIN dia_rutina dr ON dr.id = ea.dia_rutina_id
+  JOIN rutina r ON r.id = dr.rutina_id
+  WHERE ea.id = ?
+`);
+
+// Ajuste manual de series (+1/-1) sin esperar al cierre de microciclo, que
+// solo las sube automaticamente cuando detecta estancamiento. Respeta el
+// mismo piso (SERIES_MINIMO) y tope (topeSeriesPara segun objetivo/tipo de
+// ejercicio) que ya usa el motor de progresion, para no quedar inconsistente
+// con lo que haria el cierre automatico.
+export function ajustarSeriesManual(ejercicioAsignadoId, delta) {
+  const ea = getEjercicioAsignadoConTipo.get(ejercicioAsignadoId);
+  if (!ea) throw new Error('Ejercicio asignado no encontrado.');
+
+  const { usuario_id: usuarioId } = getUsuarioIdDeEjercicioAsignado.get(ejercicioAsignadoId);
+  const objetivo = getObjetivo.get(usuarioId);
+  const tope = topeSeriesPara({ objetivo: objetivo?.tipo, esCompuestoPrincipalFuerza: Boolean(ea.es_compuesto_principal_fuerza) });
+
+  const actuales = ea.series_actuales || SERIES_MINIMO;
+  const nuevas = actuales + delta;
+  if (nuevas < SERIES_MINIMO) throw new Error(`No se puede bajar de ${SERIES_MINIMO} series.`);
+  if (nuevas > tope) throw new Error(`Este ejercicio ya esta en su tope de ${tope} series.`);
+
+  db.prepare('UPDATE ejercicio_asignado SET series_actuales = ? WHERE id = ?').run(nuevas, ejercicioAsignadoId);
+  return { id: ejercicioAsignadoId, series_actuales: nuevas };
 }

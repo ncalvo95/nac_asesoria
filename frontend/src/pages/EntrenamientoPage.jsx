@@ -153,6 +153,20 @@ function Semana0Form({ rutina, usuario, onListo }) {
     });
   }
 
+  async function moverEjercicioSemana0(index, delta) {
+    const nuevoIndex = index + delta;
+    if (nuevoIndex < 0 || nuevoIndex >= diaActual.ejercicios.length) return;
+    const copia = [...diaActual.ejercicios];
+    [copia[index], copia[nuevoIndex]] = [copia[nuevoIndex], copia[index]];
+    setDias((prev) => prev.map((d) => (d.id === diaActual.id ? { ...d, ejercicios: copia } : d)));
+    const orden = copia.map((ej, i) => ({ ejercicio_asignado_id: ej.id, orden: i + 1 }));
+    try {
+      await api.patch(`/dias/${diaActual.id}/orden`, { orden });
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function onCambiarFecha(nuevaFecha) {
     setFechaInicio(nuevaFecha);
     setGuardandoFecha(true);
@@ -236,24 +250,44 @@ function Semana0Form({ rutina, usuario, onListo }) {
       </div>
 
       <div className="flex flex-col gap-3">
-        {diaActual.ejercicios.map((ej) => (
-          <div key={ej.id} className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[14px] font-semibold">{ej.ejercicio_nombre}</span>
-              <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
-                {ej.musculo_nombre}
-              </span>
+        {diaActual.ejercicios.map((ej, idx) => (
+          <div key={ej.id} className="flex gap-2 items-stretch">
+            <div className="flex flex-col justify-center gap-1 flex-none">
+              <button
+                type="button"
+                onClick={() => moverEjercicioSemana0(idx, -1)}
+                disabled={idx === 0}
+                className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                onClick={() => moverEjercicioSemana0(idx, 1)}
+                disabled={idx === diaActual.ejercicios.length - 1}
+                className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
+              >
+                ▼
+              </button>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <NumberField label="Peso (kg)" value={valores[ej.id].peso} onChange={(v) => set(ej.id, 'peso', v)} />
-              <NumberField label="Reps S1" value={valores[ej.id].reps1} onChange={(v) => set(ej.id, 'reps1', v)} />
-              <NumberField label="Reps S2" value={valores[ej.id].reps2} onChange={(v) => set(ej.id, 'reps2', v)} />
-            </div>
-            <div className="flex items-center justify-between">
-              <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
-              {!ej.es_top_de_musculo && (
-                <QuitarEjercicioBoton ejercicioAsignadoId={ej.id} onQuitado={() => onQuitado(diaActual.id, ej.id)} />
-              )}
+            <div className="flex-1 bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="text-[14px] font-semibold">{ej.ejercicio_nombre}</span>
+                <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
+                  {ej.musculo_nombre}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <NumberField label="Peso (kg)" value={valores[ej.id].peso} onChange={(v) => set(ej.id, 'peso', v)} />
+                <NumberField label="Reps S1" value={valores[ej.id].reps1} onChange={(v) => set(ej.id, 'reps1', v)} />
+                <NumberField label="Reps S2" value={valores[ej.id].reps2} onChange={(v) => set(ej.id, 'reps2', v)} />
+              </div>
+              <div className="flex items-center justify-between">
+                <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
+                {!ej.es_top_de_musculo && (
+                  <QuitarEjercicioBoton ejercicioAsignadoId={ej.id} onQuitado={() => onQuitado(diaActual.id, ej.id)} />
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -284,6 +318,8 @@ function CambiarEjercicioSemana0({ ejercicio, onSustituido }) {
   const [abierto, setAbierto] = useState(false);
   const [candidatos, setCandidatos] = useState(null);
   const [elegido, setElegido] = useState('');
+  const [particular, setParticular] = useState(false);
+  const [nombreParticular, setNombreParticular] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -294,19 +330,27 @@ function CambiarEjercicioSemana0({ ejercicio, onSustituido }) {
     }
   }
 
+  function cerrar() {
+    setAbierto(false);
+    setParticular(false);
+    setNombreParticular('');
+    setElegido('');
+  }
+
   async function confirmar() {
-    if (!elegido) {
-      setError('Elegí un ejercicio.');
+    if (particular ? !nombreParticular.trim() : !elegido) {
+      setError(particular ? 'Escribí el nombre del ejercicio.' : 'Elegí un ejercicio.');
       return;
     }
     setEnviando(true);
     setError('');
     try {
-      const candidato = candidatos.find((c) => String(c.id) === elegido);
-      const out = await api.post(`/ejercicios/${ejercicio.id}/sustituir-pre-testeo`, { nuevo_ejercicio_id: Number(elegido) });
-      onSustituido({ id: out.nuevo_ejercicio_id, nombre: candidato.nombre, rango_reps_min: out.rango_reps_min, rango_reps_max: out.rango_reps_max });
-      setAbierto(false);
-      setElegido('');
+      const body = particular
+        ? { nombre_personalizado: nombreParticular.trim() }
+        : { nuevo_ejercicio_id: Number(elegido) };
+      const out = await api.post(`/ejercicios/${ejercicio.id}/sustituir-pre-testeo`, body);
+      onSustituido({ id: out.nuevo_ejercicio_id, nombre: out.nuevo_ejercicio_nombre, rango_reps_min: out.rango_reps_min, rango_reps_max: out.rango_reps_max });
+      cerrar();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -329,11 +373,11 @@ function CambiarEjercicioSemana0({ ejercicio, onSustituido }) {
   return (
     <div className="bg-bg border border-border rounded-xl p-3 flex flex-col gap-2.5">
       <span className="text-[12px] font-semibold">Sustituir por otro ejercicio del mismo músculo</span>
-      {candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
-      {candidatos?.length === 0 && (
+      {!particular && candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
+      {!particular && candidatos?.length === 0 && (
         <span className="text-[12px] text-text-muted">No hay alternativas para este músculo con tu equipamiento actual.</span>
       )}
-      {candidatos?.length > 0 && (
+      {!particular && candidatos?.length > 0 && (
         <select
           value={elegido}
           onChange={(e) => setElegido(e.target.value)}
@@ -345,11 +389,26 @@ function CambiarEjercicioSemana0({ ejercicio, onSustituido }) {
           ))}
         </select>
       )}
+      {particular && (
+        <input
+          value={nombreParticular}
+          onChange={(e) => setNombreParticular(e.target.value)}
+          placeholder="Nombre del ejercicio particular"
+          className="h-9 rounded-lg border border-border bg-surface px-2.5 text-[13px] outline-none focus:border-accent"
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => { setParticular((v) => !v); setError(''); }}
+        className="self-start text-[11.5px] text-text-muted underline underline-offset-2"
+      >
+        {particular ? '← Elegir del catálogo' : 'No está en la lista, cargar uno particular'}
+      </button>
       {error && <span className="text-[12px] text-danger">{error}</span>}
       <div className="flex gap-2">
         <button
           type="button"
-          onClick={() => setAbierto(false)}
+          onClick={cerrar}
           className="flex-1 h-9 rounded-lg border border-border text-text-muted text-[12.5px] font-semibold"
         >
           Cancelar
@@ -357,7 +416,7 @@ function CambiarEjercicioSemana0({ ejercicio, onSustituido }) {
         <button
           type="button"
           onClick={confirmar}
-          disabled={enviando || !candidatos?.length}
+          disabled={enviando || (particular ? !nombreParticular.trim() : !candidatos?.length)}
           className="flex-1 h-9 rounded-lg bg-accent text-accent-fg text-[13px] font-semibold disabled:opacity-60"
         >
           {enviando ? 'Guardando…' : 'Confirmar'}
@@ -636,6 +695,20 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     });
   }
 
+  async function moverEjercicio(index, delta) {
+    const nuevoIndex = index + delta;
+    if (nuevoIndex < 0 || nuevoIndex >= dia.ejercicios.length) return;
+    const copia = [...dia.ejercicios];
+    [copia[index], copia[nuevoIndex]] = [copia[nuevoIndex], copia[index]];
+    const orden = copia.map((ej, i) => ({ ejercicio_asignado_id: ej.id, orden: i + 1 }));
+    try {
+      await api.patch(`/dias/${dia.id}/orden`, { orden });
+      onRutinaCambiada();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function guardarSesion() {
     setError('');
     const payload = [];
@@ -696,10 +769,29 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
       )}
 
       <div className="flex flex-col gap-3">
-        {dia.ejercicios.map((ej) => {
+        {dia.ejercicios.map((ej, idx) => {
           const nota = notasPorEjercicio.get(ej.id);
           return (
-            <div key={ej.id} className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3">
+            <div key={ej.id} className="flex gap-2 items-stretch">
+              <div className="flex flex-col justify-center gap-1 flex-none">
+                <button
+                  type="button"
+                  onClick={() => moverEjercicio(idx, -1)}
+                  disabled={idx === 0}
+                  className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moverEjercicio(idx, 1)}
+                  disabled={idx === dia.ejercicios.length - 1}
+                  className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
+                >
+                  ▼
+                </button>
+              </div>
+              <div className="flex-1 bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex flex-col gap-1">
                   <span className="text-[14.5px] font-semibold">{ej.ejercicio_nombre}</span>
@@ -748,6 +840,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
               ))}
 
               <EjercicioAcciones ejercicio={ej} usuario={usuario} onCambiado={onRutinaCambiada} />
+              </div>
             </div>
           );
         })}
@@ -780,6 +873,8 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
 function EjercicioAcciones({ ejercicio, usuario, onCambiado }) {
   const [linealForzado, setLinealForzado] = useState(Boolean(ejercicio.modo_lineal_forzado));
   const [mostrarSustituir, setMostrarSustituir] = useState(false);
+  const [mostrarPeso, setMostrarPeso] = useState(false);
+  const [error, setError] = useState('');
 
   async function toggleLineal() {
     const nuevo = !linealForzado;
@@ -817,6 +912,26 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado }) {
           )}
         </div>
       </div>
+
+      <AjusteSeries ejercicioId={ejercicio.id} seriesActuales={ejercicio.series_actuales} onAjustado={onCambiado} onError={setError} />
+
+      <button
+        type="button"
+        onClick={() => setMostrarPeso((v) => !v)}
+        className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2"
+      >
+        Ajustar peso base
+      </button>
+      {mostrarPeso && (
+        <AjustePeso
+          ejercicioId={ejercicio.id}
+          pesoActual={ejercicio.peso_actual}
+          onAjustado={() => { setMostrarPeso(false); onCambiado(); }}
+        />
+      )}
+
+      {error && <span className="text-[11px] text-danger">{error}</span>}
+
       {mostrarSustituir && (
         <SustituirEjercicio
           ejercicio={ejercicio}
@@ -828,9 +943,98 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado }) {
   );
 }
 
+// Sumar/restar una serie a mano, sin esperar al cierre de microciclo - el
+// backend valida el piso (SERIES_MINIMO) y el tope segun objetivo/ejercicio.
+function AjusteSeries({ ejercicioId, seriesActuales, onAjustado, onError }) {
+  const [enviando, setEnviando] = useState(false);
+
+  async function ajustar(delta) {
+    setEnviando(true);
+    onError('');
+    try {
+      await api.patch(`/ejercicios/${ejercicioId}/series`, { delta });
+      onAjustado();
+    } catch (err) {
+      onError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] text-text-faint">Series</span>
+      <button
+        type="button"
+        onClick={() => ajustar(-1)}
+        disabled={enviando}
+        className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[13px] leading-none disabled:opacity-40"
+      >
+        −
+      </button>
+      <span className="tabular text-[13px] font-semibold w-4 text-center">{seriesActuales}</span>
+      <button
+        type="button"
+        onClick={() => ajustar(1)}
+        disabled={enviando}
+        className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[13px] leading-none disabled:opacity-40"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+// Cambiar el peso base (el que se precarga la proxima sesion) sin depender
+// del modo lineal forzado ni esperar al cierre de microciclo.
+function AjustePeso({ ejercicioId, pesoActual, onAjustado }) {
+  const [peso, setPeso] = useState(pesoActual ?? '');
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  async function confirmar() {
+    const valor = Number(peso);
+    if (!peso || !Number.isFinite(valor) || valor <= 0) {
+      setError('Ingresá un peso válido.');
+      return;
+    }
+    setEnviando(true);
+    setError('');
+    try {
+      await api.patch(`/ejercicios/${ejercicioId}/peso`, { peso: valor });
+      onAjustado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="number" inputMode="decimal" value={peso}
+        onChange={(e) => setPeso(e.target.value)}
+        className="w-20 h-8 rounded-md border border-border bg-bg px-2 tabular text-[13px] outline-none focus:border-accent"
+      />
+      <button
+        type="button"
+        onClick={confirmar}
+        disabled={enviando}
+        className="h-8 px-3 rounded-md bg-accent text-accent-fg text-[12px] font-semibold disabled:opacity-60"
+      >
+        {enviando ? 'Guardando…' : 'Guardar'}
+      </button>
+      {error && <span className="text-[11px] text-danger">{error}</span>}
+    </div>
+  );
+}
+
 function SustituirEjercicio({ ejercicio, onListo }) {
   const [candidatos, setCandidatos] = useState(null);
   const [elegido, setElegido] = useState('');
+  const [particular, setParticular] = useState(false);
+  const [nombreParticular, setNombreParticular] = useState('');
   const [peso, setPeso] = useState('');
   const [reps1, setReps1] = useState('');
   const [reps2, setReps2] = useState('');
@@ -842,7 +1046,8 @@ function SustituirEjercicio({ ejercicio, onListo }) {
   }, [ejercicio.id]);
 
   async function confirmar() {
-    if (!elegido || peso === '' || reps1 === '' || reps2 === '') {
+    const faltaEjercicio = particular ? !nombreParticular.trim() : !elegido;
+    if (faltaEjercicio || peso === '' || reps1 === '' || reps2 === '') {
       setError('Completá el ejercicio nuevo, el peso y las 2 series de testeo.');
       return;
     }
@@ -850,7 +1055,8 @@ function SustituirEjercicio({ ejercicio, onListo }) {
     setError('');
     try {
       await api.post(`/ejercicios/${ejercicio.id}/sustituir`, {
-        nuevo_ejercicio_id: Number(elegido),
+        nuevo_ejercicio_id: particular ? undefined : Number(elegido),
+        nombre_personalizado: particular ? nombreParticular.trim() : undefined,
         peso: Number(peso),
         reps_serie1: Number(reps1),
         reps_serie2: Number(reps2),
@@ -870,36 +1076,50 @@ function SustituirEjercicio({ ejercicio, onListo }) {
         Probá un peso con el que puedas hacer entre 12 y 16 reps, y cargá 2 series de testeo — se usa como piso para lo que queda de este microciclo.
       </p>
 
-      {candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
-      {candidatos?.length === 0 && (
+      {!particular && candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
+      {!particular && candidatos?.length === 0 && (
         <span className="text-[12px] text-text-muted">No hay alternativas para este músculo con tu equipamiento actual.</span>
       )}
-      {candidatos?.length > 0 && (
-        <>
-          <select
-            value={elegido}
-            onChange={(e) => setElegido(e.target.value)}
-            className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] outline-none focus:border-accent"
-          >
-            <option value="">Elegí un ejercicio…</option>
-            {candidatos.map((c) => (
-              <option key={c.id} value={c.id}>{c.nombre}</option>
-            ))}
-          </select>
-          <div className="grid grid-cols-3 gap-2">
-            <NumberField label="Peso (kg)" value={peso} onChange={setPeso} />
-            <NumberField label="Reps S1" value={reps1} onChange={setReps1} />
-            <NumberField label="Reps S2" value={reps2} onChange={setReps2} />
-          </div>
-        </>
+      {!particular && candidatos?.length > 0 && (
+        <select
+          value={elegido}
+          onChange={(e) => setElegido(e.target.value)}
+          className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] outline-none focus:border-accent"
+        >
+          <option value="">Elegí un ejercicio…</option>
+          {candidatos.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </select>
       )}
+      {particular && (
+        <input
+          value={nombreParticular}
+          onChange={(e) => setNombreParticular(e.target.value)}
+          placeholder="Nombre del ejercicio particular"
+          className="h-9 rounded-lg border border-border bg-surface px-2.5 text-[13px] outline-none focus:border-accent"
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => { setParticular((v) => !v); setError(''); }}
+        className="self-start text-[11.5px] text-text-muted underline underline-offset-2"
+      >
+        {particular ? '← Elegir del catálogo' : 'No está en la lista, cargar uno particular'}
+      </button>
+
+      <div className="grid grid-cols-3 gap-2">
+        <NumberField label="Peso (kg)" value={peso} onChange={setPeso} />
+        <NumberField label="Reps S1" value={reps1} onChange={setReps1} />
+        <NumberField label="Reps S2" value={reps2} onChange={setReps2} />
+      </div>
 
       {error && <span className="text-[12px] text-danger">{error}</span>}
 
       <button
         type="button"
         onClick={confirmar}
-        disabled={enviando || !candidatos?.length}
+        disabled={enviando || (particular ? !nombreParticular.trim() : !candidatos?.length)}
         className="h-9 rounded-lg bg-accent text-accent-fg text-[13px] font-semibold disabled:opacity-60"
       >
         {enviando ? 'Guardando…' : 'Confirmar sustitución'}
