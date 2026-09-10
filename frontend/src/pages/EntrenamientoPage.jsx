@@ -8,6 +8,36 @@ import { formatearMusculo } from '../utils/musculo.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Borrador en localStorage para lo que se va tipeando en Semana 0 y en el
+// registro del dia - antes solo vivia en estado de React, asi que si el
+// celular mataba la pestaña (se fue a background, se quedo sin memoria,
+// se cerro el navegador) a mitad de un entrenamiento, todo lo cargado se
+// perdia sin ningun aviso. Guardar cada cambio a medida que se escribe
+// permite recuperarlo al volver a abrir la app, hasta que se confirma el
+// guardado real contra el backend (momento en el que se borra el borrador).
+function leerBorrador(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function guardarBorrador(key, valor) {
+  try {
+    localStorage.setItem(key, JSON.stringify(valor));
+  } catch {
+    // localStorage no disponible (privado, cuota, etc.) - sin borrador, pero no rompe nada.
+  }
+}
+function borrarBorrador(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // idem arriba
+  }
+}
+
 // Espejo del repsEfectivas de src/services/progressionEngine.js (mismo
 // umbral) para mostrarlo en vivo mientras se carga la serie, sin ida y
 // vuelta al backend.
@@ -125,12 +155,18 @@ function Semana0Form({ rutina, usuario, onListo, todosMusculos }) {
     () => dias.flatMap((d) => d.ejercicios.map((e) => ({ ...e, dia_semana: d.dia_semana }))),
     [dias]
   );
-  const [valores, setValores] = useState(() =>
-    Object.fromEntries(todosEjercicios.map((e) => [e.id, { peso: '', reps1: '', reps2: '' }]))
-  );
+  const borradorKey = `nac_borrador_semana0_${rutina.id}`;
+  const [valores, setValores] = useState(() => {
+    const borrador = leerBorrador(borradorKey) || {};
+    return Object.fromEntries(
+      todosEjercicios.map((e) => [e.id, borrador[e.id] || { peso: '', reps1: '', reps2: '' }])
+    );
+  });
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [guardandoFecha, setGuardandoFecha] = useState(false);
+
+  useEffect(() => { guardarBorrador(borradorKey, valores); }, [borradorKey, valores]);
 
   const diaActual = dias.find((d) => d.id === diaId) ?? dias[0];
 
@@ -212,6 +248,7 @@ function Semana0Form({ rutina, usuario, onListo, todosMusculos }) {
     setEnviando(true);
     try {
       await api.post(`/rutinas/${rutina.id}/semana0`, { resultados });
+      borrarBorrador(borradorKey);
       onListo();
     } catch (err) {
       setError(err.message);
@@ -736,10 +773,23 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
 }
 
 function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos, diasHermanos }) {
-  const [series, setSeries] = useState(() => construirEstadoInicial(dia));
+  const borradorKey = `nac_borrador_dia_${dia.id}_${microciclo.id}`;
+  const [series, setSeries] = useState(() => {
+    const base = construirEstadoInicial(dia);
+    const borrador = leerBorrador(borradorKey) || {};
+    for (const [ejId, sets] of Object.entries(borrador)) {
+      if (!base[ejId]) continue;
+      sets.forEach((s, idx) => {
+        if (base[ejId][idx]) base[ejId][idx] = { ...base[ejId][idx], ...s };
+      });
+    }
+    return base;
+  });
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [ok, setOk] = useState(false);
+
+  useEffect(() => { guardarBorrador(borradorKey, series); }, [borradorKey, series]);
 
   const notasPorEjercicio = useMemo(() => {
     const map = new Map();
@@ -794,6 +844,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
         microciclo_id: microciclo.id,
         series: payload,
       });
+      borrarBorrador(borradorKey);
       setOk(true);
       onGuardado();
     } catch (err) {
@@ -811,6 +862,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
         microciclo_id: microciclo.id,
         salteada: true,
       });
+      borrarBorrador(borradorKey);
       setOk(true);
       onGuardado();
     } catch (err) {

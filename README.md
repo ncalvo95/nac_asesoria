@@ -129,7 +129,15 @@ cierre de microciclo → progreso → export a Excel):
     `dia_rutina`, no aparece más como día activo) si ya tiene historial -
     así Reportes y la exportación a Excel no pierden esas sesiones viejas.
 - Semana 0 (testeo) y registro de sesión/serie (`src/services/progressionEngine.js`,
-  `src/routes/sesiones.js`).
+  `src/routes/sesiones.js`). Lo que se va tipeando (peso/reps/RIR de Semana 0
+  y del registro normal del día) se guarda como borrador en `localStorage`
+  del celular a medida que se escribe (`leerBorrador`/`guardarBorrador`/
+  `borrarBorrador` en `EntrenamientoPage.jsx`) - antes solo vivía en estado
+  de React, así que si la pestaña se cerraba o el celular la mataba en
+  medio del entrenamiento (se va a background, se queda sin memoria) se
+  perdía todo sin aviso. El borrador se recupera solo al volver a abrir la
+  pantalla y se borra recién cuando el guardado real contra el backend
+  confirma.
 - **Motor de cierre de microciclo** (el núcleo del sistema): calcula
   piso/techo por ejercicio (mejor marca vs promedio), detecta estancamiento
   por músculo, aplica el tope MAV, suma serie al ejercicio top, ajusta peso
@@ -141,7 +149,7 @@ cierre de microciclo → progreso → export a Excel):
   reales cargadas (`registro_serie`, con su RIR), no de lo prescripto, así
   que una serie sin RIR (hoy solo pasa en Semana 0, que no lo pide) no suma
   nada en vez de inventar un valor. Se muestra en vivo mientras se carga la
-  sesión (columna "EF" por serie + total por ejercicio), agregado por
+  sesión (columna "RE" por serie + total por ejercicio), agregado por
   músculo/ejercicio en Progreso (del último microciclo cerrado) y su
   evolución en Reportes.
 - Generador de Excel para invitados, sin cuenta ni persistencia
