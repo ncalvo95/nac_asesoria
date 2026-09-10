@@ -2,6 +2,13 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+// Corre el schema/las migraciones ANTES que cualquier router (que ya abren
+// prepared statements contra la DB al importarse) - asi un deploy nuevo
+// (pull + rebuild + restart) nunca vuelve a quedar con columnas viejas
+// contra un volumen persistente que no paso por "npm run db:migrate" a
+// mano. Es idempotente (CREATE TABLE IF NOT EXISTS + ALTER TABLE tolerante
+// a "ya existe"), asi que correrlo en cada arranque no rompe nada.
+import './db/migrate.js';
 import { MOUNT_PATH } from './base-path.js';
 import authRouter from './routes/auth.js';
 import guestRouter from './routes/guest.js';

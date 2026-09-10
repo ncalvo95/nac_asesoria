@@ -239,8 +239,18 @@ Public Hostname), para `www.castielo.io`:
   antes de la regla catch-all.
 
 **4. Primer arranque** (una sola vez, `docker compose exec nac-asesoria sh`
-o similar): correr las migraciones/seed/bootstrap-admin de la sección Setup
-dentro del contenedor.
+o similar): correr el seed/bootstrap-admin de la sección Setup dentro del
+contenedor (el schema/las migraciones ya corren solas al arrancar el
+servidor - ver más abajo, no hace falta `db:migrate` a mano).
+
+**Actualizar un deploy existente** (`git pull` + `docker compose up -d
+--build`): alcanza con eso. `src/server.js` corre el schema completo
+(`CREATE TABLE IF NOT EXISTS`) y cualquier `ALTER TABLE` pendiente
+(`src/db/migrate.js`, tolerante a columnas que ya existen) contra el
+volumen persistente ANTES de levantar el servidor HTTP, así que una
+columna nueva sumada en un commit no deja el contenedor en loop de crash
+esperando un `db:migrate` manual que nadie corrió - se auto-repara en el
+próximo restart.
 
 Validado en este entorno (Docker no pudo levantar el daemon acá — se
 verificó corriendo el server directo con `BASE_PATH=/nac_asesoria`, sin
