@@ -218,19 +218,27 @@ export function obtenerRutinaActiva(usuarioId) {
   if (!rutina) return null;
 
   const dias = db.prepare("SELECT * FROM dia_rutina WHERE rutina_id = ? AND activo = 1 ORDER BY numero_dia").all(rutina.id);
+  const microciclos = db.prepare('SELECT * FROM microciclo WHERE rutina_id = ? ORDER BY numero').all(rutina.id);
+  const microcicloActual = microciclos.find((m) => m.estado === 'en_curso');
+
+  // piso_reps del microciclo en curso: el piso de referencia contra el que
+  // se compara el techo al cerrar - se manda al frontend para mostrarlo
+  // como sugerencia en gris en la 1ra serie (ver construirEstadoInicial en
+  // EntrenamientoPage.jsx), no como valor precargado.
   const ejerciciosStmt = db.prepare(`
-    SELECT ea.*, e.nombre AS ejercicio_nombre, m.nombre AS musculo_nombre
+    SELECT ea.*, e.nombre AS ejercicio_nombre, m.nombre AS musculo_nombre, pem.piso_reps
     FROM ejercicio_asignado ea
     JOIN ejercicio e ON e.id = ea.ejercicio_id
     JOIN musculo m ON m.id = ea.musculo_objetivo_id
+    LEFT JOIN progreso_ejercicio_microciclo pem
+      ON pem.ejercicio_asignado_id = ea.id AND pem.microciclo_id = ?
     WHERE ea.dia_rutina_id = ?
     ORDER BY ea.orden
   `);
-  const microciclos = db.prepare('SELECT * FROM microciclo WHERE rutina_id = ? ORDER BY numero').all(rutina.id);
 
   return {
     ...rutina,
-    dias: dias.map((d) => ({ ...d, ejercicios: ejerciciosStmt.all(d.id) })),
+    dias: dias.map((d) => ({ ...d, ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id) })),
     microciclos,
   };
 }

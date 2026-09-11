@@ -706,8 +706,11 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
   // Reps efectivas (ver repsEfectivas en progressionEngine.js) del bloque:
   // se recalculan a partir de las series reales cargadas (registro_serie),
   // no de lo prescripto - series sin RIR cargado (ej. semana 0) no suman.
+  // Las dropset se cuentan aparte (no se mezclan con el volumen "real" del
+  // ejercicio/musculo, que asume series a peso constante - ver es_dropset
+  // en progressionEngine.js).
   const seriesDelBloque = db.prepare(`
-    SELECT rs.reps, rs.rir, ea.id AS ejercicio_asignado_id, m.nombre AS musculo_nombre
+    SELECT rs.reps, rs.rir, rs.es_dropset, ea.id AS ejercicio_asignado_id, m.nombre AS musculo_nombre
     FROM registro_serie rs
     JOIN registro_sesion rses ON rses.id = rs.registro_sesion_id
     JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
@@ -717,9 +720,14 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
 
   const repsEfectivasPorMusculo = new Map();
   const repsEfectivasPorEjercicio = new Map();
+  const dropsetEfectivasPorMusculo = new Map();
   for (const s of seriesDelBloque) {
     const efectivas = repsEfectivas(s.reps, s.rir);
     if (efectivas == null) continue;
+    if (s.es_dropset) {
+      dropsetEfectivasPorMusculo.set(s.musculo_nombre, (dropsetEfectivasPorMusculo.get(s.musculo_nombre) || 0) + efectivas);
+      continue;
+    }
     repsEfectivasPorMusculo.set(s.musculo_nombre, (repsEfectivasPorMusculo.get(s.musculo_nombre) || 0) + efectivas);
     repsEfectivasPorEjercicio.set(s.ejercicio_asignado_id, (repsEfectivasPorEjercicio.get(s.ejercicio_asignado_id) || 0) + efectivas);
   }
@@ -728,6 +736,7 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
     microciclo: ultimoCerrado,
     musculos: musculos.map((m) => ({ ...m, reps_efectivas: repsEfectivasPorMusculo.get(m.nombre) || 0 })),
     ejercicios: ejercicios.map((e) => ({ ...e, reps_efectivas: repsEfectivasPorEjercicio.get(e.id) || 0 })),
+    dropsets: [...dropsetEfectivasPorMusculo.entries()].map(([nombre, reps_efectivas]) => ({ nombre, reps_efectivas })),
   });
 });
 

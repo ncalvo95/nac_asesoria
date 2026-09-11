@@ -842,6 +842,24 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     });
   }
 
+  // Agrega/quita una serie extra de dropset al final del ejercicio. El peso
+  // arranca en la mitad de la ultima serie real cargada (o del peso base si
+  // todavia no se cargo nada), redondeado a 0.5kg - el usuario lo puede
+  // cambiar igual. No se recalcula si ya esta activa (toggle apaga/prende).
+  function toggleDropset(ejercicioId) {
+    setSeries((prev) => {
+      const actuales = prev[ejercicioId];
+      if (actuales.some((s) => s.esDropset)) {
+        return { ...prev, [ejercicioId]: actuales.filter((s) => !s.esDropset) };
+      }
+      const ej = dia.ejercicios.find((e) => e.id === ejercicioId);
+      const ultimaReal = [...actuales].reverse().find((s) => s.peso !== '');
+      const pesoBase = ultimaReal ? Number(ultimaReal.peso) : ej?.peso_actual;
+      const pesoDropset = Number.isFinite(pesoBase) ? String(Math.round(pesoBase) / 2) : '';
+      return { ...prev, [ejercicioId]: [...actuales, { peso: pesoDropset, reps: '', rir: 1, esDropset: true }] };
+    });
+  }
+
   async function moverEjercicio(index, delta) {
     const nuevoIndex = index + delta;
     if (nuevoIndex < 0 || nuevoIndex >= dia.ejercicios.length) return;
@@ -861,8 +879,8 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     const payload = [];
     for (const ej of dia.ejercicios) {
       for (const [idx, s] of series[ej.id].entries()) {
-        if (s.reps === '') {
-          setError(`Completá las reps de todas las series de "${ej.ejercicio_nombre}".`);
+        if (s.peso === '' || s.reps === '') {
+          setError(`Completá el peso y las reps de todas las series de "${ej.ejercicio_nombre}".`);
           return;
         }
         payload.push({
@@ -871,6 +889,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
           peso: Number(s.peso),
           reps: Number(s.reps),
           rir: Number(s.rir),
+          es_dropset: s.esDropset ? 1 : 0,
         });
       }
     }
@@ -956,15 +975,23 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                     </span>
                   </div>
                 </div>
-                {nota && (
-                  <span
-                    className={`text-[11px] font-semibold rounded-full px-2.5 py-1 whitespace-nowrap ${
-                      nota.mejoro ? 'bg-success-bg text-success' : nota.serie_agregada ? 'bg-warning-bg text-warning' : ''
-                    }`}
-                  >
-                    {nota.mejoro ? 'Mejoró' : nota.serie_agregada ? '+1 serie' : ''}
-                  </span>
-                )}
+                <div className="flex flex-col items-end gap-1.5">
+                  <ComentarioBoton
+                    endpoint={`/ejercicios/${ej.id}/comentario`}
+                    comentarioActual={ej.comentario}
+                    recordarActual={ej.comentario_recordar}
+                    onGuardado={onRutinaCambiada}
+                  />
+                  {nota && (
+                    <span
+                      className={`text-[11px] font-semibold rounded-full px-2.5 py-1 whitespace-nowrap ${
+                        nota.mejoro ? 'bg-success-bg text-success' : nota.serie_agregada ? 'bg-warning-bg text-warning' : ''
+                      }`}
+                    >
+                      {nota.mejoro ? 'Mejoró' : nota.serie_agregada ? '+1 serie' : ''}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {Boolean(ej.comentario_recordar && ej.comentario) && (
@@ -976,26 +1003,20 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
               </div>
               {series[ej.id].map((s, idx) => {
                 const efectivas = repsEfectivas(s.reps, s.rir);
-                // Si se mantiene el mismo peso que en la serie anterior (con
-                // el descanso habitual entre series), es esperable un
-                // declive de rendimiento de ~2 reps - se sugiere en gris en
-                // base a lo que REALMENTE se cargo en la serie anterior, no
-                // a otra sugerencia previa (encadenado, no un calculo fijo
-                // desde la serie 1). Es solo un placeholder: no cuenta como
-                // cargado hasta que el usuario lo confirma o corrige.
-                const anterior = idx > 0 ? series[ej.id][idx - 1] : null;
-                const repsAnterior = anterior ? Number(anterior.reps) : null;
-                const mismoPeso = anterior && anterior.peso !== '' && s.peso !== '' && Number(anterior.peso) === Number(s.peso);
-                const sugerenciaReps = mismoPeso && anterior.reps !== '' && Number.isFinite(repsAnterior)
-                  ? String(Math.max(0, repsAnterior - 2))
-                  : undefined;
+                const sugerenciaReps = calcularSugerenciaReps(ej, series[ej.id], idx);
                 return (
-                  <div key={idx} className="grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 items-center">
-                    <span className="tabular text-[13px] text-text-muted text-center">{idx + 1}</span>
+                  <div
+                    key={idx}
+                    className={`grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 items-center ${s.esDropset ? 'opacity-90' : ''}`}
+                  >
+                    <span className="tabular text-[11px] font-semibold text-text-muted text-center">
+                      {s.esDropset ? 'DS' : idx + 1}
+                    </span>
                     <input
                       type="number" inputMode="decimal" value={s.peso}
+                      placeholder={s.esDropset ? undefined : (ej.peso_actual != null ? String(ej.peso_actual) : undefined)}
                       onChange={(e) => actualizarSerie(ej.id, idx, 'peso', e.target.value)}
-                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent"
+                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint"
                     />
                     <input
                       type="number" inputMode="numeric" value={s.reps}
@@ -1013,10 +1034,21 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 );
               })}
               <span className="tabular text-[11px] text-text-faint -mt-1">
-                {series[ej.id].reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} reps efectivas en total
+                {series[ej.id].filter((s) => !s.esDropset).reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} reps efectivas en total
+                {series[ej.id].some((s) => s.esDropset) && (
+                  <> · {series[ej.id].filter((s) => s.esDropset).reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} de dropset</>
+                )}
               </span>
 
-              <EjercicioAcciones ejercicio={ej} usuario={usuario} onCambiado={onRutinaCambiada} diasHermanos={diasHermanos} esUltimoDelMusculo={esUltimoDelMusculo} />
+              <EjercicioAcciones
+                ejercicio={ej}
+                usuario={usuario}
+                onCambiado={onRutinaCambiada}
+                diasHermanos={diasHermanos}
+                esUltimoDelMusculo={esUltimoDelMusculo}
+                dropsetActivo={series[ej.id].some((s) => s.esDropset)}
+                onToggleDropset={() => toggleDropset(ej.id)}
+              />
               </div>
             </div>
           );
@@ -1047,7 +1079,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   );
 }
 
-function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUltimoDelMusculo }) {
+function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUltimoDelMusculo, dropsetActivo, onToggleDropset }) {
   const advertenciaQuitar = ejercicio.es_top_de_musculo || esUltimoDelMusculo
     ? `Este es el ejercicio ${ejercicio.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ejercicio.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
     : null;
@@ -1059,8 +1091,19 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
 
   return (
     <div className="flex flex-col gap-2 pt-1 border-t border-border -mx-4 px-4">
-      <div className="flex items-start justify-between gap-2 pt-2">
-        <AjusteSeries ejercicioId={ejercicio.id} seriesActuales={ejercicio.series_actuales} onAjustado={onCambiado} onError={setError} />
+      <div className="flex items-start justify-between gap-2 pt-2 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <AjusteSeries ejercicioId={ejercicio.id} seriesActuales={ejercicio.series_actuales} onAjustado={onCambiado} onError={setError} />
+          <label className="flex items-center gap-1.5 shrink-0 cursor-pointer" title="DropSet">
+            <input
+              type="checkbox"
+              checked={dropsetActivo}
+              onChange={onToggleDropset}
+              className="w-4 h-4 accent-accent"
+            />
+            <span className="text-[11px] font-semibold text-text-muted whitespace-nowrap">DS</span>
+          </label>
+        </div>
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -1109,33 +1152,26 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
             )}
           </div>
 
-          <ComentarioBoton
-            endpoint={`/ejercicios/${ejercicio.id}/comentario`}
-            comentarioActual={ejercicio.comentario}
-            recordarActual={ejercicio.comentario_recordar}
-            onGuardado={onCambiado}
-          />
+          {diasHermanos?.length > 0 && (
+            <div className="flex flex-col items-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => setMostrarMoverCopiar((v) => !v)}
+                className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+              >
+                Mover / copiar a otro día
+              </button>
+              {mostrarMoverCopiar && (
+                <MoverCopiarEjercicio
+                  ejercicioId={ejercicio.id}
+                  diasHermanos={diasHermanos}
+                  onListo={() => { setMostrarMoverCopiar(false); onCambiado(); }}
+                  onError={setError}
+                />
+              )}
+            </div>
+          )}
         </div>
-
-        {diasHermanos?.length > 0 && (
-          <div className="flex flex-col items-end gap-1.5">
-            <button
-              type="button"
-              onClick={() => setMostrarMoverCopiar((v) => !v)}
-              className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
-            >
-              Mover / copiar a otro día
-            </button>
-            {mostrarMoverCopiar && (
-              <MoverCopiarEjercicio
-                ejercicioId={ejercicio.id}
-                diasHermanos={diasHermanos}
-                onListo={() => { setMostrarMoverCopiar(false); onCambiado(); }}
-                onError={setError}
-              />
-            )}
-          </div>
-        )}
       </div>
 
       {error && <span className="text-[11px] text-danger">{error}</span>}
@@ -1520,10 +1556,38 @@ function construirEstadoInicial(dia) {
     dia.ejercicios.map((ej) => [
       ej.id,
       Array.from({ length: ej.series_actuales }, () => ({
-        peso: ej.peso_actual ?? '',
+        peso: '',
         reps: '',
         rir: 1,
+        esDropset: false,
       })),
     ])
   );
+}
+
+// Sugerencia en gris (placeholder, no un valor cargado) de cuantas reps
+// esperar en esta serie. La serie 1 usa el piso de reps calculado en el
+// ultimo cierre de microciclo (progreso_ejercicio_microciclo.piso_reps); de
+// ahi en mas, si se mantiene el mismo peso que en la serie anterior (con el
+// descanso habitual entre series), es esperable un declive de ~2 reps -
+// encadenado desde lo REALMENTE cargado en la serie anterior, o si todavia
+// no se cargo nada ahi, desde su propia sugerencia (recursivo).
+function calcularSugerenciaReps(ej, seriesEjercicio, idx) {
+  const actual = seriesEjercicio[idx];
+  if (actual.esDropset) return undefined;
+  if (idx === 0) {
+    return ej.piso_reps != null ? String(ej.piso_reps) : undefined;
+  }
+  const anterior = seriesEjercicio[idx - 1];
+  if (anterior.esDropset) return undefined;
+  const pesoActual = actual.peso !== '' ? Number(actual.peso) : ej.peso_actual;
+  const pesoAnterior = anterior.peso !== '' ? Number(anterior.peso) : ej.peso_actual;
+  const mismoPeso = pesoActual != null && pesoAnterior != null && Number.isFinite(pesoActual)
+    && Number.isFinite(pesoAnterior) && pesoActual === pesoAnterior;
+  if (!mismoPeso) return undefined;
+
+  const repsAnterior = anterior.reps !== ''
+    ? Number(anterior.reps)
+    : Number(calcularSugerenciaReps(ej, seriesEjercicio, idx - 1));
+  return Number.isFinite(repsAnterior) ? String(Math.max(0, repsAnterior - 2)) : undefined;
 }

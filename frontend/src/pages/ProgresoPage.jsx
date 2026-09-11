@@ -232,6 +232,7 @@ export default function ProgresoPage() {
               const pct = Math.min(100, Math.round((m.volumen_directo / m.mav) * 100));
               const color = m.cerca_de_mav ? 'var(--color-danger)' : pct >= 75 ? 'var(--color-warning)' : 'var(--color-accent)';
               const valueColor = m.cerca_de_mav ? 'text-danger' : pct >= 75 ? 'text-warning' : 'text-text-faint';
+              const dropset = progreso.dropsets?.find((d) => d.nombre === m.nombre);
               return (
                 <div key={m.nombre} className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
@@ -243,7 +244,10 @@ export default function ProgresoPage() {
                   <div className="h-2 rounded-full bg-track overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
                   </div>
-                  <span className="tabular text-[11px] text-text-faint">{m.reps_efectivas} reps efectivas en el bloque</span>
+                  <span className="tabular text-[11px] text-text-faint">
+                    {m.reps_efectivas} reps efectivas en el bloque
+                    {dropset && <> · {dropset.reps_efectivas} de dropset</>}
+                  </span>
                 </div>
               );
             })}

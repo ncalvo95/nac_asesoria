@@ -308,7 +308,8 @@ CREATE TABLE IF NOT EXISTS registro_serie (
   peso REAL NOT NULL,
   reps INTEGER NOT NULL,
   rir INTEGER, -- puede faltar en series de semana 0 (testeo exploratorio)
-  molestia TEXT
+  molestia TEXT,
+  es_dropset INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_registro_serie_sesion ON registro_serie(registro_sesion_id);

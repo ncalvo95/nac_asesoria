@@ -25,6 +25,7 @@ const columnasNuevas = [
   { tabla: 'ejercicio_asignado', columna: 'comentario', definicion: 'TEXT' },
   { tabla: 'ejercicio_asignado', columna: 'comentario_recordar', definicion: 'INTEGER NOT NULL DEFAULT 0' },
   { tabla: 'microciclo', columna: 'tipo', definicion: "TEXT NOT NULL DEFAULT 'normal'" },
+  { tabla: 'registro_serie', columna: 'es_dropset', definicion: 'INTEGER NOT NULL DEFAULT 0' },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

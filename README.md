@@ -103,7 +103,8 @@ cierre de microciclo → progreso → export a Excel):
   /ejercicios/:id/copiar` arranca una instancia nueva a testear en el día
   destino).
 
-- Tanto un **ejercicio** como el **día en general** tienen un botón
+- Tanto un **ejercicio** (arriba a la derecha de la tarjeta, alineado con
+  el nombre del ejercicio) como el **día en general** tienen un botón
   "Comentario" que abre un panel con un textarea libre y un tick
   "Recordarme en la próxima actualización de entrenamiento"
   (`PATCH /ejercicios/:id/comentario` y `PATCH /dias/:id/comentario`,
@@ -200,7 +201,10 @@ cierre de microciclo → progreso → export a Excel):
   nada en vez de inventar un valor. Se muestra en vivo mientras se carga la
   sesión (columna "RE" por serie + total por ejercicio), agregado por
   músculo/ejercicio en Progreso (del último microciclo cerrado) y su
-  evolución en Reportes.
+  evolución en Reportes. Las series marcadas como dropset (`es_dropset`)
+  quedan afuera de este total normal - se agregan aparte, por músculo, y
+  se muestran como un subtotal ("· N de dropset") tanto en vivo al cargar
+  la sesión como en Progreso.
 - Generador de Excel para invitados, sin cuenta ni persistencia
   (`src/routes/guest.js`) y **exportación a Excel para usuarios registrados**
   (`GET /api/rutinas/:rutinaId/export.xlsx`) que precarga el historial real
@@ -211,15 +215,27 @@ cierre de microciclo → progreso → export a Excel):
 - Frontend (`frontend/`): login (con "recordarme"), onboarding (con la
   opción de generación automática, split personalizado o armado manual de
   la rutina), "Día de entrenamiento" (semana 0 de testeo con fecha de
-  inicio elegible, registro de series por peso/reps/RIR - si se mantiene
-  el mismo peso que en la serie anterior, a partir de la 2da serie el
-  campo de reps muestra en gris (placeholder, no un valor cargado) una
-  sugerencia de 2 reps menos que la serie anterior REAL (no la sugerencia
-  previa - si el usuario carga un numero distinto al sugerido, o cambia
-  el peso, la siguiente sugerencia se recalcula en cadena desde ese
-  valor), pensado para el declive tipico a ~90s de descanso entre series;
-  el usuario igual tiene que escribir lo que hizo de verdad, el
-  placeholder no cuenta como cargado -, sustitución o agregado de
+  inicio elegible, registro de series por peso/reps/RIR - los campos de
+  peso y reps arrancan vacíos, mostrando en gris (placeholder, no un valor
+  cargado) lo recomendado como referencia: el peso, el peso base del
+  ejercicio (`peso_actual`); las reps, en la serie 1 el piso de reps del
+  último cierre (`piso_reps`), y de ahí en más, si se mantiene el mismo
+  peso que en la serie anterior (comparando lo tipeado, o el peso base si
+  todavía no se tipeó nada), 2 reps menos que la serie anterior REAL -no
+  la sugerencia previa- (si el usuario carga un número distinto al
+  sugerido, o cambia el peso, la siguiente sugerencia se recalcula en
+  cadena desde ese valor), pensado para el declive típico a ~90s de
+  descanso entre series con el mismo peso; el usuario igual tiene que
+  escribir lo que hizo de verdad -peso y reps-, el placeholder no cuenta
+  como cargado ni bloquea el guardado hasta que lo hace. Cada ejercicio
+  también tiene una casilla "DS" (DropSet): al marcarla agrega una serie
+  extra al final con el peso precargado a la mitad de la última serie
+  real cargada (o del peso base si todavía no se cargó ninguna),
+  redondeado a 0.5kg, editable igual; esa serie extra se identifica como
+  "DS" en vez de un número, no suma a las reps efectivas del
+  ejercicio/músculo pero sí a un total aparte de dropset por ejercicio
+  (columna `es_dropset` en `registro_serie`, excluida de
+  `getUltimaSerieEnRango` para no distorsionar la progresión) -, sustitución o agregado de
   ejercicio a mitad de
   rutina — en ambos casos con la opción de cargar uno "particular" que no
   está en el catálogo —, reordenar los ejercicios de un día con

@@ -69,15 +69,19 @@ const insertRegistroSesion = db.prepare(`
   VALUES (@usuario_id, @dia_rutina_id, COALESCE(@fecha, date('now')), @salteada, @microciclo_id)
 `);
 const insertRegistroSerie = db.prepare(`
-  INSERT INTO registro_serie (registro_sesion_id, ejercicio_asignado_id, numero_serie, peso, reps, rir, molestia)
-  VALUES (@registro_sesion_id, @ejercicio_asignado_id, @numero_serie, @peso, @reps, @rir, @molestia)
+  INSERT INTO registro_serie (registro_sesion_id, ejercicio_asignado_id, numero_serie, peso, reps, rir, molestia, es_dropset)
+  VALUES (@registro_sesion_id, @ejercicio_asignado_id, @numero_serie, @peso, @reps, @rir, @molestia, @es_dropset)
 `);
 
+// Excluye dropsets: son series a proposito mas livianas/al fallo para
+// buscar mas estimulo, no representan el rendimiento real del ejercicio a
+// ese peso - si se tomaran como "ultima serie" corromperian el techo/piso
+// que usa el cierre de microciclo para decidir si subir o bajar el peso.
 const getUltimaSerieEnRango = db.prepare(`
   SELECT rs.reps
   FROM registro_serie rs
   JOIN registro_sesion s ON s.id = rs.registro_sesion_id
-  WHERE rs.ejercicio_asignado_id = ? AND s.fecha BETWEEN ? AND ? AND s.salteada = 0
+  WHERE rs.ejercicio_asignado_id = ? AND s.fecha BETWEEN ? AND ? AND s.salteada = 0 AND rs.es_dropset = 0
   ORDER BY s.fecha DESC, rs.numero_serie DESC
   LIMIT 1
 `);
@@ -128,8 +132,8 @@ export const registrarSemana0 = db.transaction((rutinaId, usuarioId, resultados)
     const { lastInsertRowid: sesionId } = insertRegistroSesion.run({
       usuario_id: usuarioId, dia_rutina_id, fecha: null, salteada: 0, microciclo_id: microcicloTesteo.id,
     });
-    insertRegistroSerie.run({ registro_sesion_id: sesionId, ejercicio_asignado_id, numero_serie: 1, peso, reps: reps_serie1, rir: null, molestia: null });
-    insertRegistroSerie.run({ registro_sesion_id: sesionId, ejercicio_asignado_id, numero_serie: 2, peso, reps: reps_serie2, rir: null, molestia: null });
+    insertRegistroSerie.run({ registro_sesion_id: sesionId, ejercicio_asignado_id, numero_serie: 1, peso, reps: reps_serie1, rir: null, molestia: null, es_dropset: 0 });
+    insertRegistroSerie.run({ registro_sesion_id: sesionId, ejercicio_asignado_id, numero_serie: 2, peso, reps: reps_serie2, rir: null, molestia: null, es_dropset: 0 });
 
     // Piso de referencia para la semana siguiente: la mas alta de las 2
     // series del testeo (no siempre la serie 2 - a veces la persona elige
@@ -188,6 +192,7 @@ export function registrarSesion({ usuarioId, diaRutinaId, microcicloId, fecha, s
         reps: s.reps,
         rir: s.rir,
         molestia: s.molestia || null,
+        es_dropset: s.es_dropset ? 1 : 0,
       });
     }
   }
