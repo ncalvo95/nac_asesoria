@@ -2,7 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
-  agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, copiarEjercicioADia, crearRutina,
+  agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, cambiarDiaSemana, copiarEjercicioADia, crearRutina,
   crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva,
   quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
@@ -255,6 +255,50 @@ router.delete('/dias/:diaRutinaId', (req, res, next) => {
     res.json(rutina);
   } catch (err) {
     if (/Dia|dias activos|quitado/i.test(err.message)) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// Cambia el dia de la semana de un dia_rutina entero (todos sus ejercicios
+// se mueven juntos) - ver cambiarDiaSemana. Si el dia destino ya esta
+// ocupado, el frontend ya sabe (tiene los dias activos en pantalla) y manda
+// `conflicto` de una vez; si no lo manda y hace falta, el backend devuelve
+// 409 para que el frontend le pregunte al usuario que hacer.
+router.patch('/dias/:diaRutinaId/dia-semana', (req, res, next) => {
+  const dia = db.prepare(`
+    SELECT dr.*, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?
+  `).get(req.params.diaRutinaId);
+  if (!dia) return res.status(404).json({ error: 'Dia no encontrado.' });
+  if (!checkAccesoUsuario(req, res, dia.usuario_id)) return;
+
+  const { dia_semana, conflicto } = req.body || {};
+  if (!DIAS_VALIDOS.includes(dia_semana)) {
+    return res.status(400).json({ error: 'dia_semana invalido.' });
+  }
+  if (conflicto && !['mover', 'eliminar'].includes(conflicto.accion)) {
+    return res.status(400).json({ error: 'conflicto.accion debe ser mover o eliminar.' });
+  }
+  if (conflicto?.accion === 'mover' && !DIAS_VALIDOS.includes(conflicto.dia_semana_destino)) {
+    return res.status(400).json({ error: 'conflicto.dia_semana_destino invalido.' });
+  }
+
+  const payload = { dia_rutina_id: Number(req.params.diaRutinaId), dia_semana, conflicto: conflicto || null };
+
+  if (debeQuedarPendiente(req.usuario, dia.usuario_id)) {
+    const s = crearSolicitudCambio({ usuario_id: dia.usuario_id, coach_id: req.usuario.coach_id, tipo: 'dia_cambiar_semana', payload });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
+  }
+
+  try {
+    const rutina = cambiarDiaSemana(req.params.diaRutinaId, dia_semana, conflicto);
+    res.json(rutina);
+  } catch (err) {
+    if (/ya hay un dia activo/i.test(err.message)) {
+      return res.status(409).json({ error: err.message, conflicto: { dia_semana } });
+    }
+    if (/Dia|dia|Elegi/i.test(err.message)) {
       return res.status(400).json({ error: err.message });
     }
     next(err);

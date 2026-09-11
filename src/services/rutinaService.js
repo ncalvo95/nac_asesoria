@@ -961,6 +961,71 @@ export const quitarDiaRutina = db.transaction((diaRutinaId, { redistribuir = fal
   return obtenerRutinaActiva(usuarioId);
 });
 
+// Cambia el dia de la semana de un dia_rutina ENTERO (todos sus ejercicios
+// se mueven juntos, con su peso/series/progreso intactos) - para cuando el
+// usuario pasa lo que entrenaba un dia a otro (ej. "lo que hacia el lunes
+// ahora lo hago el martes") sin tener que mover ejercicio por ejercicio via
+// moverEjercicioADia. Si el dia destino ya tiene otro dia activo, hay que
+// decidir que hacer con ese - conflicto:
+//   - { accion: 'mover', dia_semana_destino } - el dia en conflicto pasa a
+//     un dia de la semana que este libre (no puede ser uno ya activo).
+//   - { accion: 'eliminar' } - el dia en conflicto se borra (si nunca tuvo
+//     sesiones) o se desactiva (si ya tiene historial), igual que
+//     quitarDiaRutina pero sin ofrecer redistribuir sus musculos - el
+//     usuario ya eligio conscientemente sacarlo.
+// El frontend ya conoce los dias activos (los tiene en pantalla), asi que
+// en el camino normal manda `conflicto` de una si hace falta; este chequeo
+// server-side es solo una red de seguridad ante una condicion de carrera.
+export const cambiarDiaSemana = db.transaction((diaRutinaId, nuevoDiaSemana, conflicto) => {
+  const dia = db.prepare(`
+    SELECT dr.*, r.id AS rutina_id, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?
+  `).get(diaRutinaId);
+  if (!dia) throw new Error('Dia no encontrado.');
+  if (!dia.activo) throw new Error('Ese dia no esta activo.');
+  if (!ORDEN_DIAS.includes(nuevoDiaSemana)) throw new Error('Dia de la semana invalido.');
+  if (dia.dia_semana === nuevoDiaSemana) throw new Error('Ese ya es el dia actual de este dia de rutina.');
+
+  const usuarioId = dia.usuario_id;
+  const diaSemanaOriginal = dia.dia_semana;
+  const diasActivos = getDiasActivosRutina.all(dia.rutina_id);
+  const diaEnConflicto = diasActivos.find((d) => d.dia_semana === nuevoDiaSemana && d.id !== Number(diaRutinaId));
+
+  const disponibilidad = getDisponibilidad.get(usuarioId);
+  const duracion = disponibilidad ? JSON.parse(disponibilidad.duracion_sesion_json) : {};
+
+  if (diaEnConflicto) {
+    if (!conflicto || !['mover', 'eliminar'].includes(conflicto.accion)) {
+      throw new Error(`Ya hay un dia activo en "${nuevoDiaSemana}" - elegi si moverlo o eliminarlo.`);
+    }
+    if (conflicto.accion === 'mover') {
+      const destino = conflicto.dia_semana_destino;
+      if (!destino || !ORDEN_DIAS.includes(destino)) throw new Error('Elegi a que dia mover el dia en conflicto.');
+      if (destino === nuevoDiaSemana || diasActivos.some((d) => d.dia_semana === destino && d.id !== diaEnConflicto.id)) {
+        throw new Error('Ese dia tambien esta ocupado.');
+      }
+      duracion[destino] = duracion[diaEnConflicto.dia_semana];
+      delete duracion[diaEnConflicto.dia_semana];
+      db.prepare('UPDATE dia_rutina SET dia_semana = ? WHERE id = ?').run(destino, diaEnConflicto.id);
+    } else {
+      const tieneSesiones = db.prepare('SELECT 1 FROM registro_sesion WHERE dia_rutina_id = ?').get(diaEnConflicto.id);
+      if (tieneSesiones) db.prepare('UPDATE dia_rutina SET activo = 0 WHERE id = ?').run(diaEnConflicto.id);
+      else db.prepare('DELETE FROM dia_rutina WHERE id = ?').run(diaEnConflicto.id);
+      delete duracion[diaEnConflicto.dia_semana];
+    }
+  }
+
+  duracion[nuevoDiaSemana] = duracion[diaSemanaOriginal];
+  delete duracion[diaSemanaOriginal];
+  db.prepare('UPDATE dia_rutina SET dia_semana = ? WHERE id = ?').run(nuevoDiaSemana, diaRutinaId);
+
+  renumerarDias(dia.rutina_id);
+
+  const diasEspecificosFinal = ordenarPorDiaSemana(getDiasActivosRutina.all(dia.rutina_id).map((d) => d.dia_semana));
+  aplicarDisponibilidad(usuarioId, { dias_especificos: diasEspecificosFinal, duracion_sesion: duracion });
+
+  return obtenerRutinaActiva(usuarioId);
+});
+
 // ---------------------------------------------------------------------------
 // Mover / copiar un ejercicio ya asignado a otro dia de la MISMA rutina -
 // por si durante el entrenamiento se decide que un ejercicio queda mejor en

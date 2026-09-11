@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api, API_BASE } from '../api/client.js';
 import AgregarDiaModal from '../components/AgregarDiaModal.jsx';
 import QuitarDiaModal from '../components/QuitarDiaModal.jsx';
+import CambiarDiaModal from '../components/CambiarDiaModal.jsx';
 import { formatearMusculo } from '../utils/musculo.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -722,6 +723,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
   const dia = rutina.dias.find((d) => d.id === diaId) ?? rutina.dias[0];
   const [mostrarAgregarDia, setMostrarAgregarDia] = useState(false);
   const [mostrarQuitarDia, setMostrarQuitarDia] = useState(false);
+  const [mostrarCambiarDia, setMostrarCambiarDia] = useState(false);
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto">
@@ -764,6 +766,13 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
             />
             <button
               type="button"
+              onClick={() => setMostrarCambiarDia(true)}
+              className="text-[11.5px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+            >
+              Cambiar día
+            </button>
+            <button
+              type="button"
               onClick={() => setMostrarQuitarDia(true)}
               className="text-[11.5px] font-medium text-danger underline underline-offset-2"
             >
@@ -803,6 +812,15 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           diaSemana={dia.dia_semana}
           onClose={() => setMostrarQuitarDia(false)}
           onQuitado={() => { setMostrarQuitarDia(false); onRutinaCambiada(); }}
+        />
+      )}
+      {mostrarCambiarDia && (
+        <CambiarDiaModal
+          diaRutinaId={dia.id}
+          diaSemanaActual={dia.dia_semana}
+          diasActivos={diasUnicos.filter((d) => d.id !== dia.id).map((d) => d.dia_semana)}
+          onClose={() => setMostrarCambiarDia(false)}
+          onCambiado={() => { setMostrarCambiarDia(false); onRutinaCambiada(); }}
         />
       )}
     </div>
@@ -966,12 +984,12 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
               <div className="flex items-start justify-between gap-2">
                 <div className="flex flex-col gap-1">
                   <span className="text-[14.5px] font-semibold">{ej.ejercicio_nombre}</span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
                       {formatearMusculo(ej.musculo_nombre)}
                     </span>
-                    <span className="text-[12px] text-text-faint">
-                      Objetivo {ej.rango_reps_min}–{ej.rango_reps_max} reps · Descanso {ej.descanso_segundos}s
+                    <span className="text-[12px] text-text-faint whitespace-nowrap">
+                      {ej.rango_reps_min}–{ej.rango_reps_max} reps · Descanso {ej.descanso_segundos}s
                     </span>
                   </div>
                 </div>
@@ -1124,7 +1142,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
               onClick={() => setMostrarPeso((v) => !v)}
               className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
             >
-              Ajustar peso base
+              Peso base
             </button>
             {mostrarPeso && (
               <AjustePeso
@@ -1141,7 +1159,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
               onClick={() => setMostrarDescanso((v) => !v)}
               className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
             >
-              Ajustar descanso
+              Descanso
             </button>
             {mostrarDescanso && (
               <AjusteDescanso
@@ -1159,7 +1177,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
                 onClick={() => setMostrarMoverCopiar((v) => !v)}
                 className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
               >
-                Mover / copiar a otro día
+                Mover/copiar
               </button>
               {mostrarMoverCopiar && (
                 <MoverCopiarEjercicio

@@ -11,6 +11,9 @@ const TIPO_LABEL = {
   rutina_auto: 'Generar rutina (automática)',
   rutina_manual: 'Generar rutina (manual)',
   rutina_split: 'Generar rutina (split personalizado)',
+  dia_agregar: 'Agregar día',
+  dia_quitar: 'Quitar día',
+  dia_cambiar_semana: 'Cambiar día de la semana',
 };
 
 export default function ProgresoPage() {

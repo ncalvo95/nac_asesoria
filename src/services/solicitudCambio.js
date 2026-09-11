@@ -1,6 +1,6 @@
 import db from '../db/index.js';
 import { aplicarDisponibilidad, aplicarEquipamiento, aplicarObjetivo } from './perfilService.js';
-import { agregarDiaRutina, crearRutina, crearRutinaConSplit, crearRutinaManual, quitarDiaRutina } from './rutinaService.js';
+import { agregarDiaRutina, cambiarDiaSemana, crearRutina, crearRutinaConSplit, crearRutinaManual, quitarDiaRutina } from './rutinaService.js';
 
 // Un cambio queda pendiente de aprobacion solo cuando: el actor ES el
 // cliente (no su coach ni el admin editandolo por el - esos ya son la
@@ -72,6 +72,8 @@ export function aplicarSolicitud(solicitud) {
       return agregarDiaRutina(solicitud.usuario_id, payload);
     case 'dia_quitar':
       return quitarDiaRutina(payload.dia_rutina_id, { redistribuir: payload.redistribuir });
+    case 'dia_cambiar_semana':
+      return cambiarDiaSemana(payload.dia_rutina_id, payload.dia_semana, payload.conflicto);
     default:
       throw new Error(`Tipo de solicitud desconocido: ${solicitud.tipo}`);
   }

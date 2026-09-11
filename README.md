@@ -137,6 +137,17 @@ cierre de microciclo → progreso → export a Excel):
     nunca tuvo una sesión registrada, o se desactiva (columna `activo` en
     `dia_rutina`, no aparece más como día activo) si ya tiene historial -
     así Reportes y la exportación a Excel no pierden esas sesiones viejas.
+  - **Cambiar día**: pasa TODOS los ejercicios de un día a otro día de la
+    semana de una sola vez (con su peso/series/progreso intactos), para
+    cuando el usuario simplemente cambia qué día entrena lo mismo (ej. "lo
+    que hacía el lunes ahora lo hago el martes") sin mover ejercicio por
+    ejercicio (`PATCH /dias/:id/dia-semana`, `cambiarDiaSemana` en
+    `rutinaService.js` - técnicamente solo reasigna `dia_rutina.dia_semana`
+    y recalcula `numero_dia`, nunca toca `ejercicio_asignado`). Si el día
+    elegido ya tiene otro día activo, el frontend pregunta qué hacer con
+    ese antes de confirmar: moverlo a un día que esté libre (con su
+    progreso intacto también) o eliminarlo (se borra o se desactiva, según
+    si ya tiene historial, igual que Quitar día).
 - Semana 0 (testeo) y registro de sesión/serie (`src/services/progressionEngine.js`,
   `src/routes/sesiones.js`). Lo que se va tipeando (peso/reps/RIR de Semana 0
   y del registro normal del día) se guarda como borrador en `localStorage`
