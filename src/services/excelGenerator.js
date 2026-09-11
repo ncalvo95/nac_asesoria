@@ -58,7 +58,6 @@ function construirWorkbook({ filas, meta, numMicrociclos = NUM_MICROCICLOS_DEFAU
   info.addRow(['5. Si una sesion no entra en el tiempo que tenes disponible, priorizá los ejercicios compuestos y recorta accesorios (filas) antes que apurar la tecnica.']);
   info.addRow([]);
   info.addRow(['Simplificaciones de esta version de Excel']);
-  info.addRow(['- No incluye modo "lineal forzado" por ejercicio: si no llegas al minimo de reps, el peso baja automaticamente el proximo microciclo (en la app si se respeta ese modo).']);
   info.addRow(['- No incluye sustitucion de ejercicios a mitad de rutina ni ajustes manuales de series - esos cambios los tenes que reflejar en la app.']);
   info.addRow(['- No incluye semana de descarga (deload): es opcional y a pedido, agregala manualmente si la necesitas.']);
   info.getColumn(1).width = 90;

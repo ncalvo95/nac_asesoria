@@ -308,15 +308,6 @@ function getEjercicioAsignadoOr404(req, res) {
   return ea;
 }
 
-router.patch('/ejercicios/:ejercicioAsignadoId/lineal-forzado', (req, res) => {
-  const ea = getEjercicioAsignadoOr404(req, res);
-  if (!ea) return;
-  const { activo } = req.body || {};
-  if (typeof activo !== 'boolean') return res.status(400).json({ error: 'activo debe ser boolean.' });
-  db.prepare('UPDATE ejercicio_asignado SET modo_lineal_forzado = ? WHERE id = ?').run(activo ? 1 : 0, ea.id);
-  res.json({ id: ea.id, modo_lineal_forzado: activo });
-});
-
 // Ajuste manual de series (+1/-1), sin esperar al cierre de microciclo.
 router.patch('/ejercicios/:ejercicioAsignadoId/series', (req, res, next) => {
   const ea = getEjercicioAsignadoOr404(req, res);
@@ -333,8 +324,8 @@ router.patch('/ejercicios/:ejercicioAsignadoId/series', (req, res, next) => {
 });
 
 // Ajuste manual del peso base (el que se precarga en la proxima sesion),
-// independiente del modo lineal forzado y sin esperar al cierre de
-// microciclo - el usuario/coach puede cambiarlo cuando quiera.
+// sin esperar al cierre de microciclo - el usuario/coach puede cambiarlo
+// cuando quiera.
 router.patch('/ejercicios/:ejercicioAsignadoId/peso', (req, res) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;

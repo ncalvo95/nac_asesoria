@@ -211,15 +211,16 @@ cierre de microciclo → progreso → export a Excel):
 - Frontend (`frontend/`): login (con "recordarme"), onboarding (con la
   opción de generación automática, split personalizado o armado manual de
   la rutina), "Día de entrenamiento" (semana 0 de testeo con fecha de
-  inicio elegible, registro de series por peso/reps/RIR, modo "lineal
-  forzado" por ejercicio -con esto activo, a partir de la 2da serie el
+  inicio elegible, registro de series por peso/reps/RIR - si se mantiene
+  el mismo peso que en la serie anterior, a partir de la 2da serie el
   campo de reps muestra en gris (placeholder, no un valor cargado) una
   sugerencia de 2 reps menos que la serie anterior REAL (no la sugerencia
-  previa - si el usuario carga un numero distinto al sugerido, la
-  siguiente sugerencia se recalcula en cadena desde ese valor), pensado
-  para el declive tipico a ~90s de descanso entre series; el usuario
-  igual tiene que escribir lo que hizo de verdad, el placeholder no cuenta
-  como cargado-, sustitución o agregado de ejercicio a mitad de
+  previa - si el usuario carga un numero distinto al sugerido, o cambia
+  el peso, la siguiente sugerencia se recalcula en cadena desde ese
+  valor), pensado para el declive tipico a ~90s de descanso entre series;
+  el usuario igual tiene que escribir lo que hizo de verdad, el
+  placeholder no cuenta como cargado -, sustitución o agregado de
+  ejercicio a mitad de
   rutina — en ambos casos con la opción de cargar uno "particular" que no
   está en el catálogo —, reordenar los ejercicios de un día con
   flechas, ajuste manual de series (+1/-1, respetando el piso y el tope

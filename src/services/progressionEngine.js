@@ -325,14 +325,14 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
       } else {
         nota = 'Musculo estancado, pero este ejercicio ya esta en su tope de series.';
       }
-    } else if (techo < ej.rango_reps_min && !ej.modo_lineal_forzado) {
+    } else if (techo < ej.rango_reps_min) {
       nota = 'No llegaste al minimo de reps: se baja el peso el proximo microciclo.';
     }
 
     let pesoSugerido = progreso.peso_prescrito;
     if (techo != null) {
       if (techo > ej.rango_reps_max) pesoSugerido = progreso.peso_prescrito + INCREMENTO_KG_DEFAULT;
-      else if (techo < ej.rango_reps_min && !ej.modo_lineal_forzado) pesoSugerido = progreso.peso_prescrito - INCREMENTO_KG_DEFAULT;
+      else if (techo < ej.rango_reps_min) pesoSugerido = progreso.peso_prescrito - INCREMENTO_KG_DEFAULT;
     }
 
     updateProgresoResultado.run({

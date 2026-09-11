@@ -976,15 +976,17 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
               </div>
               {series[ej.id].map((s, idx) => {
                 const efectivas = repsEfectivas(s.reps, s.rir);
-                // En modo lineal forzado, sugerimos un declive de 2 reps por
-                // serie (a los ~90s de descanso habituales entre series) en
+                // Si se mantiene el mismo peso que en la serie anterior (con
+                // el descanso habitual entre series), es esperable un
+                // declive de rendimiento de ~2 reps - se sugiere en gris en
                 // base a lo que REALMENTE se cargo en la serie anterior, no
-                // a otra sugerencia previa - encadenado, no un calculo fijo
-                // desde la serie 1. Es solo un placeholder en gris: no cuenta
-                // como cargado hasta que el usuario lo confirma o corrige.
-                const repsAnterior = idx > 0 ? Number(series[ej.id][idx - 1].reps) : null;
-                const sugerenciaReps = ej.modo_lineal_forzado && idx > 0
-                  && series[ej.id][idx - 1].reps !== '' && Number.isFinite(repsAnterior)
+                // a otra sugerencia previa (encadenado, no un calculo fijo
+                // desde la serie 1). Es solo un placeholder: no cuenta como
+                // cargado hasta que el usuario lo confirma o corrige.
+                const anterior = idx > 0 ? series[ej.id][idx - 1] : null;
+                const repsAnterior = anterior ? Number(anterior.reps) : null;
+                const mismoPeso = anterior && anterior.peso !== '' && s.peso !== '' && Number(anterior.peso) === Number(s.peso);
+                const sugerenciaReps = mismoPeso && anterior.reps !== '' && Number.isFinite(repsAnterior)
                   ? String(Math.max(0, repsAnterior - 2))
                   : undefined;
                 return (
@@ -1046,7 +1048,6 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
 }
 
 function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUltimoDelMusculo }) {
-  const [linealForzado, setLinealForzado] = useState(Boolean(ejercicio.modo_lineal_forzado));
   const advertenciaQuitar = ejercicio.es_top_de_musculo || esUltimoDelMusculo
     ? `Este es el ejercicio ${ejercicio.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ejercicio.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
     : null;
@@ -1056,29 +1057,9 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
   const [mostrarMoverCopiar, setMostrarMoverCopiar] = useState(false);
   const [error, setError] = useState('');
 
-  async function toggleLineal() {
-    const nuevo = !linealForzado;
-    setLinealForzado(nuevo);
-    try {
-      await api.patch(`/ejercicios/${ejercicio.id}/lineal-forzado`, { activo: nuevo });
-    } catch {
-      setLinealForzado(!nuevo);
-    }
-  }
-
   return (
     <div className="flex flex-col gap-2 pt-1 border-t border-border -mx-4 px-4">
       <div className="flex items-start justify-between gap-2 pt-2">
-        <button
-          type="button"
-          onClick={toggleLineal}
-          title="Si lo activás, el peso no baja automáticamente aunque no llegues al mínimo de reps."
-          className={`text-[11px] font-medium px-2 py-1 rounded-md border whitespace-nowrap ${
-            linealForzado ? 'border-accent text-accent bg-bg' : 'border-border text-text-faint bg-transparent'
-          }`}
-        >
-          {linealForzado ? '✓ Lineal forzado' : 'Lineal forzado'}
-        </button>
         <AjusteSeries ejercicioId={ejercicio.id} seriesActuales={ejercicio.series_actuales} onAjustado={onCambiado} onError={setError} />
         <div className="flex items-center gap-3">
           <button
@@ -1212,8 +1193,8 @@ function AjusteSeries({ ejercicioId, seriesActuales, onAjustado, onError }) {
   );
 }
 
-// Cambiar el peso base (el que se precarga la proxima sesion) sin depender
-// del modo lineal forzado ni esperar al cierre de microciclo.
+// Cambiar el peso base (el que se precarga la proxima sesion) sin esperar
+// al cierre de microciclo.
 function AjustePeso({ ejercicioId, pesoActual, onAjustado }) {
   const [peso, setPeso] = useState(pesoActual ?? '');
   const [error, setError] = useState('');

@@ -23,10 +23,10 @@ const insertDiaRutina = db.prepare(`
 const insertEjercicioAsignado = db.prepare(`
   INSERT INTO ejercicio_asignado (
     dia_rutina_id, ejercicio_id, orden, es_top_de_musculo, musculo_objetivo_id,
-    series_actuales, peso_actual, rango_reps_min, rango_reps_max, modo_lineal_forzado
+    series_actuales, peso_actual, rango_reps_min, rango_reps_max
   ) VALUES (
     @dia_rutina_id, @ejercicio_id, @orden, @es_top_de_musculo, @musculo_objetivo_id,
-    @series_actuales, NULL, @rango_reps_min, @rango_reps_max, 0
+    @series_actuales, NULL, @rango_reps_min, @rango_reps_max
   )
 `);
 // Siempre numero=0, la semana de testeo inicial de una rutina recien creada
@@ -446,8 +446,8 @@ const hayEjercicioDelMusculoEnElDia = db.prepare(
 const insertEjercicioAsignadoExtra = db.prepare(`
   INSERT INTO ejercicio_asignado (
     dia_rutina_id, ejercicio_id, orden, es_top_de_musculo, musculo_objetivo_id,
-    series_actuales, peso_actual, rango_reps_min, rango_reps_max, modo_lineal_forzado
-  ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)
+    series_actuales, peso_actual, rango_reps_min, rango_reps_max
+  ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
 `);
 
 // Si el musculo ya esta presente ese dia, el nuevo ejercicio entra como

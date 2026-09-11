@@ -193,4 +193,16 @@ function fixDeloadCascade() {
 }
 fixDeloadCascade();
 
+// "Lineal forzado" (modo por ejercicio que evitaba que el peso bajara solo
+// si no se llegaba al minimo de reps) se saco por confuso: la baja de
+// rendimiento entre series manteniendo el mismo peso es la expectativa
+// normal, no algo que necesite un modo aparte. Columna vieja, sin uso.
+function sacarColumnaLinealForzado() {
+  const existe = db.prepare('PRAGMA table_info(ejercicio_asignado)').all()
+    .some((c) => c.name === 'modo_lineal_forzado');
+  if (!existe) return;
+  db.exec('ALTER TABLE ejercicio_asignado DROP COLUMN modo_lineal_forzado');
+}
+sacarColumnaLinealForzado();
+
 console.log('Migracion aplicada correctamente.');

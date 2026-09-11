@@ -227,7 +227,6 @@ CREATE TABLE IF NOT EXISTS ejercicio_asignado (
   peso_actual REAL,
   rango_reps_min INTEGER NOT NULL,
   rango_reps_max INTEGER NOT NULL,
-  modo_lineal_forzado INTEGER NOT NULL DEFAULT 0,
   descanso_segundos INTEGER NOT NULL DEFAULT 90,
   comentario TEXT,
   comentario_recordar INTEGER NOT NULL DEFAULT 0
