@@ -4,7 +4,7 @@ import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
   agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, cambiarDiaSemana, copiarEjercicioADia, crearRutina,
   crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva,
-  quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
+  quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import {
   cerrarMicrociclo, marcarNuevoTesteo, marcarSemanaDescarga, obtenerTesteos, registrarSemana0, repsEfectivas, saltearTesteo,
@@ -142,7 +142,7 @@ router.post('/usuarios/:usuarioId/rutina/split', (req, res, next) => {
   const usuarioId = Number(req.params.usuarioId);
   if (!checkAccesoUsuario(req, res, usuarioId)) return;
 
-  const { dias } = req.body || {};
+  const { dias, diferir_ejercicios } = req.body || {};
   if (!Array.isArray(dias) || dias.length < 2 || dias.length > 6) {
     return res.status(400).json({ error: 'dias debe tener entre 2 y 6 elementos.' });
   }
@@ -161,12 +161,15 @@ router.post('/usuarios/:usuarioId/rutina/split', (req, res, next) => {
   }
 
   if (debeQuedarPendiente(req.usuario, usuarioId)) {
-    const s = crearSolicitudCambio({ usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_split', payload: { dias } });
+    const s = crearSolicitudCambio({
+      usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_split',
+      payload: { dias, diferirEjercicios: Boolean(diferir_ejercicios) },
+    });
     return res.status(202).json({ pendiente: true, solicitud_id: s.id });
   }
 
   try {
-    const rutina = crearRutinaConSplit(usuarioId, { dias });
+    const rutina = crearRutinaConSplit(usuarioId, { dias, diferirEjercicios: Boolean(diferir_ejercicios) });
     res.status(201).json(rutina);
   } catch (err) {
     if (err.message.includes('objetivo') || err.message.includes('equipamiento')) {
@@ -435,6 +438,27 @@ router.patch('/ejercicios/:ejercicioAsignadoId/comentario', (req, res) => {
   res.json({ id: ea.id, comentario: comentario || null, comentario_recordar: Boolean(recordar) });
 });
 
+// Corrige el nombre de un ejercicio "particular" ya cargado (por si se
+// anoto mal) - ver renombrarEjercicioParticular, rechaza cualquier
+// ejercicio del catalogo comun (solo los que se cargaron a mano).
+router.patch('/ejercicios/:ejercicioAsignadoId/nombre-particular', (req, res, next) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { nombre } = req.body || {};
+  if (!nombre || !nombre.trim()) {
+    return res.status(400).json({ error: 'nombre es obligatorio.' });
+  }
+  try {
+    const out = renombrarEjercicioParticular(ea.id, nombre);
+    res.json(out);
+  } catch (err) {
+    if (err.message.includes('particular') || err.message.includes('vacio') || err.message.includes('encontrado')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
 router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;
@@ -468,14 +492,14 @@ router.get('/ejercicios/:ejercicioAsignadoId/candidatos', (req, res) => {
 router.post('/ejercicios/:ejercicioAsignadoId/sustituir', (req, res, next) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;
-  const { nuevo_ejercicio_id, nombre_personalizado, peso, reps_serie1, reps_serie2 } = req.body || {};
-  if ((!nuevo_ejercicio_id && !nombre_personalizado) || peso == null || reps_serie1 == null || reps_serie2 == null) {
-    return res.status(400).json({ error: '(nuevo_ejercicio_id o nombre_personalizado), peso, reps_serie1 y reps_serie2 son obligatorios.' });
+  const { nuevo_ejercicio_id, nombre_personalizado, peso, reps } = req.body || {};
+  if ((!nuevo_ejercicio_id && !nombre_personalizado) || peso == null || reps == null) {
+    return res.status(400).json({ error: '(nuevo_ejercicio_id o nombre_personalizado), peso y reps son obligatorios.' });
   }
   try {
     const out = sustituirEjercicio({
       ejercicioAsignadoId: ea.id, usuarioId: ea.usuario_id, nuevoEjercicioId: nuevo_ejercicio_id,
-      nombrePersonalizado: nombre_personalizado, peso, repsSerie1: reps_serie1, repsSerie2: reps_serie2,
+      nombrePersonalizado: nombre_personalizado, peso, reps,
     });
     res.json(out);
   } catch (err) {
@@ -558,14 +582,14 @@ router.get('/dias/:diaRutinaId/musculos/:musculoId/candidatos', (req, res) => {
 router.post('/dias/:diaRutinaId/ejercicios', (req, res, next) => {
   const dia = getDiaOr404(req, res);
   if (!dia) return;
-  const { musculo_id, ejercicio_id, nombre_personalizado } = req.body || {};
-  if (!musculo_id || (!ejercicio_id && !nombre_personalizado)) {
-    return res.status(400).json({ error: 'musculo_id y (ejercicio_id o nombre_personalizado) son obligatorios.' });
+  const { musculo_id, ejercicio_id, nombre_personalizado, peso, reps } = req.body || {};
+  if (!musculo_id || (!ejercicio_id && !nombre_personalizado) || peso == null || reps == null) {
+    return res.status(400).json({ error: 'musculo_id, (ejercicio_id o nombre_personalizado), peso y reps son obligatorios.' });
   }
   try {
     const out = ejercicio_id
-      ? agregarEjercicioADia({ diaRutinaId: dia.id, usuarioId: dia.usuario_id, musculoId: musculo_id, ejercicioId: ejercicio_id })
-      : agregarEjercicioPersonalizadoADia({ diaRutinaId: dia.id, usuarioId: dia.usuario_id, musculoId: musculo_id, nombre: nombre_personalizado });
+      ? agregarEjercicioADia({ diaRutinaId: dia.id, usuarioId: dia.usuario_id, musculoId: musculo_id, ejercicioId: ejercicio_id, peso, reps })
+      : agregarEjercicioPersonalizadoADia({ diaRutinaId: dia.id, usuarioId: dia.usuario_id, musculoId: musculo_id, nombre: nombre_personalizado, peso, reps });
     res.status(201).json(out);
   } catch (err) {
     if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('ya esta') || err.message.includes('nombre')) {

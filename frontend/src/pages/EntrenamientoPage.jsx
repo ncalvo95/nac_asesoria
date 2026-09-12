@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api, API_BASE } from '../api/client.js';
@@ -189,7 +189,13 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
     setDias((prev) => prev.map((d) => (d.id === diaId
       ? { ...d, ejercicios: [...d.ejercicios, { ...nuevo, musculo_nombre: musculoNombre }] }
       : d)));
-    setValores((v) => ({ ...v, [nuevo.id]: { peso: '', reps1: '', reps2: '' } }));
+    // El peso y la serie de referencia ya se cargaron al agregar el
+    // ejercicio (ver AgregarEjercicioDia) - se precargan ambas series de
+    // este testeo con ese mismo valor, editable si hace falta.
+    setValores((v) => ({
+      ...v,
+      [nuevo.id]: { peso: String(nuevo.peso_actual ?? ''), reps1: String(nuevo.reps ?? ''), reps2: String(nuevo.reps ?? '') },
+    }));
   }
 
   function onQuitado(diaId, ejercicioAsignadoId) {
@@ -315,6 +321,12 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
         })}
       </div>
 
+      {diaActual.ejercicios.length === 0 && (
+        <p className="text-[12.5px] text-text-muted">
+          Todavía no hay ejercicios este día - agregalos abajo, con su peso y una serie de referencia.
+        </p>
+      )}
+
       <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
         {diaActual.ejercicios.map((ej, idx) => {
           const esUltimoDelMusculo = diaActual.ejercicios.filter(
@@ -359,6 +371,8 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
                   <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
                   <QuitarEjercicioBoton
                     ejercicioAsignadoId={ej.id}
+                    nombreEjercicio={ej.ejercicio_nombre}
+                    tieneSeries={Boolean(ej.tiene_series)}
                     onQuitado={() => onQuitado(diaActual.id, ej.id)}
                     advertencia={advertencia}
                   />
@@ -521,6 +535,8 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
   const [elegido, setElegido] = useState('');
   const [particular, setParticular] = useState(false);
   const [nombreParticular, setNombreParticular] = useState('');
+  const [peso, setPeso] = useState('');
+  const [reps, setReps] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -542,19 +558,25 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
     setAbierto(false);
     setParticular(false);
     setNombreParticular('');
+    setPeso('');
+    setReps('');
   }
 
   async function confirmar() {
-    if (!musculoId || (particular ? !nombreParticular.trim() : !elegido)) {
-      setError(particular ? 'Elegí un músculo y escribí el nombre del ejercicio.' : 'Elegí un músculo y un ejercicio.');
+    const faltaEjercicio = particular ? !nombreParticular.trim() : !elegido;
+    if (!musculoId || faltaEjercicio || peso === '' || reps === '') {
+      setError('Elegí el ejercicio y cargá el peso y la serie de referencia.');
       return;
     }
     setEnviando(true);
     setError('');
     try {
-      const body = particular
-        ? { musculo_id: Number(musculoId), nombre_personalizado: nombreParticular.trim() }
-        : { musculo_id: Number(musculoId), ejercicio_id: Number(elegido) };
+      const body = {
+        musculo_id: Number(musculoId),
+        ...(particular ? { nombre_personalizado: nombreParticular.trim() } : { ejercicio_id: Number(elegido) }),
+        peso: Number(peso),
+        reps: Number(reps),
+      };
       const nuevo = await api.post(`/dias/${diaRutinaId}/ejercicios`, body);
       const musculoNombre = musculos.find((m) => m.id === Number(musculoId))?.nombre;
       onAgregado(nuevo, musculoNombre);
@@ -638,6 +660,18 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
         </button>
       )}
 
+      {musculoId && (particular ? nombreParticular.trim() : elegido) && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11.5px] text-text-muted leading-relaxed">
+            Probá un peso con el que puedas hacer entre 12 y 16 reps, y cargá esa serie de referencia.
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <NumberField label="Peso (kg)" value={peso} onChange={setPeso} />
+            <NumberField label="Reps" value={reps} onChange={setReps} />
+          </div>
+        </div>
+      )}
+
       {error && <span className="text-[12px] text-danger">{error}</span>}
 
       <div className="flex gap-2">
@@ -651,7 +685,7 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
         <button
           type="button"
           onClick={confirmar}
-          disabled={enviando || (particular ? !nombreParticular.trim() : !elegido)}
+          disabled={enviando || (particular ? !nombreParticular.trim() : !elegido) || peso === '' || reps === ''}
           className="flex-1 h-9 rounded-lg bg-accent text-accent-fg text-[13px] font-semibold disabled:opacity-60"
         >
           {enviando ? 'Agregando…' : 'Agregar'}
@@ -661,16 +695,21 @@ function AgregarEjercicioDia({ diaRutinaId, musculos, onAgregado }) {
   );
 }
 
-function QuitarEjercicioBoton({ ejercicioAsignadoId, onQuitado, advertencia }) {
+// Siempre pide confirmacion con un modal antes de quitar un ejercicio (no
+// un window.confirm ni solo en el caso top/unico) - si ademas ya tiene
+// series registradas, avisa fuerte que se pierden en cascada (ver
+// quitarEjercicioAsignado en rutinaService.js).
+function QuitarEjercicioBoton({ ejercicioAsignadoId, nombreEjercicio, onQuitado, advertencia, tieneSeries }) {
+  const [mostrarConfirmar, setMostrarConfirmar] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
 
   async function quitar() {
-    if (advertencia && !window.confirm(advertencia)) return;
     setEnviando(true);
     setError('');
     try {
       await api.del(`/ejercicios-asignados/${ejercicioAsignadoId}`);
+      setMostrarConfirmar(false);
       onQuitado();
     } catch (err) {
       setError(err.message);
@@ -683,13 +722,50 @@ function QuitarEjercicioBoton({ ejercicioAsignadoId, onQuitado, advertencia }) {
     <div className="flex flex-col items-end gap-0.5">
       <button
         type="button"
-        onClick={quitar}
-        disabled={enviando}
-        className="text-[11px] font-medium text-danger underline underline-offset-2 disabled:opacity-60"
+        onClick={() => setMostrarConfirmar(true)}
+        className="text-[11px] font-medium text-danger underline underline-offset-2"
       >
-        {enviando ? 'Quitando…' : 'Quitar'}
+        Quitar
       </button>
-      {error && <span className="text-[11px] text-danger">{error}</span>}
+      {mostrarConfirmar && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => !enviando && setMostrarConfirmar(false)}
+        >
+          <div
+            className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3 w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-[15px] font-bold">Quitar {nombreEjercicio}</h2>
+            <p className="text-[13px] text-text-muted leading-relaxed">¿Seguro que querés quitar este ejercicio del día?</p>
+            {advertencia && <p className="text-[12.5px] text-warning leading-relaxed">{advertencia}</p>}
+            {tieneSeries && (
+              <p className="text-[12.5px] text-danger font-semibold leading-relaxed">
+                Ya tiene series registradas — se van a perder esos datos de entrenamiento.
+              </p>
+            )}
+            {error && <p className="text-[12.5px] text-danger">{error}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMostrarConfirmar(false)}
+                disabled={enviando}
+                className="flex-1 h-10 rounded-lg border border-border bg-bg text-text-muted text-[13px] font-semibold disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={quitar}
+                disabled={enviando}
+                className="flex-[2] h-10 rounded-lg border border-danger text-danger text-[13px] font-semibold disabled:opacity-60"
+              >
+                {enviando ? 'Quitando…' : 'Sí, quitar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -835,7 +911,15 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     for (const [ejId, sets] of Object.entries(borrador)) {
       if (!base[ejId]) continue;
       sets.forEach((s, idx) => {
-        if (base[ejId][idx]) base[ejId][idx] = { ...base[ejId][idx], ...s };
+        if (base[ejId][idx]) {
+          base[ejId][idx] = { ...base[ejId][idx], ...s };
+        } else if (s.esDropset) {
+          // La fila de dropset no forma parte de series_actuales (es una
+          // serie extra) - el merge de arriba la salteaba porque no hay
+          // indice previo con el que mezclarla, y se perdia silenciosamente
+          // si se recargaba la pagina antes de guardar la sesion.
+          base[ejId] = [...base[ejId], { peso: '', reps: '', rir: 1, esDropset: false, ...s }];
+        }
       });
     }
     return base;
@@ -891,12 +975,64 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     });
   }
 
-  async function moverEjercicio(index, delta) {
-    const nuevoIndex = index + delta;
-    if (nuevoIndex < 0 || nuevoIndex >= dia.ejercicios.length) return;
-    const copia = [...dia.ejercicios];
-    [copia[index], copia[nuevoIndex]] = [copia[nuevoIndex], copia[index]];
-    const orden = copia.map((ej, i) => ({ ejercicio_asignado_id: ej.id, orden: i + 1 }));
+  // Reordenar arrastrando la etiqueta del ejercicio (mantener presionado y
+  // mover arriba/abajo), en vez de flechas - con Pointer Events en vez de
+  // drag-and-drop nativo de HTML5, que no anda bien con touch en varios
+  // navegadores de celular (esta app es mobile-first). ordenArrastre es el
+  // orden temporal (array de ids) mientras se arrastra, null cuando no hay
+  // ningun arrastre en curso; cardRefs guarda el nodo DOM de cada tarjeta
+  // para saber, en cada pointermove, sobre cual esta el puntero.
+  const [ordenArrastre, setOrdenArrastre] = useState(null);
+  const arrastreRef = useRef({ activo: false, ejercicioId: null });
+  const cardRefs = useRef({});
+
+  function iniciarArrastre(e, ejercicioId) {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    arrastreRef.current = { activo: true, ejercicioId };
+    setOrdenArrastre(dia.ejercicios.map((ej) => ej.id));
+    window.addEventListener('pointermove', onPointerMoveArrastre);
+    window.addEventListener('pointerup', onPointerUpArrastre);
+    window.addEventListener('pointercancel', onPointerUpArrastre);
+  }
+
+  function onPointerMoveArrastre(e) {
+    if (!arrastreRef.current.activo) return;
+    const y = e.clientY;
+    setOrdenArrastre((prev) => {
+      if (!prev) return prev;
+      let nuevoIndex = null;
+      for (const [idStr, node] of Object.entries(cardRefs.current)) {
+        if (!node) continue;
+        const rect = node.getBoundingClientRect();
+        if (y >= rect.top && y <= rect.bottom) {
+          nuevoIndex = prev.indexOf(Number(idStr));
+          break;
+        }
+      }
+      if (nuevoIndex == null) return prev;
+      const idxActual = prev.indexOf(arrastreRef.current.ejercicioId);
+      if (idxActual === -1 || idxActual === nuevoIndex) return prev;
+      const copia = [...prev];
+      copia.splice(idxActual, 1);
+      copia.splice(nuevoIndex, 0, arrastreRef.current.ejercicioId);
+      return copia;
+    });
+  }
+
+  function onPointerUpArrastre() {
+    window.removeEventListener('pointermove', onPointerMoveArrastre);
+    window.removeEventListener('pointerup', onPointerUpArrastre);
+    window.removeEventListener('pointercancel', onPointerUpArrastre);
+    arrastreRef.current.activo = false;
+    setOrdenArrastre((prev) => {
+      if (prev) guardarOrdenArrastre(prev);
+      return null;
+    });
+  }
+
+  async function guardarOrdenArrastre(ids) {
+    const orden = ids.map((id, i) => ({ ejercicio_asignado_id: id, orden: i + 1 }));
     try {
       await api.patch(`/dias/${dia.id}/orden`, { orden });
       onRutinaCambiada();
@@ -905,13 +1041,18 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     }
   }
 
+  const ejerciciosMostrados = ordenArrastre
+    ? ordenArrastre.map((id) => dia.ejercicios.find((ej) => ej.id === id)).filter(Boolean)
+    : dia.ejercicios;
+
   async function guardarSesion() {
     setError('');
     const payload = [];
     for (const ej of dia.ejercicios) {
       for (const [idx, s] of seriesPorEjercicio[ej.id].entries()) {
         if (s.peso === '' || s.reps === '') {
-          setError(`Completá el peso y las reps de todas las series de "${ej.ejercicio_nombre}".`);
+          const serie = s.esDropset ? 'la serie de dropset' : 'todas las series';
+          setError(`Completá el peso y las reps de ${serie} de "${ej.ejercicio_nombre}".`);
           return;
         }
         payload.push({
@@ -968,35 +1109,29 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
       )}
 
       <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
-        {dia.ejercicios.map((ej, idx) => {
+        {ejerciciosMostrados.map((ej) => {
           const nota = notasPorEjercicio.get(ej.id);
           const esUltimoDelMusculo = dia.ejercicios.filter(
             (e) => e.musculo_objetivo_id === ej.musculo_objetivo_id
           ).length === 1;
           return (
-            <div key={ej.id} className="flex gap-2 items-stretch">
-              <div className="flex flex-col justify-center gap-1 flex-none">
-                <button
-                  type="button"
-                  onClick={() => moverEjercicio(idx, -1)}
-                  disabled={idx === 0}
-                  className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
-                >
-                  ▲
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moverEjercicio(idx, 1)}
-                  disabled={idx === dia.ejercicios.length - 1}
-                  className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
-                >
-                  ▼
-                </button>
-              </div>
-              <div className="flex-1 bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0">
+            <div
+              key={ej.id}
+              ref={(node) => { cardRefs.current[ej.id] = node; }}
+              className={`bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0 ${
+                ordenArrastre && arrastreRef.current.ejercicioId === ej.id ? 'opacity-60 ring-2 ring-accent' : ''
+              }`}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex flex-col gap-1">
-                  <span className="text-[14.5px] font-semibold">{ej.ejercicio_nombre}</span>
+                  <span
+                    onPointerDown={(e) => iniciarArrastre(e, ej.id)}
+                    className="text-[14.5px] font-semibold cursor-grab active:cursor-grabbing select-none"
+                    style={{ touchAction: 'none' }}
+                    title="Mantené presionado para reordenar"
+                  >
+                    ⠿ {ej.ejercicio_nombre}
+                  </span>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
                       {formatearMusculo(ej.musculo_nombre)}
@@ -1080,7 +1215,6 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 dropsetActivo={seriesPorEjercicio[ej.id].some((s) => s.esDropset)}
                 onToggleDropset={() => toggleDropset(ej.id)}
               />
-              </div>
             </div>
           );
         })}
@@ -1118,6 +1252,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
   const [mostrarPeso, setMostrarPeso] = useState(false);
   const [mostrarDescanso, setMostrarDescanso] = useState(false);
   const [mostrarMoverCopiar, setMostrarMoverCopiar] = useState(false);
+  const [mostrarEditarNombre, setMostrarEditarNombre] = useState(false);
   const [error, setError] = useState('');
 
   return (
@@ -1143,7 +1278,13 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
           >
             Cambiar ejercicio
           </button>
-          <QuitarEjercicioBoton ejercicioAsignadoId={ejercicio.id} onQuitado={onCambiado} advertencia={advertenciaQuitar} />
+          <QuitarEjercicioBoton
+            ejercicioAsignadoId={ejercicio.id}
+            nombreEjercicio={ejercicio.ejercicio_nombre}
+            tieneSeries={Boolean(ejercicio.tiene_series)}
+            onQuitado={onCambiado}
+            advertencia={advertenciaQuitar}
+          />
         </div>
       </div>
 
@@ -1198,6 +1339,25 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
                   diasHermanos={diasHermanos}
                   onListo={() => { setMostrarMoverCopiar(false); onCambiado(); }}
                   onError={setError}
+                />
+              )}
+            </div>
+          )}
+
+          {ejercicio.patron_movimiento === 'personalizado' && (
+            <div className="flex flex-col items-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => setMostrarEditarNombre((v) => !v)}
+                className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+              >
+                Editar nombre
+              </button>
+              {mostrarEditarNombre && (
+                <EditarNombreParticular
+                  ejercicioId={ejercicio.id}
+                  nombreActual={ejercicio.ejercicio_nombre}
+                  onEditado={() => { setMostrarEditarNombre(false); onCambiado(); }}
                 />
               )}
             </div>
@@ -1351,6 +1511,50 @@ function AjusteDescanso({ ejercicioId, descansoSegundos, onAjustado }) {
   );
 }
 
+// Corrige el nombre de un ejercicio "particular" (cargado a mano) por si
+// se anoto mal - solo aparece para esos, nunca para uno del catalogo.
+function EditarNombreParticular({ ejercicioId, nombreActual, onEditado }) {
+  const [nombre, setNombre] = useState(nombreActual);
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  async function confirmar() {
+    if (!nombre.trim()) {
+      setError('El nombre no puede estar vacío.');
+      return;
+    }
+    setEnviando(true);
+    setError('');
+    try {
+      await api.patch(`/ejercicios/${ejercicioId}/nombre-particular`, { nombre: nombre.trim() });
+      onEditado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        value={nombre}
+        onChange={(e) => setNombre(e.target.value)}
+        className="w-40 h-8 rounded-md border border-border bg-bg px-2 text-[13px] outline-none focus:border-accent"
+      />
+      <button
+        type="button"
+        onClick={confirmar}
+        disabled={enviando}
+        className="h-8 px-3 rounded-md bg-accent text-accent-fg text-[12px] font-semibold disabled:opacity-60"
+      >
+        {enviando ? 'Guardando…' : 'Guardar'}
+      </button>
+      {error && <span className="text-[11px] text-danger">{error}</span>}
+    </div>
+  );
+}
+
 // Mueve (conserva peso/series, solo cambia de dia) o copia (queda una
 // instancia nueva a testear) un ejercicio ya asignado a otro dia de la
 // misma rutina - por si durante el entrenamiento se decide que queda mejor
@@ -1490,8 +1694,7 @@ function SustituirEjercicio({ ejercicio, onListo }) {
   const [particular, setParticular] = useState(false);
   const [nombreParticular, setNombreParticular] = useState('');
   const [peso, setPeso] = useState('');
-  const [reps1, setReps1] = useState('');
-  const [reps2, setReps2] = useState('');
+  const [reps, setReps] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -1501,8 +1704,8 @@ function SustituirEjercicio({ ejercicio, onListo }) {
 
   async function confirmar() {
     const faltaEjercicio = particular ? !nombreParticular.trim() : !elegido;
-    if (faltaEjercicio || peso === '' || reps1 === '' || reps2 === '') {
-      setError('Completá el ejercicio nuevo, el peso y las 2 series de testeo.');
+    if (faltaEjercicio || peso === '' || reps === '') {
+      setError('Completá el ejercicio nuevo, el peso y la serie de referencia.');
       return;
     }
     setEnviando(true);
@@ -1512,8 +1715,7 @@ function SustituirEjercicio({ ejercicio, onListo }) {
         nuevo_ejercicio_id: particular ? undefined : Number(elegido),
         nombre_personalizado: particular ? nombreParticular.trim() : undefined,
         peso: Number(peso),
-        reps_serie1: Number(reps1),
-        reps_serie2: Number(reps2),
+        reps: Number(reps),
       });
       onListo();
     } catch (err) {
@@ -1527,7 +1729,7 @@ function SustituirEjercicio({ ejercicio, onListo }) {
     <div className="bg-bg border border-border rounded-xl p-3 flex flex-col gap-2.5">
       <span className="text-[12px] font-semibold">Sustituir por otro ejercicio del mismo músculo</span>
       <p className="text-[11.5px] text-text-muted leading-relaxed">
-        Probá un peso con el que puedas hacer entre 12 y 16 reps, y cargá 2 series de testeo — se usa como piso para lo que queda de este microciclo.
+        Probá un peso con el que puedas hacer entre 12 y 16 reps, y cargá esa serie de referencia — se usa como piso para lo que queda de este microciclo.
       </p>
 
       {!particular && candidatos === null && <span className="text-[12px] text-text-muted">Cargando opciones…</span>}
@@ -1562,10 +1764,9 @@ function SustituirEjercicio({ ejercicio, onListo }) {
         {particular ? '← Elegir del catálogo' : 'No está en la lista, cargar uno particular'}
       </button>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <NumberField label="Peso (kg)" value={peso} onChange={setPeso} />
-        <NumberField label="Reps S1" value={reps1} onChange={setReps1} />
-        <NumberField label="Reps S2" value={reps2} onChange={setReps2} />
+        <NumberField label="Reps" value={reps} onChange={setReps} />
       </div>
 
       {error && <span className="text-[12px] text-danger">{error}</span>}

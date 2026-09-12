@@ -45,6 +45,7 @@ export default function OnboardingPage() {
   const [modo, setModo] = useState('auto');
   const [diasManual, setDiasManual] = useState([]);
   const [diasSplit, setDiasSplit] = useState([]);
+  const [diferirEjercicios, setDiferirEjercicios] = useState(false);
 
   const [tipo, setTipo] = useState('hipertrofia');
   const [subObjetivo, setSubObjetivo] = useState('');
@@ -136,6 +137,7 @@ export default function OnboardingPage() {
         }));
         marcar(await api.post(`/usuarios/${usuario.id}/rutina/split`, {
           dias: diasSplit.map((d) => ({ dia_semana: d.dia_semana, musculos: d.musculos, duracion_minutos: Number(d.duracion_minutos) })),
+          diferir_ejercicios: diferirEjercicios,
         }));
       } else {
         const duracionPorDia = Object.fromEntries(dias.map((d) => [d, Number(duracion)]));
@@ -309,6 +311,33 @@ export default function OnboardingPage() {
           <section className="flex flex-col gap-3">
             <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Tu split</span>
             <ArmadoSplitPersonalizado dias={diasSplit} onChange={setDiasSplit} />
+
+            <div className="flex flex-col gap-1.5">
+              {[
+                {
+                  v: false,
+                  label: 'Completar los ejercicios automáticamente',
+                  hint: 'El sistema elige un ejercicio por músculo en cada día, como siempre.',
+                },
+                {
+                  v: true,
+                  label: 'Voy a elegir los ejercicios yo mismo, después',
+                  hint: 'Los días quedan armados con sus músculos, sin ejercicios - los vas agregando vos desde Entrenamiento, a tu ritmo.',
+                },
+              ].map((opt) => (
+                <button
+                  type="button"
+                  key={String(opt.v)}
+                  onClick={() => setDiferirEjercicios(opt.v)}
+                  className={`text-left rounded-lg border px-3 py-2 ${
+                    diferirEjercicios === opt.v ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                  }`}
+                >
+                  <div className="text-[12.5px] font-semibold">{opt.label}</div>
+                  <div className={`text-[11px] ${diferirEjercicios === opt.v ? 'opacity-90' : 'text-text-faint'}`}>{opt.hint}</div>
+                </button>
+              ))}
+            </div>
           </section>
         )}
 

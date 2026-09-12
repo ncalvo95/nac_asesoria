@@ -206,4 +206,21 @@ function sacarColumnaLinealForzado() {
 }
 sacarColumnaLinealForzado();
 
+// Los ejercicios unilaterales descansan menos entre series (60s en vez de
+// 90s) - el INSERT de ejercicio_asignado ya lo calcula solo de ahora en
+// mas, pero esto corrige retroactivamente los que quedaron en 90 (el
+// default de la columna) de antes de este cambio. Solo toca los que
+// nunca se ajustaron a mano (90 = el default, no necesariamente "elegido a
+// proposito" pero es la unica señal disponible - si alguien lo puso en 90
+// a proposito para un unilateral, lo tiene que volver a ajustar).
+function corregirDescansoUnilaterales() {
+  db.exec(`
+    UPDATE ejercicio_asignado SET descanso_segundos = 60
+    WHERE descanso_segundos = 90 AND ejercicio_id IN (
+      SELECT id FROM ejercicio WHERE es_unilateral = 1 OR nombre LIKE '%unilateral%'
+    )
+  `);
+}
+corregirDescansoUnilaterales();
+
 console.log('Migracion aplicada correctamente.');

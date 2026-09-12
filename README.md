@@ -157,7 +157,11 @@ cierre de microciclo → progreso → export a Excel):
   medio del entrenamiento (se va a background, se queda sin memoria) se
   perdía todo sin aviso. El borrador se recupera solo al volver a abrir la
   pantalla y se borra recién cuando el guardado real contra el backend
-  confirma. El piso de reps de referencia para la semana 1 (`piso_reps` en
+  confirma - la serie de dropset (una fila extra, fuera del rango normal de
+  `series_actuales`) también se restaura si estaba en el borrador; antes se
+  perdía silenciosamente al recargar la página, porque el merge del
+  borrador solo pisaba índices que ya existían en el estado inicial. El
+  piso de reps de referencia para la semana 1 (`piso_reps` en
   `progreso_ejercicio`) toma la más alta de las 2 series cargadas en el
   testeo, no siempre la serie 2 - a veces el peso elegido rinde mejor en
   la primera serie que en la segunda. Se puede **saltear el testeo**
@@ -225,7 +229,13 @@ cierre de microciclo → progreso → export a Excel):
 
 - Frontend (`frontend/`): login (con "recordarme"), onboarding (con la
   opción de generación automática, split personalizado o armado manual de
-  la rutina), "Día de entrenamiento" (semana 0 de testeo con fecha de
+  la rutina - en split personalizado, además de elegir qué músculos entrena
+  cada día, se puede elegir que el motor complete los ejercicios
+  automáticamente como siempre, o dejar los días armados solo con sus
+  músculos y agregar los ejercicios uno mismo después desde Entrenamiento,
+  a su propio ritmo -`diferirEjercicios` en `crearRutinaConSplit`, pasa por
+  Semana 0 igual pero queda vacía, sin nada que testear-), "Día de
+  entrenamiento" (semana 0 de testeo con fecha de
   inicio elegible, registro de series por peso/reps/RIR - los campos de
   peso y reps arrancan vacíos, mostrando en gris (placeholder, no un valor
   cargado) lo recomendado como referencia: el peso, el peso base del
@@ -246,18 +256,29 @@ cierre de microciclo → progreso → export a Excel):
   "DS" en vez de un número, no suma a las reps efectivas del
   ejercicio/músculo pero sí a un total aparte de dropset por ejercicio
   (columna `es_dropset` en `registro_serie`, excluida de
-  `getUltimaSerieEnRango` para no distorsionar la progresión) -, sustitución o agregado de
-  ejercicio a mitad de
-  rutina — en ambos casos con la opción de cargar uno "particular" que no
-  está en el catálogo —, reordenar los ejercicios de un día con
-  flechas, ajuste manual de series (+1/-1, respetando el piso y el tope
-  según objetivo - el ajuste se pisa también en `progreso_ejercicio_microciclo`
-  del microciclo en curso, no solo en `ejercicio_asignado`, así que se
-  mantiene microciclo tras microciclo hasta que el usuario lo cambie o
-  pida una descarga, en vez de perderse solo con que pase un cierre) y del
-  peso base sin esperar al cierre de microciclo, y
-  descanso entre series editable por ejercicio (informativo, no lo toca el
-  motor de progresión - default 90s, `descanso_segundos` en
+  `getUltimaSerieEnRango` para no distorsionar la progresión) -, sustitución
+  o agregado de ejercicio a mitad de rutina — en ambos casos pide un único
+  peso + una serie de referencia (no un mini-testeo de 2 series), que fija
+  el piso de reps del microciclo en curso igual que hace Semana 0 con el
+  máximo de sus 2 series (si se agrega durante la propia Semana 0, ese peso
+  y esas reps quedan precargados ahí, editables, en vez de pedirse dos
+  veces); en ambos casos con la opción de cargar uno "particular" que no
+  está en el catálogo, con su propio botón "Editar nombre" por si se anotó
+  mal (solo para estos, nunca para uno del catálogo compartido) —,
+  reordenar los ejercicios de un día arrastrando la etiqueta con el nombre
+  (mantener presionado y mover arriba/abajo - con Pointer Events, no
+  drag-and-drop nativo de HTML5, que no anda bien con touch en la mayoría
+  de los navegadores de celular), ajuste manual de series (+1/-1,
+  respetando el piso y el tope según objetivo - el ajuste se pisa también
+  en `progreso_ejercicio_microciclo` del microciclo en curso, no solo en
+  `ejercicio_asignado`, así que se mantiene microciclo tras microciclo
+  hasta que el usuario lo cambie o pida una descarga, en vez de perderse
+  solo con que pase un cierre) y del peso base sin esperar al cierre de
+  microciclo, quitar un ejercicio (siempre pide confirmar con un modal, no
+  un simple mensaje - si ya tiene series registradas, avisa fuerte que se
+  pierden en cascada) y descanso entre series editable por ejercicio
+  (informativo, no lo toca el motor de progresión - default 90s, 60s si el
+  ejercicio es unilateral -catálogo o nombre-, `descanso_segundos` en
   `ejercicio_asignado`),
   "Mis rutinas" (historial de rutinas - solo una puede estar
   activa a la vez, se finaliza sola al crear o reactivar otra; desde acá se
