@@ -117,7 +117,7 @@ export default function EntrenamientoPage() {
       usuario={usuario}
       progreso={progreso}
       onGuardado={recargarSilencioso}
-      onRutinaCambiada={cargar}
+      onRutinaCambiada={recargarSilencioso}
       todosMusculos={todosMusculos}
     />
   );
@@ -846,6 +846,18 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
 
   useEffect(() => { guardarBorrador(borradorKey, series); }, [borradorKey, series]);
 
+  // Como el guardado/agregado/reordenado ya no fuerza un remount de este
+  // componente (ver onRutinaCambiada en EntrenamientoPage - antes recargaba
+  // la pagina entera y reseteaba el dia seleccionado), "series" puede no
+  // tener todavia una entrada para un ejercicio agregado despues del mount
+  // (o al revés, seguir teniendo una de uno ya quitado) - se completa acá,
+  // por render, sin pisar lo que el usuario ya tipeo para los que si existen.
+  const seriesPorEjercicio = useMemo(() => {
+    const map = {};
+    for (const ej of dia.ejercicios) map[ej.id] = series[ej.id] ?? construirSeriesPorDefecto(ej);
+    return map;
+  }, [series, dia.ejercicios]);
+
   const notasPorEjercicio = useMemo(() => {
     const map = new Map();
     for (const e of progreso?.ejercicios ?? []) map.set(e.id, e);
@@ -854,7 +866,8 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
 
   function actualizarSerie(ejercicioId, idx, campo, valor) {
     setSeries((prev) => {
-      const copia = { ...prev, [ejercicioId]: [...prev[ejercicioId]] };
+      const actual = prev[ejercicioId] ?? seriesPorEjercicio[ejercicioId];
+      const copia = { ...prev, [ejercicioId]: [...actual] };
       copia[ejercicioId][idx] = { ...copia[ejercicioId][idx], [campo]: valor };
       return copia;
     });
@@ -866,7 +879,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   // cambiar igual. No se recalcula si ya esta activa (toggle apaga/prende).
   function toggleDropset(ejercicioId) {
     setSeries((prev) => {
-      const actuales = prev[ejercicioId];
+      const actuales = prev[ejercicioId] ?? seriesPorEjercicio[ejercicioId];
       if (actuales.some((s) => s.esDropset)) {
         return { ...prev, [ejercicioId]: actuales.filter((s) => !s.esDropset) };
       }
@@ -896,7 +909,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     setError('');
     const payload = [];
     for (const ej of dia.ejercicios) {
-      for (const [idx, s] of series[ej.id].entries()) {
+      for (const [idx, s] of seriesPorEjercicio[ej.id].entries()) {
         if (s.peso === '' || s.reps === '') {
           setError(`Completá el peso y las reps de todas las series de "${ej.ejercicio_nombre}".`);
           return;
@@ -1019,9 +1032,9 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
               <div className="grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 text-[10px] font-semibold text-text-faint tracking-wide px-0.5">
                 <span className="text-center">S</span><span className="text-center">KG</span><span className="text-center">REPS</span><span className="text-center">RIR</span><span title="Reps efectivas" className="text-center">RE</span>
               </div>
-              {series[ej.id].map((s, idx) => {
+              {seriesPorEjercicio[ej.id].map((s, idx) => {
                 const efectivas = repsEfectivas(s.reps, s.rir);
-                const sugerenciaReps = calcularSugerenciaReps(ej, series[ej.id], idx);
+                const sugerenciaReps = calcularSugerenciaReps(ej, seriesPorEjercicio[ej.id], idx);
                 return (
                   <div
                     key={idx}
@@ -1052,9 +1065,9 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 );
               })}
               <span className="tabular text-[11px] text-text-faint -mt-1">
-                {series[ej.id].filter((s) => !s.esDropset).reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} reps efectivas en total
-                {series[ej.id].some((s) => s.esDropset) && (
-                  <> · {series[ej.id].filter((s) => s.esDropset).reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} de dropset</>
+                {seriesPorEjercicio[ej.id].filter((s) => !s.esDropset).reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} reps efectivas en total
+                {seriesPorEjercicio[ej.id].some((s) => s.esDropset) && (
+                  <> · {seriesPorEjercicio[ej.id].filter((s) => s.esDropset).reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} de dropset</>
                 )}
               </span>
 
@@ -1064,7 +1077,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 onCambiado={onRutinaCambiada}
                 diasHermanos={diasHermanos}
                 esUltimoDelMusculo={esUltimoDelMusculo}
-                dropsetActivo={series[ej.id].some((s) => s.esDropset)}
+                dropsetActivo={seriesPorEjercicio[ej.id].some((s) => s.esDropset)}
                 onToggleDropset={() => toggleDropset(ej.id)}
               />
               </div>
@@ -1569,18 +1582,17 @@ function SustituirEjercicio({ ejercicio, onListo }) {
   );
 }
 
+function construirSeriesPorDefecto(ej) {
+  return Array.from({ length: ej.series_actuales }, () => ({
+    peso: '',
+    reps: '',
+    rir: 1,
+    esDropset: false,
+  }));
+}
+
 function construirEstadoInicial(dia) {
-  return Object.fromEntries(
-    dia.ejercicios.map((ej) => [
-      ej.id,
-      Array.from({ length: ej.series_actuales }, () => ({
-        peso: '',
-        reps: '',
-        rir: 1,
-        esDropset: false,
-      })),
-    ])
-  );
+  return Object.fromEntries(dia.ejercicios.map((ej) => [ej.id, construirSeriesPorDefecto(ej)]));
 }
 
 // Sugerencia en gris (placeholder, no un valor cargado) de cuantas reps
