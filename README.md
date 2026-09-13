@@ -311,7 +311,14 @@ cierre de microciclo → progreso → export a Excel):
   pierden en cascada) y descanso entre series editable por ejercicio
   (informativo, no lo toca el motor de progresión - default 90s, 60s si el
   ejercicio es unilateral -catálogo o nombre-, `descanso_segundos` en
-  `ejercicio_asignado`),
+  `ejercicio_asignado`) - las 6 acciones de cada ejercicio (Comentario,
+  Cambiar ejercicio, Peso base, Descanso, Mover/copiar, Editar nombre si es
+  particular y Quitar ejercicio) viven colapsadas atrás de un botón "⋯" en
+  vez de mostrarse siempre como texto suelto, para que la tarjeta no ocupe
+  tanto scroll durante el entrenamiento - el menú se cierra solo al tocar
+  afuera o al scrollear la pantalla, "Comentario" va primero por ser la más
+  usada de las 6, y el músculo del ejercicio pasó a la esquina superior
+  derecha (donde antes estaba el botón de Comentario),
   "Mis rutinas" (historial de rutinas - solo una puede estar
   activa a la vez, se finaliza sola al crear o reactivar otra; desde acá se
   puede reactivar una vieja o borrarla para siempre), Progreso

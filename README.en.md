@@ -318,7 +318,14 @@ sessions → closing a microcycle → progress → Excel export):
   per-exercise rest time between sets (informational, the progression
   engine never touches it - defaults to 90s, 60s if the exercise is
   unilateral -by catalog flag or by name-, `descanso_segundos` on
-  `ejercicio_asignado`), "My routines" (routine history - only one can be
+  `ejercicio_asignado`) - each exercise's 6 actions (Comment, Change
+  exercise, Base weight, Rest, Move/copy, Edit name if it's a custom one,
+  and Remove exercise) live collapsed behind a "⋯" button instead of always
+  showing as loose text links, so the card doesn't eat up so much scroll
+  during a workout - the menu closes itself on an outside tap or on scroll,
+  "Comment" goes first since it's the one you'd reach for most of the 6,
+  and the exercise's muscle badge moved to the top-right corner (where the
+  Comment button used to sit), "My routines" (routine history - only one can be
   active at a time, it's automatically finished when another is created
   or reactivated; from here you can reactivate an old one or delete it
   for good), Progress (volume per muscle vs. MAV, **effective reps** per

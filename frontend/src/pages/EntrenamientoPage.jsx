@@ -844,7 +844,7 @@ function QuitarEjercicioBoton({ ejercicioAsignadoId, nombreEjercicio, onQuitado,
         onClick={() => setMostrarConfirmar(true)}
         className="text-[11px] font-medium text-danger underline underline-offset-2"
       >
-        Quitar
+        Quitar ejercicio
       </button>
       {mostrarConfirmar && (
         <div
@@ -1261,22 +1261,14 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                   >
                     ⠿ {ej.ejercicio_nombre}
                   </span>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
-                      {formatearMusculo(ej.musculo_nombre)}
-                    </span>
-                    <span className="text-[12px] text-text-faint whitespace-nowrap">
-                      {ej.rango_reps_min}–{ej.rango_reps_max} reps · Descanso {ej.descanso_segundos}s
-                    </span>
-                  </div>
+                  <span className="text-[12px] text-text-faint whitespace-nowrap">
+                    {ej.rango_reps_min}–{ej.rango_reps_max} reps · Descanso {ej.descanso_segundos}s
+                  </span>
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
-                  <ComentarioBoton
-                    endpoint={`/ejercicios/${ej.id}/comentario`}
-                    comentarioActual={ej.comentario}
-                    recordarActual={ej.comentario_recordar}
-                    onGuardado={onRutinaCambiada}
-                  />
+                  <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
+                    {formatearMusculo(ej.musculo_nombre)}
+                  </span>
                   {nota && (
                     <span
                       className={`text-[11px] font-semibold rounded-full px-2.5 py-1 whitespace-nowrap ${
@@ -1377,16 +1369,45 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
   const advertenciaQuitar = ejercicio.es_top_de_musculo || esUltimoDelMusculo
     ? `Este es el ejercicio ${ejercicio.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ejercicio.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
     : null;
+  const [menuAbierto, setMenuAbierto] = useState(false);
   const [mostrarSustituir, setMostrarSustituir] = useState(false);
   const [mostrarPeso, setMostrarPeso] = useState(false);
   const [mostrarDescanso, setMostrarDescanso] = useState(false);
   const [mostrarMoverCopiar, setMostrarMoverCopiar] = useState(false);
   const [mostrarEditarNombre, setMostrarEditarNombre] = useState(false);
   const [error, setError] = useState('');
+  const menuRef = useRef(null);
+
+  // Cerrar el menú "⋯" al tocar afuera - las acciones que abre (Peso base,
+  // Descanso, etc.) quedan visibles debajo de la tarjeta, así que un click
+  // en cualquier otro lado de la pantalla debe cerrarlo primero.
+  useEffect(() => {
+    if (!menuAbierto) return;
+    function onClickFuera(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuAbierto(false);
+    }
+    // Scrollear tambien lo cierra (no solo tocar afuera) - al ser
+    // position:absolute, el menu no sigue a la tarjeta y queda flotando en
+    // cualquier lado si no se cierra solo.
+    function onScroll() {
+      setMenuAbierto(false);
+    }
+    window.addEventListener('mousedown', onClickFuera);
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener('mousedown', onClickFuera);
+      window.removeEventListener('scroll', onScroll, { capture: true });
+    };
+  }, [menuAbierto]);
+
+  function abrir(setter) {
+    setMenuAbierto(false);
+    setter(true);
+  }
 
   return (
     <div className="flex flex-col gap-2 pt-1 border-t border-border -mx-4 px-4">
-      <div className="flex items-start justify-between gap-2 pt-2 flex-wrap">
+      <div className="flex items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-3 flex-wrap">
           <AjusteSeries ejercicioId={ejercicio.id} seriesActuales={ejercicio.series_actuales} onAjustado={onCambiado} onError={setError} />
           <label className="flex items-center gap-1.5 shrink-0 cursor-pointer" title="DropSet">
@@ -1399,100 +1420,116 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
             <span className="text-[11px] font-semibold text-text-muted whitespace-nowrap">DS</span>
           </label>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="relative" ref={menuRef}>
           <button
             type="button"
-            onClick={() => setMostrarSustituir((v) => !v)}
-            className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+            onClick={() => setMenuAbierto((v) => !v)}
+            className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[15px] leading-none flex items-center justify-center"
+            title="Más acciones"
           >
-            Cambiar ejercicio
+            ⋯
           </button>
-          <QuitarEjercicioBoton
-            ejercicioAsignadoId={ejercicio.id}
-            nombreEjercicio={ejercicio.ejercicio_nombre}
-            tieneSeries={Boolean(ejercicio.tiene_series)}
-            onQuitado={onCambiado}
-            advertencia={advertenciaQuitar}
+          {menuAbierto && (
+            <div className="absolute right-0 top-full mt-1 z-20 w-48 bg-surface border border-border rounded-lg shadow-lg py-1 flex flex-col">
+              <ComentarioBoton
+                endpoint={`/ejercicios/${ejercicio.id}/comentario`}
+                comentarioActual={ejercicio.comentario}
+                recordarActual={ejercicio.comentario_recordar}
+                onGuardado={onCambiado}
+                variante="menu"
+              />
+              <button
+                type="button"
+                onClick={() => abrir(setMostrarSustituir)}
+                className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
+              >
+                Cambiar ejercicio
+              </button>
+              <button
+                type="button"
+                onClick={() => abrir(setMostrarPeso)}
+                className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
+              >
+                Peso base
+              </button>
+              <button
+                type="button"
+                onClick={() => abrir(setMostrarDescanso)}
+                className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
+              >
+                Descanso
+              </button>
+              {diasHermanos?.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => abrir(setMostrarMoverCopiar)}
+                  className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
+                >
+                  Mover/copiar
+                </button>
+              )}
+              {ejercicio.patron_movimiento === 'personalizado' && (
+                <button
+                  type="button"
+                  onClick={() => abrir(setMostrarEditarNombre)}
+                  className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
+                >
+                  Editar nombre
+                </button>
+              )}
+              <div className="border-t border-border my-1" />
+              <div className="px-3 py-1.5">
+                <QuitarEjercicioBoton
+                  ejercicioAsignadoId={ejercicio.id}
+                  nombreEjercicio={ejercicio.ejercicio_nombre}
+                  tieneSeries={Boolean(ejercicio.tiene_series)}
+                  onQuitado={() => { setMenuAbierto(false); onCambiado(); }}
+                  advertencia={advertenciaQuitar}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {mostrarPeso && (
+        <div className="flex justify-end">
+          <AjustePeso
+            ejercicioId={ejercicio.id}
+            pesoActual={ejercicio.peso_actual}
+            onAjustado={() => { setMostrarPeso(false); onCambiado(); }}
           />
         </div>
-      </div>
-
-      <div className="flex flex-col items-end gap-1.5">
-        <div className="flex flex-wrap items-start justify-end gap-x-3 gap-y-1.5">
-          <div className="flex flex-col items-end gap-1.5">
-            <button
-              type="button"
-              onClick={() => setMostrarPeso((v) => !v)}
-              className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
-            >
-              Peso base
-            </button>
-            {mostrarPeso && (
-              <AjustePeso
-                ejercicioId={ejercicio.id}
-                pesoActual={ejercicio.peso_actual}
-                onAjustado={() => { setMostrarPeso(false); onCambiado(); }}
-              />
-            )}
-          </div>
-
-          <div className="flex flex-col items-end gap-1.5">
-            <button
-              type="button"
-              onClick={() => setMostrarDescanso((v) => !v)}
-              className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
-            >
-              Descanso
-            </button>
-            {mostrarDescanso && (
-              <AjusteDescanso
-                ejercicioId={ejercicio.id}
-                descansoSegundos={ejercicio.descanso_segundos}
-                onAjustado={() => { setMostrarDescanso(false); onCambiado(); }}
-              />
-            )}
-          </div>
-
-          {diasHermanos?.length > 0 && (
-            <div className="flex flex-col items-end gap-1.5">
-              <button
-                type="button"
-                onClick={() => setMostrarMoverCopiar((v) => !v)}
-                className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
-              >
-                Mover/copiar
-              </button>
-              {mostrarMoverCopiar && (
-                <MoverCopiarEjercicio
-                  ejercicioId={ejercicio.id}
-                  diasHermanos={diasHermanos}
-                  onListo={() => { setMostrarMoverCopiar(false); onCambiado(); }}
-                  onError={setError}
-                />
-              )}
-            </div>
-          )}
-
-          {ejercicio.patron_movimiento === 'personalizado' && (
-            <div className="flex flex-col items-end gap-1.5">
-              <button
-                type="button"
-                onClick={() => setMostrarEditarNombre((v) => !v)}
-                className="text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
-              >
-                Editar nombre
-              </button>
-              {mostrarEditarNombre && (
-                <EditarNombreParticular
-                  ejercicioId={ejercicio.id}
-                  nombreActual={ejercicio.ejercicio_nombre}
-                  onEditado={() => { setMostrarEditarNombre(false); onCambiado(); }}
-                />
-              )}
-            </div>
-          )}
+      )}
+      {mostrarDescanso && (
+        <div className="flex justify-end">
+          <AjusteDescanso
+            ejercicioId={ejercicio.id}
+            descansoSegundos={ejercicio.descanso_segundos}
+            onAjustado={() => { setMostrarDescanso(false); onCambiado(); }}
+          />
         </div>
-      </div>
+      )}
+      {mostrarMoverCopiar && (
+        <div className="flex justify-end">
+          <MoverCopiarEjercicio
+            ejercicioId={ejercicio.id}
+            diasHermanos={diasHermanos}
+            onListo={() => { setMostrarMoverCopiar(false); onCambiado(); }}
+            onError={setError}
+          />
+        </div>
+      )}
+      {mostrarEditarNombre && (
+        <div className="flex justify-end">
+          <EditarNombreParticular
+            ejercicioId={ejercicio.id}
+            nombreActual={ejercicio.ejercicio_nombre}
+            onEditado={() => { setMostrarEditarNombre(false); onCambiado(); }}
+          />
+        </div>
+      )}
 
       {error && <span className="text-[11px] text-danger">{error}</span>}
 
@@ -1754,12 +1791,16 @@ function ComentarioRecordatorio({ comentario }) {
 // tilde "recordarme" - si esta tildado, ComentarioRecordatorio lo muestra
 // destacado la proxima vez que se abra esta pantalla, sin necesidad de
 // tocar nada.
-function ComentarioBoton({ endpoint, comentarioActual, recordarActual, onGuardado, etiqueta }) {
+// variante="menu": mismo componente pero con la tipografia/padding de una
+// fila de menu colapsado (ver EjercicioAcciones) en vez del link subrayado
+// que usan "Comentario del dia" y demas usos sueltos.
+function ComentarioBoton({ endpoint, comentarioActual, recordarActual, onGuardado, etiqueta, variante }) {
   const [abierto, setAbierto] = useState(false);
   const [texto, setTexto] = useState(comentarioActual || '');
   const [recordar, setRecordar] = useState(Boolean(recordarActual));
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
+  const comoItemMenu = variante === 'menu';
 
   async function guardar() {
     setEnviando(true);
@@ -1776,16 +1817,18 @@ function ComentarioBoton({ endpoint, comentarioActual, recordarActual, onGuardad
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={comoItemMenu ? 'flex flex-col' : 'flex flex-col gap-1.5'}>
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
-        className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+        className={comoItemMenu
+          ? 'text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg'
+          : 'self-start text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap'}
       >
         {comentarioActual ? 'Editar comentario' : (etiqueta || 'Comentario')}
       </button>
       {abierto && (
-        <div className="flex flex-col gap-2 bg-bg border border-border rounded-lg p-2.5 min-w-[220px]">
+        <div className={`flex flex-col gap-2 bg-bg border border-border rounded-lg p-2.5 ${comoItemMenu ? 'mx-3 mb-2' : 'min-w-[220px]'}`}>
           <textarea
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
