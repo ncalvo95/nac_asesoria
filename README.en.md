@@ -264,7 +264,10 @@ sessions → closing a microcycle → progress → Excel export):
   muscles so you add the exercises yourself later from Entrenamiento, at
   your own pace -`diferirEjercicios` in `crearRutinaConSplit`, it still
   goes through Week 0, just empty, with nothing to test-), "Training day"
-  (Week 0 testing with a selectable start date, logging sets by
+  (opens straight on today's weekday tab if the routine trains that day -
+  otherwise it falls back to the first tab, same as before
+  (`elegirDiaInicial` in `EntrenamientoPage.jsx`, shared logic with Week
+  0); Week 0 testing with a selectable start date, logging sets by
   weight/reps/RIR - the weight and reps fields start empty, showing in
   gray (a placeholder, not a saved value) the recommended reference: for
   weight, the exercise's base weight (`peso_actual`); for reps, on set 1

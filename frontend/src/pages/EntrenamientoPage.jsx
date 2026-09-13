@@ -125,6 +125,21 @@ export default function EntrenamientoPage() {
 
 const ORDEN_DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 
+// dia_semana de hoy segun el reloj del dispositivo, para abrir la pantalla
+// directo en el dia que corresponde en vez de siempre el primero de la
+// rutina - si hoy no es un dia de entrenamiento, quien llama cae al primer
+// dia (ver elegirDiaInicial).
+function diaSemanaHoy() {
+  return ORDEN_DIAS[(new Date().getDay() + 6) % 7]; // getDay(): 0=domingo -> lunes=0..domingo=6
+}
+
+// Elige el dia con el que arranca la pantalla: el de hoy si la rutina
+// entrena ese dia, si no el primero de la lista (mismo fallback que antes).
+function elegirDiaInicial(dias) {
+  const hoy = diaSemanaHoy();
+  return dias.find((d) => d.dia_semana === hoy)?.id ?? dias[0]?.id;
+}
+
 // Fecha calendario del proximo (o mismo) "dia_semana" a partir de fechaInicio
 // (YYYY-MM-DD) - asume que la semana arranca en fechaInicio, sin importar
 // que dia de la semana sea.
@@ -150,7 +165,7 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
   // en cada slot, sin recargar toda la pantalla.
   const [dias, setDias] = useState(() => rutina.dias.map((d) => ({ ...d, ejercicios: d.ejercicios.map((e) => ({ ...e })) })));
   const [fechaInicio, setFechaInicio] = useState(rutina.fecha_inicio?.slice(0, 10) || '');
-  const [diaId, setDiaId] = useState(dias[0]?.id);
+  const [diaId, setDiaId] = useState(() => elegirDiaInicial(dias));
 
   const todosEjercicios = useMemo(
     () => dias.flatMap((d) => d.ejercicios.map((e) => ({ ...e, dia_semana: d.dia_semana }))),
@@ -853,7 +868,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
     });
   }, [rutina]);
 
-  const [diaId, setDiaId] = useState(diasUnicos[0]?.id ?? rutina.dias[0].id);
+  const [diaId, setDiaId] = useState(() => elegirDiaInicial(diasUnicos) ?? rutina.dias[0].id);
   const dia = rutina.dias.find((d) => d.id === diaId) ?? rutina.dias[0];
   const [mostrarAgregarDia, setMostrarAgregarDia] = useState(false);
   const [mostrarQuitarDia, setMostrarQuitarDia] = useState(false);

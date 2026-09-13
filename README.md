@@ -257,7 +257,10 @@ cierre de microciclo → progreso → export a Excel):
   músculos y agregar los ejercicios uno mismo después desde Entrenamiento,
   a su propio ritmo -`diferirEjercicios` en `crearRutinaConSplit`, pasa por
   Semana 0 igual pero queda vacía, sin nada que testear-), "Día de
-  entrenamiento" (semana 0 de testeo con fecha de
+  entrenamiento" (se abre directo en la pestaña del día de la semana que es
+  hoy, si la rutina entrena ese día - si no, cae a la primera pestaña, igual
+  que antes (`elegirDiaInicial` en `EntrenamientoPage.jsx`, comparte lógica
+  con Semana 0); semana 0 de testeo con fecha de
   inicio elegible, registro de series por peso/reps/RIR - los campos de
   peso y reps arrancan vacíos, mostrando en gris (placeholder, no un valor
   cargado) lo recomendado como referencia: el peso, el peso base del
