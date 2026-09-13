@@ -293,7 +293,9 @@ cierre de microciclo → progreso → export a Excel):
   reordenar los ejercicios de un día arrastrando la etiqueta con el nombre
   (mantener presionado y mover arriba/abajo - con Pointer Events, no
   drag-and-drop nativo de HTML5, que no anda bien con touch en la mayoría
-  de los navegadores de celular), ajuste manual de series (+1/-1,
+  de los navegadores de celular; Semana 0 usaba flechas ▲▼ en vez de esto -
+  quedaba inconsistente con el resto de la app y era más lento en el
+  celular-, ahora comparte el mismo arrastre), ajuste manual de series (+1/-1,
   respetando el piso y el tope según objetivo - el ajuste se pisa también
   en `progreso_ejercicio_microciclo` del microciclo en curso, no solo en
   `ejercicio_asignado`, así que se mantiene microciclo tras microciclo

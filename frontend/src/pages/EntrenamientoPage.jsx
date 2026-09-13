@@ -267,19 +267,72 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
     });
   }
 
-  async function moverEjercicioSemana0(index, delta) {
-    const nuevoIndex = index + delta;
-    if (nuevoIndex < 0 || nuevoIndex >= diaActual.ejercicios.length) return;
-    const copia = [...diaActual.ejercicios];
-    [copia[index], copia[nuevoIndex]] = [copia[nuevoIndex], copia[index]];
-    setDias((prev) => prev.map((d) => (d.id === diaActual.id ? { ...d, ejercicios: copia } : d)));
-    const orden = copia.map((ej, i) => ({ ejercicio_asignado_id: ej.id, orden: i + 1 }));
+  // Reordenar arrastrando la etiqueta del ejercicio (mismo patrón de Pointer
+  // Events que en RegistroDia, en vez de flechas - ver ese componente para
+  // el detalle de por qué Pointer Events y no drag-and-drop nativo).
+  const [ordenArrastre, setOrdenArrastre] = useState(null);
+  const arrastreRef = useRef({ activo: false, ejercicioId: null });
+  const cardRefs = useRef({});
+
+  function iniciarArrastreSemana0(e, ejercicioId) {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    arrastreRef.current = { activo: true, ejercicioId };
+    setOrdenArrastre(diaActual.ejercicios.map((ej) => ej.id));
+    window.addEventListener('pointermove', onPointerMoveArrastreSemana0);
+    window.addEventListener('pointerup', onPointerUpArrastreSemana0);
+    window.addEventListener('pointercancel', onPointerUpArrastreSemana0);
+  }
+
+  function onPointerMoveArrastreSemana0(e) {
+    if (!arrastreRef.current.activo) return;
+    const y = e.clientY;
+    setOrdenArrastre((prev) => {
+      if (!prev) return prev;
+      let nuevoIndex = null;
+      for (const [idStr, node] of Object.entries(cardRefs.current)) {
+        if (!node) continue;
+        const rect = node.getBoundingClientRect();
+        if (y >= rect.top && y <= rect.bottom) {
+          nuevoIndex = prev.indexOf(Number(idStr));
+          break;
+        }
+      }
+      if (nuevoIndex == null) return prev;
+      const idxActual = prev.indexOf(arrastreRef.current.ejercicioId);
+      if (idxActual === -1 || idxActual === nuevoIndex) return prev;
+      const copia = [...prev];
+      copia.splice(idxActual, 1);
+      copia.splice(nuevoIndex, 0, arrastreRef.current.ejercicioId);
+      return copia;
+    });
+  }
+
+  function onPointerUpArrastreSemana0() {
+    window.removeEventListener('pointermove', onPointerMoveArrastreSemana0);
+    window.removeEventListener('pointerup', onPointerUpArrastreSemana0);
+    window.removeEventListener('pointercancel', onPointerUpArrastreSemana0);
+    arrastreRef.current.activo = false;
+    setOrdenArrastre((prev) => {
+      if (prev) guardarOrdenArrastreSemana0(prev);
+      return null;
+    });
+  }
+
+  async function guardarOrdenArrastreSemana0(ids) {
+    const nuevosEjercicios = ids.map((id) => diaActual.ejercicios.find((ej) => ej.id === id)).filter(Boolean);
+    setDias((prev) => prev.map((d) => (d.id === diaActual.id ? { ...d, ejercicios: nuevosEjercicios } : d)));
+    const orden = ids.map((id, i) => ({ ejercicio_asignado_id: id, orden: i + 1 }));
     try {
       await api.patch(`/dias/${diaActual.id}/orden`, { orden });
     } catch (err) {
       setError(err.message);
     }
   }
+
+  const ejerciciosMostrados = ordenArrastre
+    ? ordenArrastre.map((id) => diaActual.ejercicios.find((ej) => ej.id === id)).filter(Boolean)
+    : diaActual.ejercicios;
 
   async function onCambiarFecha(nuevaFecha) {
     setFechaInicio(nuevaFecha);
@@ -386,7 +439,7 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
       )}
 
       <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
-        {diaActual.ejercicios.map((ej, idx) => {
+        {ejerciciosMostrados.map((ej) => {
           const esUltimoDelMusculo = diaActual.ejercicios.filter(
             (e) => e.musculo_objetivo_id === ej.musculo_objetivo_id
           ).length === 1;
@@ -394,47 +447,40 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
             ? `Este es el ejercicio ${ej.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ej.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
             : null;
           return (
-            <div key={ej.id} className="flex gap-2 items-stretch">
-              <div className="flex flex-col justify-center gap-1 flex-none">
-                <button
-                  type="button"
-                  onClick={() => moverEjercicioSemana0(idx, -1)}
-                  disabled={idx === 0}
-                  className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
+            <div
+              key={ej.id}
+              ref={(node) => { cardRefs.current[ej.id] = node; }}
+              className={`bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0 ${
+                ordenArrastre && arrastreRef.current.ejercicioId === ej.id ? 'opacity-60 ring-2 ring-accent' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  onPointerDown={(e) => iniciarArrastreSemana0(e, ej.id)}
+                  className="text-[14px] font-semibold cursor-grab active:cursor-grabbing select-none"
+                  style={{ touchAction: 'none' }}
+                  title="Mantené presionado para reordenar"
                 >
-                  ▲
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moverEjercicioSemana0(idx, 1)}
-                  disabled={idx === diaActual.ejercicios.length - 1}
-                  className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[12px] leading-none disabled:opacity-30"
-                >
-                  ▼
-                </button>
+                  ⠿ {ej.ejercicio_nombre}
+                </span>
+                <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
+                  {formatearMusculo(ej.musculo_nombre)}
+                </span>
               </div>
-              <div className="flex-1 bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="text-[14px] font-semibold">{ej.ejercicio_nombre}</span>
-                  <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
-                    {formatearMusculo(ej.musculo_nombre)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <NumberField label="Peso (kg)" value={valores[ej.id].peso} onChange={(v) => set(ej.id, 'peso', v)} />
-                  <NumberField label="Reps S1" value={valores[ej.id].reps1} onChange={(v) => set(ej.id, 'reps1', v)} />
-                  <NumberField label="Reps S2" value={valores[ej.id].reps2} onChange={(v) => set(ej.id, 'reps2', v)} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
-                  <QuitarEjercicioBoton
-                    ejercicioAsignadoId={ej.id}
-                    nombreEjercicio={ej.ejercicio_nombre}
-                    tieneSeries={Boolean(ej.tiene_series)}
-                    onQuitado={() => onQuitado(diaActual.id, ej.id)}
-                    advertencia={advertencia}
-                  />
-                </div>
+              <div className="grid grid-cols-3 gap-2">
+                <NumberField label="Peso (kg)" value={valores[ej.id].peso} onChange={(v) => set(ej.id, 'peso', v)} />
+                <NumberField label="Reps S1" value={valores[ej.id].reps1} onChange={(v) => set(ej.id, 'reps1', v)} />
+                <NumberField label="Reps S2" value={valores[ej.id].reps2} onChange={(v) => set(ej.id, 'reps2', v)} />
+              </div>
+              <div className="flex items-center justify-between">
+                <CambiarEjercicioSemana0 ejercicio={ej} onSustituido={(nuevo) => onSustituido(ej.id, nuevo)} />
+                <QuitarEjercicioBoton
+                  ejercicioAsignadoId={ej.id}
+                  nombreEjercicio={ej.ejercicio_nombre}
+                  tieneSeries={Boolean(ej.tiene_series)}
+                  onQuitado={() => onQuitado(diaActual.id, ej.id)}
+                  advertencia={advertencia}
+                />
               </div>
             </div>
           );

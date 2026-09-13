@@ -299,7 +299,9 @@ sessions → closing a microcycle → progress → Excel export):
   exercises by dragging the exercise name label (press and hold, then
   move up/down - built with Pointer Events rather than native HTML5
   drag-and-drop, which doesn't play well with touch on most mobile
-  browsers), manually adjusting sets (+1/-1, respecting the floor and cap
+  browsers; Week 0 used to have ▲▼ arrows instead - inconsistent with the
+  rest of the app and slower on a phone - now it shares the same drag),
+  manually adjusting sets (+1/-1, respecting the floor and cap
   for the given goal - the adjustment is also written to
   `progreso_ejercicio_microciclo` for the current microcycle, not just to
   `ejercicio_asignado`, so it carries over from microcycle to microcycle
