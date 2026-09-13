@@ -11,10 +11,10 @@
   --success-bg: #EAF3EE;
   --warning: #B8842E;
   --warning-bg: #FBF2E2;
-  --danger: #B5533F;
-  --danger-bg: #FAEBE7;
+  --danger: #B8631A;
+  --danger-bg: #FAEDDD;
   --track: #EDEBE5;
-  --accent: #2F6F6B;
+  --accent: #7A2E2B;
   --accent-fg: #FFFFFF;
 }
 
@@ -30,11 +30,11 @@
     --success-bg: #1B2E26;
     --warning: #D9A44E;
     --warning-bg: #332812;
-    --danger: #D97862;
-    --danger-bg: #331E19;
+    --danger: #E0904A;
+    --danger-bg: #3A2A12;
     --track: #2B2D30;
-    --accent: #4A9490;
-    --accent-fg: #0D1414;
+    --accent: #9C4B44;
+    --accent-fg: #F5EDEB;
   }
 }
 
@@ -51,11 +51,11 @@
   --success-bg: #1B2E26;
   --warning: #D9A44E;
   --warning-bg: #332812;
-  --danger: #D97862;
-  --danger-bg: #331E19;
+  --danger: #E0904A;
+  --danger-bg: #3A2A12;
   --track: #2B2D30;
-  --accent: #4A9490;
-  --accent-fg: #0D1414;
+  --accent: #9C4B44;
+  --accent-fg: #F5EDEB;
 }
 
 :root[data-theme="claro"] {
@@ -69,10 +69,10 @@
   --success-bg: #EAF3EE;
   --warning: #B8842E;
   --warning-bg: #FBF2E2;
-  --danger: #B5533F;
-  --danger-bg: #FAEBE7;
+  --danger: #B8631A;
+  --danger-bg: #FAEDDD;
   --track: #EDEBE5;
-  --accent: #2F6F6B;
+  --accent: #7A2E2B;
   --accent-fg: #FFFFFF;
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import AccountMenu from '../components/AccountMenu.jsx';
+import AppIcon from '../components/AppIcon.jsx';
 import { formatearMusculo } from '../utils/musculo.js';
 
 const EQUIPO_TAGS = ['barra', 'mancuernas', 'banco', 'polea', 'maquina', 'banda', 'paralelas', 'barra_dominadas', 'peso_corporal'];
@@ -42,9 +43,7 @@ export default function CatalogoPage() {
     <div className="min-h-dvh bg-bg flex flex-col">
       <header className="flex-none bg-surface border-b border-border px-5 py-3 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6.5 7v10M17.5 7v10M2 10v4M22 10v4M6.5 12h11" />
-          </svg>
+          <AppIcon size={22} />
           <span className="text-[15px] font-bold">NAC Asesoria · Catálogo</span>
         </Link>
         <div className="flex items-center gap-3">

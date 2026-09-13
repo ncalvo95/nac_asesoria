@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import InstallButton from '../components/InstallButton.jsx';
+import logoNac from '../assets/logo-nac.png';
 
 export default function InvitePage() {
   const { usuario, claimInvite } = useAuth();
@@ -71,12 +72,7 @@ export default function InvitePage() {
     <div className="min-h-dvh flex flex-col justify-center px-8 py-20 gap-9 max-w-sm mx-auto">
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6.5 7v10M17.5 7v10M2 10v4M22 10v4M6.5 12h11" />
-            </svg>
-            <span className="text-xl font-bold tracking-tight">NAC Asesoria</span>
-          </div>
+          <img src={logoNac} alt="NAC Asesoria" className="w-14 h-14 rounded-full" />
           <InstallButton />
         </div>
         <p className="text-[13.5px] text-text-muted leading-relaxed">

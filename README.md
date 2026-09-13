@@ -33,6 +33,18 @@ Cloudflare Tunnel (ver Deployment).
   en el menú de cuenta y en las pantallas de login/invitación cuando el
   navegador lo soporta (no aparece en iOS Safari, que nunca dispara ese
   evento).
+- **Identidad visual:** logo propio (círculo negro, silueta levantando una
+  barra, "N.A.C · ASESORÍA") en vez del ícono de mancuerna genérico de
+  antes - versión chica sin texto (`AppIcon.jsx`, `src/assets/icon-nac.png`)
+  en los headers de 18-32px, donde el texto del logo completo no se leería,
+  y versión completa con el texto dibujado adentro
+  (`src/assets/logo-nac.png`) en Login e Invitación, donde hay espacio para
+  que se vea grande. El color de acento de toda la app (`--accent` en
+  `index.css`, una sola variable que pisa botones/tabs/links en todos
+  lados) pasó de verde azulado a un bordó apagado (`#7A2E2B` claro /
+  `#9C4B44` oscuro) a pedido, y el rojo de "Quitar"/acciones destructivas
+  (`--danger`) se corrió a ámbar (`#B8631A` claro / `#E0904A` oscuro) para
+  que no se confunda con el bordó del acento.
 
 ### Por qué tan liviano
 

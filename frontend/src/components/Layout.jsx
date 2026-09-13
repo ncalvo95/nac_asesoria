@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import AccountMenu from './AccountMenu.jsx';
+import AppIcon from './AppIcon.jsx';
 
 const tabs = [
   { to: '/entrenamiento', label: 'Entrenamiento' },
@@ -16,9 +17,7 @@ export default function Layout() {
     <div className="min-h-dvh flex flex-col bg-bg">
       <header className="flex-none bg-surface border-b border-border px-5 py-3 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6.5 7v10M17.5 7v10M2 10v4M22 10v4M6.5 12h11" />
-          </svg>
+          <AppIcon size={22} />
           <span className="text-[15px] font-bold">NAC Asesoria</span>
         </Link>
         <div className="flex items-center gap-3">
