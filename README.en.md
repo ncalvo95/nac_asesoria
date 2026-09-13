@@ -267,7 +267,12 @@ sessions → closing a microcycle → progress → Excel export):
   (opens straight on today's weekday tab if the routine trains that day -
   otherwise it falls back to the first tab, same as before
   (`elegirDiaInicial` in `EntrenamientoPage.jsx`, shared logic with Week
-  0); Week 0 testing with a selectable start date, logging sets by
+  0); each day tab also carries a small indicator for whether that day was
+  already logged (green check) or skipped (gray dash) in the current
+  microcycle -no indicator means it's still pending this week-, so you can
+  see what's left at a glance without opening every day (`dia.sesion_actual`
+  in `obtenerRutinaActiva`, the latest `registro_sesion` row for that day
+  and microcycle); Week 0 testing with a selectable start date, logging sets by
   weight/reps/RIR - the weight and reps fields start empty, showing in
   gray (a placeholder, not a saved value) the recommended reference: for
   weight, the exercise's base weight (`peso_actual`); for reps, on set 1

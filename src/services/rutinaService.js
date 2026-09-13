@@ -261,9 +261,25 @@ export function obtenerRutinaActiva(usuarioId) {
     ORDER BY ea.orden
   `);
 
+  // Si ya se registró (o salteó) este día en el microciclo en curso - se
+  // manda como "sesion_actual" para que el frontend marque la pestaña del
+  // día con un check/salteado, así se ve de un vistazo qué falta esta
+  // semana sin tener que entrar a cada día. `salteada` puede repetirse
+  // (una sesión por registro, no hay unique) así que se toma la más
+  // reciente con MAX(id).
+  const sesionActualStmt = db.prepare(`
+    SELECT salteada FROM registro_sesion
+    WHERE dia_rutina_id = ? AND microciclo_id = ?
+    ORDER BY id DESC LIMIT 1
+  `);
+
   return {
     ...rutina,
-    dias: dias.map((d) => ({ ...d, ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id) })),
+    dias: dias.map((d) => ({
+      ...d,
+      ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id),
+      sesion_actual: microcicloActual ? (sesionActualStmt.get(d.id, microcicloActual.id) ?? null) : null,
+    })),
     microciclos,
   };
 }

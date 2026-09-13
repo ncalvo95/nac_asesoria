@@ -260,7 +260,12 @@ cierre de microciclo → progreso → export a Excel):
   entrenamiento" (se abre directo en la pestaña del día de la semana que es
   hoy, si la rutina entrena ese día - si no, cae a la primera pestaña, igual
   que antes (`elegirDiaInicial` en `EntrenamientoPage.jsx`, comparte lógica
-  con Semana 0); semana 0 de testeo con fecha de
+  con Semana 0); cada pestaña de día muestra además un indicador chiquito de
+  si ya se registró (check verde) o se salteó (guion gris) ese día en el
+  microciclo en curso -sin indicador, todavía está pendiente esta semana-,
+  para ver de un vistazo qué falta sin entrar a cada día (`dia.sesion_actual`
+  en `obtenerRutinaActiva`, última fila de `registro_sesion` para ese día y
+  microciclo); semana 0 de testeo con fecha de
   inicio elegible, registro de series por peso/reps/RIR - los campos de
   peso y reps arrancan vacíos, mostrando en gris (placeholder, no un valor
   cargado) lo recomendado como referencia: el peso, el peso base del

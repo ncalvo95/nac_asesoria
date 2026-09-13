@@ -936,11 +936,21 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
               <button
                 key={d.id}
                 onClick={() => setDiaId(d.id)}
-                className={`px-3 h-8 rounded-full border text-[12.5px] font-semibold ${
+                className={`relative px-3 h-8 rounded-full border text-[12.5px] font-semibold ${
                   d.id === dia.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
                 }`}
               >
                 {CAPITALIZAR(d.dia_semana)}
+                {d.sesion_actual && (
+                  <span
+                    title={d.sesion_actual.salteada ? 'Salteado esta semana' : 'Registrado esta semana'}
+                    className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] leading-none text-white ${
+                      d.sesion_actual.salteada ? 'bg-text-faint' : 'bg-success'
+                    }`}
+                  >
+                    {d.sesion_actual.salteada ? '–' : '✓'}
+                  </span>
+                )}
               </button>
             ))}
             <button
