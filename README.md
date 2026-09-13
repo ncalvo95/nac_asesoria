@@ -1,5 +1,7 @@
 # nac_asesoria - WebApp de programación de entrenamientos
 
+🇬🇧 [Read this in English](README.en.md)
+
 Webapp para programar entrenamientos con progresión automática por microciclos
 de 2 semanas, medición de volumen y series efectivas por grupo muscular.
 Pensada para convivir en la misma Raspberry Pi (3B, 1GB RAM) que ya corre
@@ -31,6 +33,16 @@ Cloudflare Tunnel (ver Deployment).
   en el menú de cuenta y en las pantallas de login/invitación cuando el
   navegador lo soporta (no aparece en iOS Safari, que nunca dispara ese
   evento).
+
+### Por qué tan liviano
+
+Cada una de estas decisiones (SQLite en vez de un motor cliente/servidor,
+un solo proceso Node sirviendo API y estáticos, sin Redis, sin colas, sin
+workers aparte) apunta a lo mismo: mantener el footprint lo más chico
+posible. La app corre en una Raspberry Pi 3B con 1GB de RAM, compartida
+—dentro de contenedores Docker, en la misma red `edge`— con una web
+portfolio y otra aplicación del mismo estilo. No hay margen para un
+runtime pesado.
 
 ## Estado actual
 
