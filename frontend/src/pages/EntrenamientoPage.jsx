@@ -158,21 +158,64 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
   );
   const borradorKey = `nac_borrador_semana0_${rutina.id}`;
   const [valores, setValores] = useState(() => {
-    const borrador = leerBorrador(borradorKey) || {};
+    // El borrador del backend (microciclo.borrador_semana0) es lo que se
+    // cargo desde CUALQUIER dispositivo y se empujo con el boton "Guardar
+    // progreso"; el de localStorage es solo la copia instantanea de este
+    // mismo dispositivo/pestaña, que puede tener tipeo mas reciente que
+    // todavia no se empujo. Por eso localStorage gana campo por campo
+    // cuando tiene algo cargado, y el del backend rellena el resto.
+    let borradorBackend = {};
+    try {
+      borradorBackend = microciclo?.borrador_semana0 ? JSON.parse(microciclo.borrador_semana0) : {};
+    } catch {
+      borradorBackend = {};
+    }
+    const borradorLocal = leerBorrador(borradorKey) || {};
     return Object.fromEntries(
-      todosEjercicios.map((e) => [e.id, borrador[e.id] || { peso: '', reps1: '', reps2: '' }])
+      todosEjercicios.map((e) => {
+        const local = borradorLocal[e.id];
+        const remoto = borradorBackend[e.id];
+        const vacio = { peso: '', reps1: '', reps2: '' };
+        if (!local) return [e.id, remoto || vacio];
+        if (!remoto) return [e.id, local];
+        return [e.id, {
+          peso: local.peso || remoto.peso || '',
+          reps1: local.reps1 || remoto.reps1 || '',
+          reps2: local.reps2 || remoto.reps2 || '',
+        }];
+      })
     );
   });
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [guardandoFecha, setGuardandoFecha] = useState(false);
+  const [guardandoProgreso, setGuardandoProgreso] = useState(false);
+  const [progresoGuardado, setProgresoGuardado] = useState(false);
 
   useEffect(() => { guardarBorrador(borradorKey, valores); }, [borradorKey, valores]);
+
+  // Empuja lo tipeado hasta ahora al servidor (sin cerrar el testeo ni
+  // arrancar la semana 1) para que se vea desde otro dispositivo - a
+  // diferencia del submit, acepta ejercicios incompletos.
+  async function guardarProgreso() {
+    setError('');
+    setGuardandoProgreso(true);
+    setProgresoGuardado(false);
+    try {
+      await api.put(`/rutinas/${rutina.id}/semana0/borrador`, { valores });
+      setProgresoGuardado(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardandoProgreso(false);
+    }
+  }
 
   const diaActual = dias.find((d) => d.id === diaId) ?? dias[0];
 
   function set(id, campo, valor) {
     setValores((v) => ({ ...v, [id]: { ...v[id], [campo]: valor } }));
+    setProgresoGuardado(false);
   }
 
   function onSustituido(ejercicioAsignadoId, nuevo) {
@@ -391,13 +434,28 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
 
       {error && <p className="text-[13px] text-danger px-1">{error}</p>}
 
-      <button
-        type="submit"
-        disabled={enviando}
-        className="w-full h-12 rounded-[10px] bg-accent text-accent-fg text-[15px] font-semibold disabled:opacity-60"
-      >
-        {enviando ? 'Guardando…' : microciclo?.numero === 0 ? 'Guardar testeo y arrancar semana 1' : 'Guardar testeo y continuar'}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={guardarProgreso}
+          disabled={guardandoProgreso}
+          className="h-12 px-4 rounded-[10px] border border-accent text-accent text-[14px] font-semibold disabled:opacity-60 whitespace-nowrap"
+        >
+          {guardandoProgreso ? 'Guardando…' : 'Guardar'}
+        </button>
+        <button
+          type="submit"
+          disabled={enviando}
+          className="flex-1 h-12 rounded-[10px] bg-accent text-accent-fg text-[15px] font-semibold disabled:opacity-60"
+        >
+          {enviando ? 'Guardando…' : microciclo?.numero === 0 ? 'Guardar testeo y arrancar semana 1' : 'Guardar testeo y continuar'}
+        </button>
+      </div>
+      {progresoGuardado && (
+        <p className="text-[12.5px] text-text-muted self-center">
+          Progreso guardado - ya lo podés ver desde otro dispositivo.
+        </p>
+      )}
 
       {microciclo?.numero === 0 && (
         <button

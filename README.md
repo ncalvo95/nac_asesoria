@@ -184,6 +184,16 @@ cierre de microciclo → progreso → export a Excel):
   reps (0 - cualquier resultado real "supera" ese piso, así la base se
   establece sola en el primer cierre en vez de compararse contra un testeo
   que no pasó).
+- El borrador de Semana 0 también se puede empujar al backend sin cerrar el
+  testeo: botón **"Guardar"** al lado de "Guardar testeo y arrancar semana
+  1" (`PUT /rutinas/:id/semana0/borrador`, columna `microciclo.borrador_semana0`,
+  `guardarBorradorSemana0` en `progressionEngine.js`). A diferencia del
+  submit final, acepta ejercicios incompletos - sirve para cargar la rutina
+  personalizada desde la compu y verla (o seguir completándola) desde el
+  celular, en vez de quedar atrapada en el `localStorage` de un solo
+  dispositivo. Al abrir la pantalla, el borrador local y el del backend se
+  mezclan campo por campo (gana lo tipeado en este mismo dispositivo si
+  hay algo sin empujar todavía, y se completa con lo que venga del backend).
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

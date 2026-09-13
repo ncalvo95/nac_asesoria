@@ -253,6 +253,7 @@ CREATE TABLE IF NOT EXISTS microciclo (
   fecha_fin TEXT,
   estado TEXT NOT NULL DEFAULT 'en_curso' CHECK (estado IN ('en_curso', 'cerrado')),
   tipo TEXT NOT NULL DEFAULT 'normal' CHECK (tipo IN ('normal', 'testeo', 'descarga')),
+  borrador_semana0 TEXT,
   UNIQUE (rutina_id, numero)
 );
 

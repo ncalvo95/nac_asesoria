@@ -44,6 +44,7 @@ const getMicrocicloTesteoActual = db.prepare(
 );
 const insertMicrociclo = db.prepare(`INSERT INTO microciclo (rutina_id, numero, fecha_inicio, estado) VALUES (?, ?, ?, 'en_curso')`);
 const cerrarMicrocicloRow = db.prepare(`UPDATE microciclo SET estado = 'cerrado', fecha_fin = date('now') WHERE id = ?`);
+const updateBorradorSemana0 = db.prepare('UPDATE microciclo SET borrador_semana0 = ? WHERE id = ?');
 
 const upsertProgresoEjercicio = db.prepare(`
   INSERT INTO progreso_ejercicio_microciclo (ejercicio_asignado_id, microciclo_id, peso_prescrito, piso_reps, series_prescritas)
@@ -147,6 +148,20 @@ export const registrarSemana0 = db.transaction((rutinaId, usuarioId, resultados)
 
   cerrarMicrocicloRow.run(microcicloTesteo.id);
   return { microciclo0: microcicloTesteo, microciclo1: siguiente };
+});
+
+// Guarda lo tipeado en la semana de testeo en curso SIN cerrarla (a
+// diferencia de registrarSemana0): solo actualiza microciclo.borrador_semana0
+// con el JSON tal cual llega del frontend, acepte lo que acepte (parcial,
+// con campos vacios, etc. - no hay validacion de "completo" aca, esa la
+// hace el submit final). Sirve para que lo cargado en un dispositivo se vea
+// en otro antes de terminar el testeo (por ejemplo, cargarlo en la compu y
+// revisarlo despues desde el celular).
+export const guardarBorradorSemana0 = db.transaction((rutinaId, valores) => {
+  const microcicloTesteo = getMicrocicloTesteoActual.get(rutinaId);
+  if (!microcicloTesteo) throw new Error('La rutina no tiene una semana de testeo en curso.');
+  updateBorradorSemana0.run(JSON.stringify(valores), microcicloTesteo.id);
+  return { microciclo_id: microcicloTesteo.id };
 });
 
 // Salta la semana de testeo en curso: en vez de pedir 2 series de prueba por

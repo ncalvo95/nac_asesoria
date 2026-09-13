@@ -189,6 +189,16 @@ sessions → closing a microcycle → progress → Excel export):
   any real result "beats" that floor, so the baseline establishes itself
   naturally at the first close-out instead of being compared against a
   test that never happened).
+- The Week 0 draft can also be pushed to the backend without closing out
+  testing: a **"Save"** button next to "Save testing and start week 1"
+  (`PUT /rutinas/:id/semana0/borrador`, `microciclo.borrador_semana0`
+  column, `guardarBorradorSemana0` in `progressionEngine.js`). Unlike the
+  final submit, it accepts incomplete exercises - useful for loading the
+  custom routine on a computer and picking it back up (or finishing it)
+  from a phone, instead of it staying trapped in one device's
+  `localStorage`. When the screen loads, the local draft and the backend
+  one get merged field by field (whatever's typed on this device wins if
+  it hasn't been pushed yet, filled in from the backend otherwise).
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distinguishes
   special microcycles from regular progression blocks - this used to be
   implicit in `numero === 0`, which stopped being enough once a testing

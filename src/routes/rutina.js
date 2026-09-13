@@ -7,7 +7,7 @@ import {
   quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import {
-  cerrarMicrociclo, marcarNuevoTesteo, marcarSemanaDescarga, obtenerTesteos, registrarSemana0, repsEfectivas, saltearTesteo,
+  cerrarMicrociclo, guardarBorradorSemana0, marcarNuevoTesteo, marcarSemanaDescarga, obtenerTesteos, registrarSemana0, repsEfectivas, saltearTesteo,
 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
 import { tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
@@ -663,6 +663,27 @@ router.patch('/rutinas/:rutinaId/fecha-inicio', (req, res) => {
   db.prepare('UPDATE rutina SET fecha_inicio = ? WHERE id = ?').run(fecha_inicio, rutina.id);
   db.prepare('UPDATE microciclo SET fecha_inicio = ? WHERE id = ?').run(fecha_inicio, microciclo0.id);
   res.json({ rutina_id: rutina.id, fecha_inicio });
+});
+
+// Guarda lo tipeado en la semana de testeo en curso sin cerrarla, para que
+// se vea desde otro dispositivo antes de terminarla (a diferencia de POST
+// /semana0, que exige todo completo y arranca la semana 1). "valores" es el
+// objeto tal cual lo maneja el frontend (clave = ejercicio_asignado_id),
+// puede venir parcial.
+router.put('/rutinas/:rutinaId/semana0/borrador', (req, res, next) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  const { valores } = req.body || {};
+  if (!valores || typeof valores !== 'object') {
+    return res.status(400).json({ error: 'valores debe ser un objeto { ejercicio_asignado_id: { peso, reps1, reps2 } }.' });
+  }
+  try {
+    const out = guardarBorradorSemana0(rutina.id, valores);
+    res.json(out);
+  } catch (err) {
+    if (err.message.includes('no tiene una semana de testeo')) return res.status(400).json({ error: err.message });
+    next(err);
+  }
 });
 
 router.post('/rutinas/:rutinaId/semana0', (req, res, next) => {
