@@ -233,7 +233,13 @@ CREATE TABLE IF NOT EXISTS ejercicio_asignado (
   rango_reps_max INTEGER NOT NULL,
   descanso_segundos INTEGER NOT NULL DEFAULT 90,
   comentario TEXT,
-  comentario_recordar INTEGER NOT NULL DEFAULT 0
+  comentario_recordar INTEGER NOT NULL DEFAULT 0,
+  -- Hasta 2 musculos secundarios elegidos a mano para ESTE ejercicio puntual
+  -- (union con los musculos_secundarios_json del catalogo, no reemplazo -
+  -- ver musculosSecundariosDe en routineBuilder.js), para cuando el
+  -- catalogo no capta bien lo que un ejercicio en particular le pega a un
+  -- musculo (o para un ejercicio "particular" sin dato de catalogo).
+  musculos_secundarios_json TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE INDEX IF NOT EXISTS idx_ejercicio_asignado_dia ON ejercicio_asignado(dia_rutina_id, orden);

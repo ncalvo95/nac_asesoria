@@ -29,6 +29,7 @@ const columnasNuevas = [
   { tabla: 'microciclo', columna: 'borrador_semana0', definicion: 'TEXT' },
   { tabla: 'rutina', columna: 'nombre', definicion: 'TEXT' },
   { tabla: 'microciclo', columna: 'fase_nutricional', definicion: "TEXT CHECK (fase_nutricional IN ('volumen', 'definicion', 'mantenimiento'))" },
+  { tabla: 'ejercicio_asignado', columna: 'musculos_secundarios_json', definicion: "TEXT NOT NULL DEFAULT '[]'" },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

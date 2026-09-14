@@ -248,7 +248,8 @@ export default function ProgresoPage() {
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
                   </div>
                   <span className="tabular text-[11px] text-text-faint">
-                    {m.reps_efectivas} reps efectivas en el bloque
+                    {m.reps_efectivas} reps efectivas directas en el bloque
+                    {m.reps_efectivas_indirectas > 0 && <> · {m.reps_efectivas_indirectas} indirectas (secundario en otro ejercicio)</>}
                     {dropset && <> · {dropset.reps_efectivas} de dropset</>}
                   </span>
                 </div>

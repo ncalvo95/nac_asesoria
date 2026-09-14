@@ -17,6 +17,21 @@ export const TODOS_MUSCULOS = [
   'abdominales', 'cuadriceps', 'isquiotibiales', 'gluteos', 'abductores', 'aductores', 'pantorrillas', 'lumbares',
 ];
 
+const getMusculosSecundariosCatalogo = db.prepare('SELECT musculos_secundarios_json FROM ejercicio WHERE id = ?');
+
+// Musculos secundarios "efectivos" de un ejercicio_asignado puntual: union
+// de los del catalogo (fijos, definidos por el ejercicio en si) con los que
+// el usuario haya agregado a mano para ESTE ejercicio en particular (hasta
+// 2, ver PATCH /ejercicios/:id/musculos-secundarios) - nunca reemplazo, asi
+// que agregar uno nunca hace desaparecer los del catalogo. Sin duplicados,
+// y sin el propio musculo objetivo si por error quedo cargado como
+// secundario tambien.
+export function musculosSecundariosDe({ ejercicioId, musculoObjetivo, musculosSecundariosJson }) {
+  const catalogo = JSON.parse(getMusculosSecundariosCatalogo.get(ejercicioId)?.musculos_secundarios_json || '[]');
+  const extra = JSON.parse(musculosSecundariosJson || '[]');
+  return [...new Set([...catalogo, ...extra])].filter((m) => m !== musculoObjetivo);
+}
+
 const UPPER = ['pecho', 'espalda', 'dorsales', DELT_LATERAL, DELT_ANTERIOR, DELT_POSTERIOR, 'biceps', 'triceps'];
 // Abductores/aductores/lumbares van con las piernas (LOWER/LEGS): son
 // musculos de cadera y zona lumbar, no tienen lugar en un dia de Upper/

@@ -331,6 +331,25 @@ cierre de microciclo → progreso → export a Excel):
   siempre). Aplica también al agregar un día suelto más adelante (no solo
   al armar la rutina completa), siempre que la rutina ya tenga 4+
   días/semana.
+- **Músculos secundarios por ejercicio** (`ejercicio_asignado.musculos_secundarios_json`,
+  `PATCH /ejercicios/:id/musculos-secundarios`, opción "Músculos
+  secundarios" en el menú "⋯"): hasta 2 músculos elegidos a mano para ESE
+  ejercicio puntual, que se suman a los que ya trae el catálogo (nunca los
+  reemplazan - ver `musculosSecundariosDe` en `routineBuilder.js`). Sirve
+  para cuando el catálogo no capta bien lo que un ejercicio en particular
+  le pega a un músculo, o para un ejercicio "particular" (cargado a mano)
+  que no tiene dato de catálogo.
+- **Reps efectivas directas vs. indirectas por músculo** (sección "Volumen
+  semanal por músculo" en Progreso, `reps_efectivas_indirectas` en `GET
+  /rutinas/:id/progreso`): además de las reps efectivas directas de
+  siempre (del ejercicio cuyo músculo objetivo es ese), ahora se muestran
+  discriminadas las indirectas - las mismas series ya registradas cuentan
+  también, completas, para cada músculo secundario del ejercicio
+  (catálogo + agregados a mano de arriba). Se calcula en vivo a partir de
+  `registro_serie` del último bloque cerrado, igual que las directas -
+  `volumen_indirecto` (el conteo en series, no en reps efectivas, que ya
+  existía para el cierre de microciclo) también pasa a usar esta misma
+  unión catálogo+agregados.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

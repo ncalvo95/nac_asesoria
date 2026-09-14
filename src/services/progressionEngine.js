@@ -1,5 +1,5 @@
 import db from '../db/index.js';
-import { INCREMENTO_KG_DEFAULT, SERIES_MINIMO, topeSeriesPara } from './routineBuilder.js';
+import { INCREMENTO_KG_DEFAULT, musculosSecundariosDe, SERIES_MINIMO, topeSeriesPara } from './routineBuilder.js';
 
 // Umbral para decidir "mejor marca" vs "promedio" al cerrar un bloque de 2
 // semanas (supuesto #1 del prompt original, configurable aca).
@@ -374,10 +374,9 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
     const directos = resultadosPorEjercicio.filter((r) => r.ejercicio.musculo_nombre === musculo);
     const volumenDirecto = directos.reduce((acc, r) => acc + r.progreso.series_prescritas, 0);
     const volumenIndirecto = ejercicios
-      .filter((e) => {
-        const secundarios = JSON.parse(db.prepare('SELECT musculos_secundarios_json FROM ejercicio WHERE id = ?').get(e.ejercicio_id).musculos_secundarios_json);
-        return secundarios.includes(musculo);
-      })
+      .filter((e) => musculosSecundariosDe({
+        ejercicioId: e.ejercicio_id, musculoObjetivo: e.musculo_nombre, musculosSecundariosJson: e.musculos_secundarios_json,
+      }).includes(musculo))
       .reduce((acc, e) => {
         const p = getProgresoEjercicio.get(e.id, microciclo.id);
         return acc + (p ? p.series_prescritas : 0);

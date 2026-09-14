@@ -11,7 +11,7 @@ import {
   registrarSemana0, repsEfectivas, saltearTesteo,
 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
-import { tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
+import { musculosSecundariosDe, tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
 import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
 
 const router = Router();
@@ -424,6 +424,30 @@ router.patch('/ejercicios/:ejercicioAsignadoId/descanso', (req, res) => {
   }
   db.prepare('UPDATE ejercicio_asignado SET descanso_segundos = ? WHERE id = ?').run(descanso_segundos, ea.id);
   res.json({ id: ea.id, descanso_segundos });
+});
+
+// Hasta 2 musculos secundarios elegidos a mano para ESTE ejercicio puntual
+// (union con los del catalogo, nunca reemplazo - ver musculosSecundariosDe
+// en routineBuilder.js). Sirve para cuando el catalogo no capta bien lo que
+// un ejercicio le pega a un musculo, o para un ejercicio "particular" sin
+// dato de catalogo. musculos: [] los borra.
+router.patch('/ejercicios/:ejercicioAsignadoId/musculos-secundarios', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { musculos } = req.body || {};
+  if (!Array.isArray(musculos) || musculos.length > 2) {
+    return res.status(400).json({ error: 'musculos debe ser un array de hasta 2 elementos.' });
+  }
+  if (musculos.some((m) => !TODOS_MUSCULOS.includes(m))) {
+    return res.status(400).json({ error: `musculos debe ser un subconjunto de: ${TODOS_MUSCULOS.join(', ')}.` });
+  }
+  const musculoPropio = db.prepare('SELECT nombre FROM musculo WHERE id = ?').get(ea.musculo_objetivo_id)?.nombre;
+  if (musculos.includes(musculoPropio)) {
+    return res.status(400).json({ error: 'Un musculo no puede ser secundario de si mismo.' });
+  }
+  const unicos = [...new Set(musculos)];
+  db.prepare('UPDATE ejercicio_asignado SET musculos_secundarios_json = ? WHERE id = ?').run(JSON.stringify(unicos), ea.id);
+  res.json({ id: ea.id, musculos_secundarios: unicos });
 });
 
 // Mueve/copia un ejercicio ya asignado a otro dia de la misma rutina - ver
@@ -878,9 +902,14 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
   // no de lo prescripto - series sin RIR cargado (ej. semana 0) no suman.
   // Las dropset se cuentan aparte (no se mezclan con el volumen "real" del
   // ejercicio/musculo, que asume series a peso constante - ver es_dropset
-  // en progressionEngine.js).
+  // en progressionEngine.js). Ademas de las directas (al musculo objetivo
+  // del ejercicio), se discriminan las indirectas: las mismas series
+  // cuentan tambien -completas, no fraccionadas- para cada musculo
+  // secundario del ejercicio (catalogo + agregados a mano, ver
+  // musculosSecundariosDe en routineBuilder.js).
   const seriesDelBloque = db.prepare(`
-    SELECT rs.reps, rs.rir, rs.es_dropset, ea.id AS ejercicio_asignado_id, m.nombre AS musculo_nombre
+    SELECT rs.reps, rs.rir, rs.es_dropset, ea.id AS ejercicio_asignado_id, ea.ejercicio_id,
+      ea.musculos_secundarios_json, m.nombre AS musculo_nombre
     FROM registro_serie rs
     JOIN registro_sesion rses ON rses.id = rs.registro_sesion_id
     JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
@@ -889,6 +918,7 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
   `).all(ultimoCerrado.id);
 
   const repsEfectivasPorMusculo = new Map();
+  const repsEfectivasIndirectasPorMusculo = new Map();
   const repsEfectivasPorEjercicio = new Map();
   const dropsetEfectivasPorMusculo = new Map();
   for (const s of seriesDelBloque) {
@@ -900,11 +930,22 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
     }
     repsEfectivasPorMusculo.set(s.musculo_nombre, (repsEfectivasPorMusculo.get(s.musculo_nombre) || 0) + efectivas);
     repsEfectivasPorEjercicio.set(s.ejercicio_asignado_id, (repsEfectivasPorEjercicio.get(s.ejercicio_asignado_id) || 0) + efectivas);
+
+    const secundarios = musculosSecundariosDe({
+      ejercicioId: s.ejercicio_id, musculoObjetivo: s.musculo_nombre, musculosSecundariosJson: s.musculos_secundarios_json,
+    });
+    for (const sec of secundarios) {
+      repsEfectivasIndirectasPorMusculo.set(sec, (repsEfectivasIndirectasPorMusculo.get(sec) || 0) + efectivas);
+    }
   }
 
   res.json({
     microciclo: ultimoCerrado,
-    musculos: musculos.map((m) => ({ ...m, reps_efectivas: repsEfectivasPorMusculo.get(m.nombre) || 0 })),
+    musculos: musculos.map((m) => ({
+      ...m,
+      reps_efectivas: repsEfectivasPorMusculo.get(m.nombre) || 0,
+      reps_efectivas_indirectas: repsEfectivasIndirectasPorMusculo.get(m.nombre) || 0,
+    })),
     ejercicios: ejercicios.map((e) => ({ ...e, reps_efectivas: repsEfectivasPorEjercicio.get(e.id) || 0 })),
     dropsets: [...dropsetEfectivasPorMusculo.entries()].map(([nombre, reps_efectivas]) => ({ nombre, reps_efectivas })),
   });

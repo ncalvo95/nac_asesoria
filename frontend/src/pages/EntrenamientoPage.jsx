@@ -1490,6 +1490,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 dropsetActivo={seriesPorEjercicio[ej.id].some((s) => s.esDropset)}
                 onToggleDropset={() => toggleDropset(ej.id)}
                 onAutocompletar={() => autocompletarReferencia(ej.id)}
+                todosMusculos={todosMusculos}
               />
             </div>
           );
@@ -1520,7 +1521,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   );
 }
 
-function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUltimoDelMusculo, dropsetActivo, onToggleDropset, onAutocompletar }) {
+function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUltimoDelMusculo, dropsetActivo, onToggleDropset, onAutocompletar, todosMusculos }) {
   const advertenciaQuitar = ejercicio.es_top_de_musculo || esUltimoDelMusculo
     ? `Este es el ejercicio ${ejercicio.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ejercicio.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
     : null;
@@ -1530,6 +1531,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
   const [mostrarDescanso, setMostrarDescanso] = useState(false);
   const [mostrarMoverCopiar, setMostrarMoverCopiar] = useState(false);
   const [mostrarEditarNombre, setMostrarEditarNombre] = useState(false);
+  const [mostrarSecundarios, setMostrarSecundarios] = useState(false);
   const [error, setError] = useState('');
   const menuRef = useRef(null);
 
@@ -1624,6 +1626,13 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
               >
                 Descanso
               </button>
+              <button
+                type="button"
+                onClick={() => abrir(setMostrarSecundarios)}
+                className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
+              >
+                Músculos secundarios
+              </button>
               {diasHermanos?.length > 0 && (
                 <button
                   type="button"
@@ -1672,6 +1681,15 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
             ejercicioId={ejercicio.id}
             descansoSegundos={ejercicio.descanso_segundos}
             onAjustado={() => { setMostrarDescanso(false); onCambiado(); }}
+          />
+        </div>
+      )}
+      {mostrarSecundarios && (
+        <div className="flex justify-end">
+          <AjusteMusculosSecundarios
+            ejercicio={ejercicio}
+            todosMusculos={todosMusculos}
+            onAjustado={() => { setMostrarSecundarios(false); onCambiado(); }}
           />
         </div>
       )}
@@ -1869,6 +1887,79 @@ function AjusteDescanso({ ejercicioId, descansoSegundos, onAjustado }) {
         className="w-20 h-8 rounded-md border border-border bg-bg px-2 tabular text-[13px] outline-none focus:border-accent"
       />
       <span className="text-[11px] text-text-faint">segundos</span>
+      <button
+        type="button"
+        onClick={confirmar}
+        disabled={enviando}
+        className="h-8 px-3 rounded-md bg-accent text-accent-fg text-[12px] font-semibold disabled:opacity-60"
+      >
+        {enviando ? 'Guardando…' : 'Guardar'}
+      </button>
+      {error && <span className="text-[11px] text-danger">{error}</span>}
+    </div>
+  );
+}
+
+// Hasta 2 musculos secundarios elegidos a mano para ESTE ejercicio puntual -
+// se suman a los que ya trae el catalogo (no los reemplazan), para cuando
+// el catalogo no capta bien lo que el ejercicio le pega a un musculo, o
+// para un ejercicio "particular" sin dato de catalogo. Se usan para
+// discriminar reps efectivas directas/indirectas por musculo en Progreso.
+function AjusteMusculosSecundarios({ ejercicio, todosMusculos, onAjustado }) {
+  const [elegidos, setElegidos] = useState(() => {
+    try {
+      return JSON.parse(ejercicio.musculos_secundarios_json || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  function toggle(nombre) {
+    setElegidos((prev) => {
+      if (prev.includes(nombre)) return prev.filter((m) => m !== nombre);
+      if (prev.length >= 2) return prev;
+      return [...prev, nombre];
+    });
+  }
+
+  async function confirmar() {
+    setEnviando(true);
+    setError('');
+    try {
+      await api.patch(`/ejercicios/${ejercicio.id}/musculos-secundarios`, { musculos: elegidos });
+      onAjustado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const opciones = (todosMusculos || []).filter((m) => m.nombre !== ejercicio.musculo_nombre);
+
+  return (
+    <div className="flex flex-col gap-2 items-end">
+      <span className="text-[11px] text-text-faint">Hasta 2, además de los que ya trae el ejercicio</span>
+      <div className="flex gap-1.5 flex-wrap justify-end max-w-xs">
+        {opciones.map((m) => {
+          const activo = elegidos.includes(m.nombre);
+          return (
+            <button
+              key={m.nombre}
+              type="button"
+              onClick={() => toggle(m.nombre)}
+              disabled={!activo && elegidos.length >= 2}
+              className={`px-2.5 h-7 rounded-full border text-[11px] font-medium disabled:opacity-40 ${
+                activo ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+              }`}
+            >
+              {formatearMusculo(m.nombre)}
+            </button>
+          );
+        })}
+      </div>
       <button
         type="button"
         onClick={confirmar}
