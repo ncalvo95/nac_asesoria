@@ -220,6 +220,24 @@ sessions → closing a microcycle → progress → Excel export):
   `<form>` now blocks Enter on any nested `<input>` (`onKeyDown` on
   `Semana0Form`), so only an explicit click on "Save testing..." closes it
   out.
+- **Edit Week 0** (link next to "Change day" on Entrenamiento,
+  `EditarSemana0Modal.jsx`, `GET`/`PUT /rutinas/:id/semana0/editar`,
+  `obtenerSemana0Editable`/`editarResultadosSemana0` in
+  `progressionEngine.js`): fixes what got logged in testing week after
+  it's already closed - the classic "I typed it wrong" case, or a way to
+  undo what a bug like the one above did without redoing the whole thing
+  from scratch. Only available while the microcycle that testing produced
+  is still in progress (`getMicrocicloTesteoOrigenDelActual`: the closed
+  testeo whose `numero + 1` is the currently in_curso microcycle) - once
+  that microcycle closes, the routine has already moved past what testing
+  set up, so touching it retroactively would break the progression chain,
+  and the link stops showing up. Saving corrects the 2 already-logged sets
+  AND recalculates the current microcycle's prescribed weight/rep floor
+  from the corrected values (same rule as the original test close-out),
+  preserving any manual set-count adjustment already made. An exercise
+  added after testing closed (already in microcycle 1) never went through
+  testing, so it doesn't show up on this screen - it gets skipped even if
+  the request still includes it.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distinguishes
   special microcycles from regular progression blocks - this used to be
   implicit in `numero === 0`, which stopped being enough once a testing

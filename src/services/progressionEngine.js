@@ -42,6 +42,15 @@ const getMicrociclo = db.prepare('SELECT * FROM microciclo WHERE rutina_id = ? A
 const getMicrocicloTesteoActual = db.prepare(
   "SELECT * FROM microciclo WHERE rutina_id = ? AND tipo = 'testeo' AND estado = 'en_curso'"
 );
+// El testeo que dio origen al microciclo en curso, solo si ese microciclo
+// todavia no se cerro (numero+1 en_curso) - una vez que se cierra, la
+// rutina ya avanzo mas alla de lo que corrigio la semana 0, asi que
+// tocarla retroactivamente rompería la cadena de progresion.
+const getMicrocicloTesteoOrigenDelActual = db.prepare(`
+  SELECT t.* FROM microciclo t
+  JOIN microciclo actual ON actual.rutina_id = t.rutina_id AND actual.numero = t.numero + 1
+  WHERE t.rutina_id = ? AND t.tipo = 'testeo' AND t.estado = 'cerrado' AND actual.estado = 'en_curso'
+`);
 const insertMicrociclo = db.prepare(`INSERT INTO microciclo (rutina_id, numero, fecha_inicio, estado) VALUES (?, ?, ?, 'en_curso')`);
 const cerrarMicrocicloRow = db.prepare(`UPDATE microciclo SET estado = 'cerrado', fecha_fin = date('now') WHERE id = ?`);
 const updateBorradorSemana0 = db.prepare('UPDATE microciclo SET borrador_semana0 = ? WHERE id = ?');
@@ -148,6 +157,90 @@ export const registrarSemana0 = db.transaction((rutinaId, usuarioId, resultados)
 
   cerrarMicrocicloRow.run(microcicloTesteo.id);
   return { microciclo0: microcicloTesteo, microciclo1: siguiente };
+});
+
+// Devuelve lo que se cargo en la semana de testeo que dio origen al
+// microciclo en curso, para poder corregirlo (ver editarResultadosSemana0)
+// - por ejemplo si se cargo mal un dato o un bug hizo que el testeo se
+// cerrara antes de tiempo (ver Enter implicito del form, ya arreglado, pero
+// esto da una salida para lo que ya haya pasado). null si no hay nada
+// editable en este momento (el microciclo siguiente ya se cerro).
+export function obtenerSemana0Editable(rutinaId) {
+  const testeo = getMicrocicloTesteoOrigenDelActual.get(rutinaId);
+  if (!testeo) return null;
+
+  const filas = db.prepare(`
+    SELECT rs.ejercicio_asignado_id, rs.numero_serie, rs.peso, rs.reps,
+      e.nombre AS ejercicio_nombre, m.nombre AS musculo_nombre, dr.dia_semana, dr.numero_dia
+    FROM registro_serie rs
+    JOIN registro_sesion se ON se.id = rs.registro_sesion_id
+    JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
+    JOIN ejercicio e ON e.id = ea.ejercicio_id
+    JOIN musculo m ON m.id = ea.musculo_objetivo_id
+    JOIN dia_rutina dr ON dr.id = ea.dia_rutina_id
+    WHERE se.microciclo_id = ?
+    ORDER BY dr.numero_dia, ea.orden, rs.numero_serie
+  `).all(testeo.id);
+
+  const porEjercicio = new Map();
+  for (const f of filas) {
+    if (!porEjercicio.has(f.ejercicio_asignado_id)) {
+      porEjercicio.set(f.ejercicio_asignado_id, {
+        ejercicio_asignado_id: f.ejercicio_asignado_id, ejercicio_nombre: f.ejercicio_nombre,
+        musculo_nombre: f.musculo_nombre, dia_semana: f.dia_semana, peso: f.peso,
+      });
+    }
+    const ej = porEjercicio.get(f.ejercicio_asignado_id);
+    if (f.numero_serie === 1) ej.reps_serie1 = f.reps;
+    if (f.numero_serie === 2) ej.reps_serie2 = f.reps;
+  }
+
+  return { microciclo: testeo, ejercicios: [...porEjercicio.values()] };
+}
+
+// Corrige lo cargado en la semana de testeo que dio origen al microciclo en
+// curso (ver obtenerSemana0Editable) - no reabre ni recierra nada, solo
+// actualiza las 2 series ya registradas de cada ejercicio y, con esos
+// valores corregidos, vuelve a calcular el peso prescrito y el piso de
+// reps del microciclo en curso (mismo criterio que registrarSemana0),
+// asi las sugerencias que ve el usuario ahora tambien quedan al dia.
+export const editarResultadosSemana0 = db.transaction((rutinaId, resultados) => {
+  const testeo = getMicrocicloTesteoOrigenDelActual.get(rutinaId);
+  if (!testeo) throw new Error('No hay una semana de testeo para corregir en este momento (el microciclo siguiente ya se cerró).');
+  const actual = getMicrociclo.get(rutinaId, testeo.numero + 1);
+
+  const getSeriesOriginales = db.prepare(`
+    SELECT rs.id, rs.numero_serie FROM registro_serie rs
+    JOIN registro_sesion se ON se.id = rs.registro_sesion_id
+    WHERE se.microciclo_id = ? AND rs.ejercicio_asignado_id = ?
+    ORDER BY rs.numero_serie
+  `);
+  const updateSerie = db.prepare('UPDATE registro_serie SET peso = ?, reps = ? WHERE id = ?');
+
+  for (const r of resultados) {
+    const { ejercicio_asignado_id, peso, reps_serie1, reps_serie2 } = r;
+    const series = getSeriesOriginales.all(testeo.id, ejercicio_asignado_id);
+    // Ejercicio agregado despues de cerrado el testeo (no formaba parte del
+    // envio original) - no hay nada que corregir para este, se ignora.
+    if (series.length !== 2) continue;
+
+    updateSerie.run(peso, reps_serie1, series[0].id);
+    updateSerie.run(peso, reps_serie2, series[1].id);
+
+    // Si ya se ajusto manualmente el numero de series en microciclo 1 (ver
+    // AjusteSeries), esta correccion no lo pisa - solo actualiza peso y
+    // piso de reps, que es lo que la semana de testeo realmente fija.
+    const progresoActual = getProgresoEjercicio.get(ejercicio_asignado_id, actual.id);
+    const seriesPrescritas = progresoActual?.series_prescritas ?? SERIES_MINIMO;
+
+    const pisoReferencia = Math.max(reps_serie1, reps_serie2);
+    upsertProgresoEjercicio.run({
+      ejercicio_asignado_id, microciclo_id: actual.id, peso_prescrito: peso, piso_reps: pisoReferencia, series_prescritas: seriesPrescritas,
+    });
+    updateEjercicioAsignadoEstado.run(peso, seriesPrescritas, ejercicio_asignado_id);
+  }
+
+  return { microciclo0: testeo, microciclo1: actual };
 });
 
 // Guarda lo tipeado en la semana de testeo en curso SIN cerrarla (a

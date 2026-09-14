@@ -215,6 +215,24 @@ cierre de microciclo → progreso → export a Excel):
   hasta ese momento. El `<form>` ahora bloquea el Enter en cualquier
   `<input>` anidado (`onKeyDown` en `Semana0Form`), así que solo el clic
   explícito en "Guardar testeo..." cierra el testeo.
+- **Editar Semana 0** (link junto a "Cambiar día" en Entrenamiento,
+  `EditarSemana0Modal.jsx`, `GET`/`PUT /rutinas/:id/semana0/editar`,
+  `obtenerSemana0Editable`/`editarResultadosSemana0` en
+  `progressionEngine.js`): corrige lo cargado en la semana de testeo
+  después de haberla cerrado -para el típico "me equivoqué al tipear" o
+  para deshacer el efecto de un bug como el de arriba, sin tener que
+  rehacer todo desde cero-. Solo está disponible mientras el microciclo
+  que generó ese testeo siga en curso (`getMicrocicloTesteoOrigenDelActual`:
+  el testeo cerrado cuyo `numero + 1` es el microciclo en_curso) - una vez
+  que se cierra ese microciclo, la rutina ya avanzó más allá de lo que
+  corrigió el testeo, así que tocarlo retroactivamente rompería la cadena
+  de progresión, y el link deja de estar disponible. Al guardar, corrige
+  las 2 series ya registradas Y recalcula el peso prescrito/piso de reps
+  del microciclo en curso con los valores corregidos (mismo criterio que
+  el cierre de testeo original), preservando el ajuste manual de series si
+  ya se hizo uno. Un ejercicio agregado después de cerrado el testeo (ya
+  en microciclo 1) no tenía nada que testear, así que no aparece en esta
+  pantalla - se ignora si igual se manda en el pedido.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

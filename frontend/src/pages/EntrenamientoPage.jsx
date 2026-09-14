@@ -5,6 +5,7 @@ import { api, API_BASE } from '../api/client.js';
 import AgregarDiaModal from '../components/AgregarDiaModal.jsx';
 import QuitarDiaModal from '../components/QuitarDiaModal.jsx';
 import CambiarDiaModal from '../components/CambiarDiaModal.jsx';
+import EditarSemana0Modal from '../components/EditarSemana0Modal.jsx';
 import { formatearMusculo } from '../utils/musculo.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -928,6 +929,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
   const [mostrarAgregarDia, setMostrarAgregarDia] = useState(false);
   const [mostrarQuitarDia, setMostrarQuitarDia] = useState(false);
   const [mostrarCambiarDia, setMostrarCambiarDia] = useState(false);
+  const [mostrarEditarSemana0, setMostrarEditarSemana0] = useState(false);
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto">
@@ -985,6 +987,15 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
             >
               Cambiar día
             </button>
+            {microciclo.numero >= 1 && (
+              <button
+                type="button"
+                onClick={() => setMostrarEditarSemana0(true)}
+                className="text-[11.5px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+              >
+                Editar Semana 0
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setMostrarQuitarDia(true)}
@@ -1035,6 +1046,13 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           diasActivos={diasUnicos.filter((d) => d.id !== dia.id).map((d) => d.dia_semana)}
           onClose={() => setMostrarCambiarDia(false)}
           onCambiado={() => { setMostrarCambiarDia(false); onRutinaCambiada(); }}
+        />
+      )}
+      {mostrarEditarSemana0 && (
+        <EditarSemana0Modal
+          rutinaId={rutina.id}
+          onClose={() => setMostrarEditarSemana0(false)}
+          onCorregido={() => { setMostrarEditarSemana0(false); onRutinaCambiada(); }}
         />
       )}
     </div>

@@ -7,7 +7,8 @@ import {
   quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import {
-  cerrarMicrociclo, guardarBorradorSemana0, marcarNuevoTesteo, marcarSemanaDescarga, obtenerTesteos, registrarSemana0, repsEfectivas, saltearTesteo,
+  cerrarMicrociclo, editarResultadosSemana0, guardarBorradorSemana0, marcarNuevoTesteo, marcarSemanaDescarga, obtenerSemana0Editable, obtenerTesteos,
+  registrarSemana0, repsEfectivas, saltearTesteo,
 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
 import { tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
@@ -682,6 +683,41 @@ router.put('/rutinas/:rutinaId/semana0/borrador', (req, res, next) => {
     res.json(out);
   } catch (err) {
     if (err.message.includes('no tiene una semana de testeo')) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Devuelve la semana de testeo que dio origen al microciclo en curso, para
+// corregirla (ver PUT de abajo) - solo mientras ese microciclo no se haya
+// cerrado. Null si no hay nada editable en este momento (no es un error:
+// el frontend lo usa para decidir si mostrar el link "Editar semana 0").
+router.get('/rutinas/:rutinaId/semana0/editar', (req, res) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  res.json(obtenerSemana0Editable(rutina.id));
+});
+
+// Corrige lo cargado en esa semana de testeo (mismo peso/reps_serie1/
+// reps_serie2 por ejercicio que el submit original) sin reabrir el
+// microciclo - actualiza el registro historico y, con eso, el peso
+// prescrito/piso de reps del microciclo en curso.
+router.put('/rutinas/:rutinaId/semana0/editar', (req, res, next) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  const { resultados } = req.body || {};
+  if (!Array.isArray(resultados) || resultados.length === 0) {
+    return res.status(400).json({ error: 'resultados debe ser una lista de {ejercicio_asignado_id, peso, reps_serie1, reps_serie2}.' });
+  }
+  for (const r of resultados) {
+    if (!r.ejercicio_asignado_id || r.peso == null || r.reps_serie1 == null || r.reps_serie2 == null) {
+      return res.status(400).json({ error: 'Cada resultado necesita ejercicio_asignado_id, peso, reps_serie1 y reps_serie2.' });
+    }
+  }
+  try {
+    const out = editarResultadosSemana0(rutina.id, resultados);
+    res.json(out);
+  } catch (err) {
+    if (err.message.includes('No hay una semana de testeo')) return res.status(400).json({ error: err.message });
     next(err);
   }
 });
