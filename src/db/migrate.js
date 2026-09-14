@@ -198,6 +198,64 @@ function fixDeloadCascade() {
 }
 fixDeloadCascade();
 
+// registro_sesion.dia_rutina_id/microciclo_id y registro_serie.ejercicio_asignado_id
+// tampoco tenian ON DELETE CASCADE originalmente (mismo problema que deload,
+// ver comentario de fixDeloadCascade arriba) - borrar una rutina con
+// sesiones entrenadas registradas rompia con "FOREIGN KEY constraint
+// failed" porque esas filas quedaban huerfanas bloqueando el borrado en
+// cascada de dia_rutina/microciclo/ejercicio_asignado. Mismo enfoque:
+// reconstruir la tabla solo si todavia le falta el cascade (idempotente).
+function fixRegistroSesionCascade() {
+  const fks = db.prepare('PRAGMA foreign_key_list(registro_sesion)').all();
+  const yaTieneCascade = ['dia_rutina', 'microciclo'].every((tabla) =>
+    fks.some((fk) => fk.table === tabla && fk.on_delete === 'CASCADE')
+  );
+  if (yaTieneCascade) return;
+
+  db.exec(`
+    ALTER TABLE registro_sesion RENAME TO registro_sesion_old;
+    CREATE TABLE registro_sesion (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      dia_rutina_id INTEGER NOT NULL REFERENCES dia_rutina(id) ON DELETE CASCADE,
+      fecha TEXT NOT NULL DEFAULT (date('now')),
+      salteada INTEGER NOT NULL DEFAULT 0,
+      microciclo_id INTEGER NOT NULL REFERENCES microciclo(id) ON DELETE CASCADE
+    );
+    INSERT INTO registro_sesion (id, usuario_id, dia_rutina_id, fecha, salteada, microciclo_id)
+      SELECT id, usuario_id, dia_rutina_id, fecha, salteada, microciclo_id FROM registro_sesion_old;
+    DROP TABLE registro_sesion_old;
+    CREATE INDEX IF NOT EXISTS idx_registro_sesion_usuario ON registro_sesion(usuario_id, fecha);
+  `);
+}
+fixRegistroSesionCascade();
+
+function fixRegistroSerieCascade() {
+  const yaTieneCascade = db.prepare('PRAGMA foreign_key_list(registro_serie)').all()
+    .some((fk) => fk.table === 'ejercicio_asignado' && fk.on_delete === 'CASCADE');
+  if (yaTieneCascade) return;
+
+  db.exec(`
+    ALTER TABLE registro_serie RENAME TO registro_serie_old;
+    CREATE TABLE registro_serie (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      registro_sesion_id INTEGER NOT NULL REFERENCES registro_sesion(id) ON DELETE CASCADE,
+      ejercicio_asignado_id INTEGER NOT NULL REFERENCES ejercicio_asignado(id) ON DELETE CASCADE,
+      numero_serie INTEGER NOT NULL,
+      peso REAL NOT NULL,
+      reps INTEGER NOT NULL,
+      rir INTEGER,
+      molestia TEXT,
+      es_dropset INTEGER NOT NULL DEFAULT 0
+    );
+    INSERT INTO registro_serie (id, registro_sesion_id, ejercicio_asignado_id, numero_serie, peso, reps, rir, molestia, es_dropset)
+      SELECT id, registro_sesion_id, ejercicio_asignado_id, numero_serie, peso, reps, rir, molestia, es_dropset FROM registro_serie_old;
+    DROP TABLE registro_serie_old;
+    CREATE INDEX IF NOT EXISTS idx_registro_serie_sesion ON registro_serie(registro_sesion_id);
+  `);
+}
+fixRegistroSerieCascade();
+
 // "Lineal forzado" (modo por ejercicio que evitaba que el peso bajara solo
 // si no se llegaba al minimo de reps) se saco por confuso: la baja de
 // rendimiento entre series manteniendo el mismo peso es la expectativa

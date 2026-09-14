@@ -350,6 +350,19 @@ cierre de microciclo → progreso → export a Excel):
   `volumen_indirecto` (el conteo en series, no en reps efectivas, que ya
   existía para el cierre de microciclo) también pasa a usar esta misma
   unión catálogo+agregados.
+- **Fix crítico: borrar una rutina con sesiones entrenadas fallaba con
+  "FOREIGN KEY constraint failed"** (`fixRegistroSesionCascade`/
+  `fixRegistroSerieCascade` en `src/db/migrate.js`): en bases creadas antes
+  de que `registro_sesion.dia_rutina_id`/`microciclo_id` y
+  `registro_serie.ejercicio_asignado_id` tuvieran `ON DELETE CASCADE`
+  (agregado a `schema.sql` en un commit posterior a la creación de esas
+  tablas), `CREATE TABLE IF NOT EXISTS` nunca actualiza retroactivamente
+  esa restricción en una base ya existente - hacía falta reconstruir la
+  tabla, mismo problema y mismo mecanismo que ya se había arreglado antes
+  para `deload` (ver `fixDeloadCascade`, un poco más arriba en el mismo
+  archivo) pero que se había quedado corto: solo cubría esa tabla. Se
+  corre solo (retroactivo, idempotente) en cada arranque del servidor -
+  no hace falta ningún paso manual.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de
