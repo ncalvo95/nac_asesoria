@@ -102,7 +102,13 @@ router.delete('/rutinas/:rutinaId', (req, res, next) => {
     eliminarRutina(rutina.id);
     res.status(204).end();
   } catch (err) {
-    next(err);
+    // Se manda el mensaje real (no el generico "Error interno del
+    // servidor") porque esto ya paso a produccion sin poder reproducirse
+    // en desarrollo - sin el motivo puntual en pantalla no hay forma de
+    // diagnosticarlo a distancia. console.error tambien deja el stack
+    // completo en el log del contenedor por si hace falta mas detalle.
+    console.error(`Error borrando rutina ${rutina.id}:`, err);
+    res.status(500).json({ error: `No se pudo borrar la rutina: ${err.message}` });
   }
 });
 
