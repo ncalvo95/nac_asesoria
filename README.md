@@ -269,6 +269,29 @@ cierre de microciclo → progreso → export a Excel):
   en Entrenamiento): volumen/definición/mantenimiento/sin definir, elegido
   libremente por el usuario para ese microciclo - puramente informativo,
   no afecta en nada al motor de progresión ni al cálculo de series/peso.
+- **Cálculo de tiempo por ejercicio reemplazado** (antes un fijo
+  `MINUTOS_POR_EJERCICIO = 9` sin importar la cantidad de series):
+  `segundosEstimadosEjercicio` en `routineBuilder.js` ahora estima
+  `30s de trabajo × series + descanso × (series - 1) + 5 min de
+  transición` (cambiar de máquina/estación, cargar y descargar discos) -
+  el mismo criterio de descanso (90s, 60s si es unilateral) que ya se
+  persiste en `ejercicio_asignado`. `armarDia` sigue repartiendo el tiempo
+  declarado entre ejercicios igual que antes, pero ahora con este costo
+  real por ejercicio en vez del fijo, y redondeando el acumulado para
+  abajo al comparar contra los minutos disponibles (así un ejercicio que
+  se pasa por una fracción de minuto -ej. 9.5 min por una 3ra serie donde
+  antes eran 9 fijos- igual entra si el sobrante es menor a un minuto).
+  Sigue arrancando siempre en `SERIES_MINIMO` (2) porque es el estado con
+  el que se crea cualquier ejercicio nuevo, así que este cálculo es solo
+  para decidir CUÁNTOS ejercicios entran al armar el día - no se vuelve a
+  correr después.
+- **Duración aproximada del entrenamiento** (junto a "Microciclo N" en
+  Entrenamiento, `duracionEstimadaDia` en `EntrenamientoPage.jsx`): mismo
+  criterio de arriba, pero recalculado en vivo con las series y el
+  descanso REALES de cada ejercicio del día actual (los que ya subieron
+  por progresión, o los que el usuario ajustó a mano con +/- Series o
+  Descanso) - a diferencia del cálculo de `armarDia`, que solo corre una
+  vez al armar el día y se congela en 2 series.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

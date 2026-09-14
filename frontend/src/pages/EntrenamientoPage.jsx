@@ -51,6 +51,24 @@ function repsEfectivas(reps, rir) {
   return Math.max(0, Math.min(r, REPS_EFECTIVAS_UMBRAL - i));
 }
 
+// Duración aproximada del día: mismo criterio que segundosEstimadosEjercicio
+// en src/services/routineBuilder.js (30s de trabajo por serie + el descanso
+// entre series + 5 min de transición por ejercicio), pero acá con las
+// series y el descanso REALES de cada ejercicio_asignado -que ya pueden
+// haberse movido lejos de los 2/90s con los que se armó el día- en vez de
+// congelados en el momento del armado.
+const SEGUNDOS_POR_SERIE = 30;
+const SEGUNDOS_TRANSICION_EJERCICIO = 300;
+function duracionEstimadaDia(dia) {
+  const segundos = dia.ejercicios.reduce((acc, ej) => {
+    const series = ej.series_actuales || 0;
+    if (series <= 0) return acc;
+    const descanso = ej.descanso_segundos ?? 90;
+    return acc + SEGUNDOS_POR_SERIE * series + descanso * (series - 1) + SEGUNDOS_TRANSICION_EJERCICIO;
+  }, 0);
+  return Math.round(segundos / 60);
+}
+
 function ExportarExcel({ rutinaId }) {
   return (
     <a
@@ -938,6 +956,12 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           <div className="flex items-center gap-2">
             <h1 className="text-[17px] font-bold">{CAPITALIZAR(dia.dia_semana)}</h1>
             <span className="tabular text-[12px] text-text-muted">Microciclo {microciclo.numero}</span>
+            <span
+              className="tabular text-[12px] text-text-faint"
+              title="Estimado: 30s de trabajo por serie + el descanso entre series + 5 min de transición por ejercicio (cambiar de máquina, cargar/descargar)"
+            >
+              ~{duracionEstimadaDia(dia)} min
+            </span>
             <FaseNutricional rutinaId={rutina.id} faseActual={microciclo.fase_nutricional} onCambiada={onRutinaCambiada} />
           </div>
           <ExportarExcel rutinaId={rutina.id} />

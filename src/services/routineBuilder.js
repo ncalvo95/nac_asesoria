@@ -139,11 +139,29 @@ const getEjerciciosPorMusculo = db.prepare(`
   WHERE m.nombre = ? AND e.activo = 1
 `);
 
-// Estimado de minutos por ejercicio (series de trabajo + descanso entre
-// series + transicion al siguiente), para poder repartir el tiempo
+// Estimado de segundos por ejercicio, para poder repartir el tiempo
 // disponible del dia entre varios ejercicios por musculo en vez de asignar
-// siempre uno solo sin importar cuantos minutos declaro el usuario.
-export const MINUTOS_POR_EJERCICIO = 9;
+// siempre uno solo sin importar cuantos minutos declaro el usuario:
+// 30s de trabajo por cada serie + el descanso entre series (no despues de
+// la ultima) + 5 minutos fijos de transicion (cambiar de maquina/estacion,
+// cargar y descargar discos). Arranca siempre en SERIES_MINIMO porque es el
+// estado con el que se crea cualquier ejercicio nuevo (a testear en la
+// Semana 0) - no se recalcula mas adelante si la progresion le suma series
+// (ver duracionEstimadaDia en EntrenamientoPage.jsx para el calculo en vivo
+// con las series/descansos reales de una rutina ya en curso).
+const SEGUNDOS_POR_SERIE = 30;
+const SEGUNDOS_TRANSICION = 300;
+
+// Mismo criterio que DESCANSO_SEGUNDOS_SQL en rutinaService.js (90s salvo
+// ejercicio unilateral, que arranca en 60s), para que el presupuesto de
+// tiempo al armar el dia coincida con el descanso que despues se persiste.
+function descansoSegundosPara(ejercicio) {
+  return ejercicio.es_unilateral || /unilateral/i.test(ejercicio.nombre) ? 60 : 90;
+}
+
+export function segundosEstimadosEjercicio(ejercicio, series = SERIES_MINIMO) {
+  return SEGUNDOS_POR_SERIE * series + descansoSegundosPara(ejercicio) * (series - 1) + SEGUNDOS_TRANSICION;
+}
 
 function candidatosPara(musculo, equipamiento, excluidos) {
   const tags = tagsDisponibles({ ...equipamiento, musculo });
@@ -196,9 +214,11 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], m
     restantesPorMusculo.set(musculo, ordenados.slice(1));
   }
 
-  let minutosUsados = [...elegidosPorMusculo.values()].reduce((acc, arr) => acc + arr.length, 0) * MINUTOS_POR_EJERCICIO;
+  let segundosUsados = [...elegidosPorMusculo.values()]
+    .flat()
+    .reduce((acc, { ejercicio }) => acc + segundosEstimadosEjercicio(ejercicio), 0);
 
-  while (minutosDisponibles - minutosUsados >= MINUTOS_POR_EJERCICIO) {
+  for (;;) {
     const musculoElegido = musculos
       .filter((m) => restantesPorMusculo.get(m)?.length > 0)
       .sort((a, b) => elegidosPorMusculo.get(a).length - elegidosPorMusculo.get(b).length)[0];
@@ -210,10 +230,18 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], m
       restantesPorMusculo.set(musculoElegido, []);
       continue;
     }
+
+    // Redondeando el total para abajo al comparar contra minutosDisponibles
+    // (en vez de exigir que entre exacto), un ejercicio que en teoria se
+    // pasa por unos segundos -como la 3ra serie de un ejercicio, 9.5 min en
+    // vez de 9- igual entra si el sobrante es menor a un minuto.
+    const costo = segundosEstimadosEjercicio(siguiente);
+    if (Math.floor((segundosUsados + costo) / 60) > minutosDisponibles) break;
+
     usadosEnElDia.add(siguiente.nombre);
     elegidosPorMusculo.get(musculoElegido).push({ ejercicio: siguiente, esTop: false });
     restantesPorMusculo.set(musculoElegido, cola.filter((c) => c !== siguiente));
-    minutosUsados += MINUTOS_POR_EJERCICIO;
+    segundosUsados += costo;
   }
 
   const ejercicios = [];
