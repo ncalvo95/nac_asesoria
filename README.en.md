@@ -211,6 +211,15 @@ sessions → closing a microcycle → progress → Excel export):
   `localStorage`. When the screen loads, the local draft and the backend
   one get merged field by field (whatever's typed on this device wins if
   it hasn't been pushed yet, filled in from the backend otherwise).
+- **Bug fixed:** the whole Week 0 screen is a single `<form>` (the real
+  submit is the "Save testing..." button), so hitting Enter/"Done" on the
+  numeric keyboard while typing the weight or reps in the "+ Add exercise"
+  panel -before ever tapping its own "Add" button- triggered an implicit
+  submit of the ENTIRE form and closed out testing right then, starting
+  microcycle 1 with whatever had been filled in up to that point. The
+  `<form>` now blocks Enter on any nested `<input>` (`onKeyDown` on
+  `Semana0Form`), so only an explicit click on "Save testing..." closes it
+  out.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distinguishes
   special microcycles from regular progression blocks - this used to be
   implicit in `numero === 0`, which stopped being enough once a testing

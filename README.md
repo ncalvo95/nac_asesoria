@@ -206,6 +206,15 @@ cierre de microciclo → progreso → export a Excel):
   dispositivo. Al abrir la pantalla, el borrador local y el del backend se
   mezclan campo por campo (gana lo tipeado en este mismo dispositivo si
   hay algo sin empujar todavía, y se completa con lo que venga del backend).
+- **Bug arreglado:** toda la pantalla de Semana 0 es un solo `<form>` (el
+  submit real es el botón "Guardar testeo..."), así que tocar Enter/"Listo"
+  en el teclado numérico mientras se cargaba el peso o las reps del panel
+  "+ Agregar ejercicio" -sin haber tocado todavía su propio botón
+  "Agregar"- disparaba el submit implícito de TODO el formulario y cerraba
+  el testeo de golpe, arrancando el microciclo 1 con lo que hubiera cargado
+  hasta ese momento. El `<form>` ahora bloquea el Enter en cualquier
+  `<input>` anidado (`onKeyDown` en `Semana0Form`), así que solo el clic
+  explícito en "Guardar testeo..." cierra el testeo.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

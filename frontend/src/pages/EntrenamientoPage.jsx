@@ -391,7 +391,16 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto">
+    <form
+      onSubmit={onSubmit}
+      // Toda la pantalla es UN solo <form> (el submit real es el boton
+      // "Guardar testeo..." de mas abajo) - sin esto, tocar Enter/"Listo" en
+      // cualquier input anidado (por ejemplo el peso/reps de "+ Agregar
+      // ejercicio", que todavia no se confirmo con su propio boton) dispara
+      // el submit implicito del form completo y cierra el testeo de golpe.
+      onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}
+      className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto"
+    >
       <div className="px-1 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
           <h1 className="text-[17px] font-bold">{microciclo?.numero === 0 ? 'Semana 0 · Testeo' : 'Nueva semana de testeo'}</h1>
