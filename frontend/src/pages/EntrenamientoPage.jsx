@@ -177,6 +177,12 @@ function formatearFechaCorta(fecha) {
   return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
 }
 
+function sumarDiasFecha(fechaIso, dias) {
+  const fecha = new Date(`${fechaIso}T00:00:00`);
+  fecha.setDate(fecha.getDate() + dias);
+  return fecha.toISOString().slice(0, 10);
+}
+
 function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
   // Estado local mutable de los dias/ejercicios (independiente del prop
   // "rutina", que queda fijo desde que se monta la pantalla) - hace falta
@@ -949,12 +955,24 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
   const [mostrarCambiarDia, setMostrarCambiarDia] = useState(false);
   const [mostrarEditarSemana0, setMostrarEditarSemana0] = useState(false);
 
+  // rutina.semana_actual (1 o 2, ver obtenerRutinaActiva en rutinaService.js)
+  // es null si no hay microciclo en curso de 2 semanas todavia (testeo). Cual
+  // semana se esta VIENDO puede diferir de la actual: el usuario puede tocar
+  // "Semana 1" desde la semana 2 para consultar como le fue, de solo lectura
+  // - no cambia nada de lo que esta entrenando hoy.
+  const [semanaVista, setSemanaVista] = useState(rutina.semana_actual ?? 1);
+  const esSemanaActual = semanaVista === rutina.semana_actual;
+  const fechaDia = rutina.semana_actual
+    ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), dia.dia_semana)
+    : null;
+
   return (
     <div className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-[17px] font-bold">{CAPITALIZAR(dia.dia_semana)}</h1>
+            {fechaDia && <span className="tabular text-[12px] text-text-faint">{formatearFechaCorta(fechaDia)}</span>}
             <span className="tabular text-[12px] text-text-muted">Microciclo {microciclo.numero}</span>
             <span
               className="tabular text-[12px] text-text-faint"
@@ -966,29 +984,52 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           </div>
           <ExportarExcel rutinaId={rutina.id} />
         </div>
+        {rutina.semana_actual && (
+          <div className="flex items-center gap-1.5 self-start">
+            {[1, 2].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setSemanaVista(n)}
+                className={`px-2.5 h-7 rounded-md border text-[12px] font-semibold ${
+                  n === semanaVista ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                }`}
+              >
+                Semana {n}{n === rutina.semana_actual ? ' · hoy' : ''}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex gap-1.5 flex-wrap">
-            {diasUnicos.map((d) => (
+            {diasUnicos.map((d) => {
+              const registroTab = d.registros_semana ? d.registros_semana[semanaVista] : d.sesion_actual;
+              const fechaTab = rutina.semana_actual
+                ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), d.dia_semana)
+                : null;
+              return (
               <button
                 key={d.id}
                 onClick={() => setDiaId(d.id)}
-                className={`relative px-3 h-8 rounded-full border text-[12.5px] font-semibold ${
+                className={`relative flex flex-col items-center px-3 h-9 justify-center rounded-xl border text-[12.5px] font-semibold leading-tight ${
                   d.id === dia.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
                 }`}
               >
                 {CAPITALIZAR(d.dia_semana)}
-                {d.sesion_actual && (
+                {fechaTab && <span className="text-[9.5px] font-normal opacity-80">{formatearFechaCorta(fechaTab)}</span>}
+                {registroTab && (
                   <span
-                    title={d.sesion_actual.salteada ? 'Salteado esta semana' : 'Registrado esta semana'}
+                    title={registroTab.salteada ? `Salteado semana ${semanaVista}` : `Registrado semana ${semanaVista}`}
                     className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] leading-none text-white ${
-                      d.sesion_actual.salteada ? 'bg-text-faint' : 'bg-success'
+                      registroTab.salteada ? 'bg-text-faint' : 'bg-success'
                     }`}
                   >
-                    {d.sesion_actual.salteada ? '–' : '✓'}
+                    {registroTab.salteada ? '–' : '✓'}
                   </span>
                 )}
               </button>
-            ))}
+              );
+            })}
             <button
               type="button"
               onClick={() => setMostrarAgregarDia(true)}
@@ -1036,17 +1077,26 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
       </div>
 
       {/* key={dia.id} fuerza un remount limpio del estado de series al cambiar de dia */}
-      <RegistroDia
-        key={dia.id}
-        dia={dia}
-        microciclo={microciclo}
-        usuario={usuario}
-        progreso={progreso}
-        onGuardado={onGuardado}
-        onRutinaCambiada={onRutinaCambiada}
-        todosMusculos={todosMusculos}
-        diasHermanos={diasUnicos.filter((d) => d.id !== dia.id)}
-      />
+      {esSemanaActual ? (
+        <RegistroDia
+          key={dia.id}
+          dia={dia}
+          microciclo={microciclo}
+          usuario={usuario}
+          progreso={progreso}
+          onGuardado={onGuardado}
+          onRutinaCambiada={onRutinaCambiada}
+          todosMusculos={todosMusculos}
+          diasHermanos={diasUnicos.filter((d) => d.id !== dia.id)}
+        />
+      ) : (
+        <ResumenSemanaPasada
+          key={`${dia.id}-${semanaVista}`}
+          dia={dia}
+          numeroSemana={semanaVista}
+          registro={dia.registros_semana?.[semanaVista] ?? null}
+        />
+      )}
 
       {mostrarAgregarDia && (
         <AgregarDiaModal
@@ -1080,6 +1130,57 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           onCorregido={() => { setMostrarEditarSemana0(false); onRutinaCambiada(); }}
         />
       )}
+    </div>
+  );
+}
+
+// Vista de solo lectura de una semana que NO es la actual (ver semanaVista
+// en DiaEntrenamiento) - consultar como fue la semana 1 sin perder de vista
+// que lo que se esta entrenando/editando hoy es la semana actual, que sigue
+// siendo RegistroDia de siempre. No permite cargar ni editar nada: eso solo
+// se hace en la semana actual, como siempre paso.
+function ResumenSemanaPasada({ dia, numeroSemana, registro }) {
+  if (!registro) {
+    return (
+      <div className="bg-surface border border-border rounded-[14px] p-4 text-[13px] text-text-muted">
+        Todavía no hay nada registrado en la Semana {numeroSemana} para {CAPITALIZAR(dia.dia_semana)}.
+      </div>
+    );
+  }
+  if (registro.salteada) {
+    return (
+      <div className="bg-surface border border-border rounded-[14px] p-4 text-[13px] text-text-muted">
+        Salteaste {CAPITALIZAR(dia.dia_semana)} en la Semana {numeroSemana}.
+      </div>
+    );
+  }
+
+  const seriesPorEjercicio = new Map();
+  for (const s of registro.series) {
+    if (!seriesPorEjercicio.has(s.ejercicio_asignado_id)) seriesPorEjercicio.set(s.ejercicio_asignado_id, []);
+    seriesPorEjercicio.get(s.ejercicio_asignado_id).push(s);
+  }
+
+  return (
+    <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
+      {dia.ejercicios.map((ej) => {
+        const series = seriesPorEjercicio.get(ej.id) ?? [];
+        if (series.length === 0) return null;
+        return (
+          <div key={ej.id} className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-2 min-w-0">
+            <span className="text-[14.5px] font-semibold">{ej.ejercicio_nombre}</span>
+            <div className="flex flex-col gap-1">
+              {series.map((s) => (
+                <div key={s.id} className="flex items-center gap-3 text-[13px] tabular">
+                  <span className="text-text-faint w-14">{s.es_dropset ? 'Dropset' : `Serie ${s.numero_serie}`}</span>
+                  <span>{s.peso} kg × {s.reps} reps</span>
+                  {s.rir != null && <span className="text-text-faint">RIR {s.rir}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

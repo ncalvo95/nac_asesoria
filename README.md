@@ -363,6 +363,25 @@ cierre de microciclo → progreso → export a Excel):
   archivo) pero que se había quedado corto: solo cubría esa tabla. Se
   corre solo (retroactivo, idempotente) en cada arranque del servidor -
   no hace falta ningún paso manual.
+- **Semana 1 / Semana 2 por separado dentro de un mismo microciclo**
+  (selector "Semana 1"/"Semana 2 · hoy" en Entrenamiento, `semana_actual`
+  y `dia.registros_semana` en `GET /usuarios/:id/rutina`): antes, el
+  registro de sesión de la semana 2 quedaba "encima" del de la semana 1 en
+  la misma pestaña de día (mismo `dia_rutina_id`), sin forma de consultar
+  cómo había ido la semana 1 una vez ya en la semana 2 - y el tick de
+  "registrado" en la pestaña del día tomaba la sesión más reciente sin
+  importar de qué semana era, así que en la semana 2 podía seguir marcado
+  en verde por una sesión de la semana 1 que no tenía nada que ver con
+  hoy. Ahora `obtenerRutinaActiva` en `rutinaService.js` separa el
+  registro de cada semana por rango de fecha (mismo criterio de
+  semana1/semana2 que ya usaba `cerrarMicrociclo` al cerrar el bloque) y
+  el tick queda scopeado SOLO a la semana actual. La semana que no es la
+  actual se ve de solo lectura (`ResumenSemanaPasada` en
+  `EntrenamientoPage.jsx`) - consultar no toca nada de lo que se está
+  entrenando hoy, que sigue siendo el formulario editable de siempre. La
+  fecha (dd/mm) de cada día, que antes solo se mostraba en la Semana 0 de
+  testeo, ahora también se ve junto al nombre del día y en cada pestaña,
+  actualizándose según la semana que se esté consultando.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

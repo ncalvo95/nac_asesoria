@@ -239,6 +239,31 @@ export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
   return obtenerRutinaActiva(usuarioId);
 });
 
+function sumarDiasIso(fechaIso, dias) {
+  const fecha = new Date(`${fechaIso}T00:00:00`);
+  fecha.setDate(fecha.getDate() + dias);
+  return fecha.toISOString().slice(0, 10);
+}
+
+// Registro (con series) del dia_rutina en cada una de las 2 semanas del
+// microciclo en curso - por separado, para no pisarse entre si (antes solo
+// se mandaba "la sesion mas reciente" sin importar de que semana era, asi
+// que en semana 2 el tick de "ya entrenaste" seguia marcado con la sesion de
+// la semana 1, aunque todavia no hubieras entrenado esta semana - ver
+// AskUserQuestion / seleccion "dentro del dia" en RegistroDia.jsx).
+const sesionSemanaStmt = db.prepare(`
+  SELECT * FROM registro_sesion
+  WHERE dia_rutina_id = ? AND microciclo_id = ? AND fecha >= ? AND fecha <= ?
+  ORDER BY id DESC LIMIT 1
+`);
+const seriesDeSesionStmt = db.prepare('SELECT * FROM registro_serie WHERE registro_sesion_id = ? ORDER BY ejercicio_asignado_id, numero_serie');
+
+function registroDeSemana(diaRutinaId, microcicloId, rango) {
+  const sesion = sesionSemanaStmt.get(diaRutinaId, microcicloId, rango[0], rango[1]);
+  if (!sesion) return null;
+  return { ...sesion, series: seriesDeSesionStmt.all(sesion.id) };
+}
+
 export function obtenerRutinaActiva(usuarioId) {
   const rutina = db.prepare("SELECT * FROM rutina WHERE usuario_id = ? AND estado = 'activa'").get(usuarioId);
   if (!rutina) return null;
@@ -263,25 +288,36 @@ export function obtenerRutinaActiva(usuarioId) {
     ORDER BY ea.orden
   `);
 
-  // Si ya se registró (o salteó) este día en el microciclo en curso - se
-  // manda como "sesion_actual" para que el frontend marque la pestaña del
-  // día con un check/salteado, así se ve de un vistazo qué falta esta
-  // semana sin tener que entrar a cada día. `salteada` puede repetirse
-  // (una sesión por registro, no hay unique) así que se toma la más
-  // reciente con MAX(id).
-  const sesionActualStmt = db.prepare(`
-    SELECT salteada FROM registro_sesion
-    WHERE dia_rutina_id = ? AND microciclo_id = ?
-    ORDER BY id DESC LIMIT 1
-  `);
+  // Rango de fechas de cada semana del microciclo en curso (numero>=1 -
+  // testeo/numero 0 es una sola semana, se maneja aparte en Semana0Form) y
+  // cual de las 2 es "hoy" - mismo criterio de semana1/semana2 que usa
+  // cerrarMicrociclo en progressionEngine.js al cerrar el bloque.
+  const rangosSemana = microcicloActual && microcicloActual.numero >= 1
+    ? {
+        1: [microcicloActual.fecha_inicio, sumarDiasIso(microcicloActual.fecha_inicio, 6)],
+        2: [sumarDiasIso(microcicloActual.fecha_inicio, 7), sumarDiasIso(microcicloActual.fecha_inicio, 13)],
+      }
+    : null;
+  const hoyIso = new Date().toISOString().slice(0, 10);
+  // Si ya paso la fecha de fin de la semana 2 (el bloque deberia haberse
+  // cerrado pero todavia no se cerro), se sigue considerando semana 2 -
+  // "actual" nunca puede ser un numero mayor a 2 en un microciclo de 2 semanas.
+  const semanaActualNumero = rangosSemana ? (hoyIso <= rangosSemana[1][1] ? 1 : 2) : null;
 
   return {
     ...rutina,
-    dias: dias.map((d) => ({
-      ...d,
-      ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id),
-      sesion_actual: microcicloActual ? (sesionActualStmt.get(d.id, microcicloActual.id) ?? null) : null,
-    })),
+    semana_actual: semanaActualNumero,
+    dias: dias.map((d) => {
+      const registrosSemana = rangosSemana && microcicloActual
+        ? { 1: registroDeSemana(d.id, microcicloActual.id, rangosSemana[1]), 2: registroDeSemana(d.id, microcicloActual.id, rangosSemana[2]) }
+        : null;
+      return {
+        ...d,
+        ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id),
+        sesion_actual: registrosSemana ? registrosSemana[semanaActualNumero] : null,
+        registros_semana: registrosSemana,
+      };
+    }),
     microciclos,
   };
 }
