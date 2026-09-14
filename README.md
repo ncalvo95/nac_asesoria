@@ -382,6 +382,18 @@ cierre de microciclo → progreso → export a Excel):
   fecha (dd/mm) de cada día, que antes solo se mostraba en la Semana 0 de
   testeo, ahora también se ve junto al nombre del día y en cada pestaña,
   actualizándose según la semana que se esté consultando.
+- **Fix: reabrir un día ya registrado mostraba todo en blanco** (precarga
+  en `RegistroDia` desde `dia.sesion_actual.series`): al guardar una
+  sesión con éxito se borra el borrador local de ese día (correcto, ya no
+  hace falta), pero el formulario nunca volvía a leer la sesión ya
+  guardada - así que reabrir un día con la sesión de hoy ya registrada
+  mostraba peso y reps en gris (como si nunca se hubiera tipeado nada) y
+  el RIR vuelto a su default (1), aunque el registro seguía intacto en la
+  base (nada se había borrado - era solo la vista la que no lo reflejaba).
+  Ahora, si el día ya tiene una sesión registrada (no salteada) esta
+  semana, el formulario se precarga con los valores realmente guardados -
+  funciona incluso sin el borrador local (otro dispositivo, caché
+  limpiado), porque lee directo de lo que ya está en la base.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

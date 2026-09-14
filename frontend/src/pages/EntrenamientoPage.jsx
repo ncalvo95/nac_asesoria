@@ -1189,6 +1189,33 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   const borradorKey = `nac_borrador_dia_${dia.id}_${microciclo.id}`;
   const [series, setSeries] = useState(() => {
     const base = construirEstadoInicial(dia);
+
+    // Si esta semana ya se registro (no salteada) una sesion de este dia,
+    // precargar el formulario con lo que REALMENTE se guardo - antes, al
+    // guardar con exito se borraba el borrador local (mas abajo) pero el
+    // formulario nunca volvia a leer la sesion ya guardada, asi que
+    // reabrir un dia ya registrado mostraba todo en blanco (peso/reps en
+    // gris, como si nunca se hubiera tipeado nada) y el RIR vuelto a su
+    // default (1) - el registro en si seguia intacto en la base, solo la
+    // vista no lo reflejaba. dia.sesion_actual ya trae las series (ver
+    // registroDeSemana en rutinaService.js).
+    if (dia.sesion_actual && !dia.sesion_actual.salteada) {
+      const porEjercicio = new Map();
+      for (const s of dia.sesion_actual.series) {
+        if (!porEjercicio.has(s.ejercicio_asignado_id)) porEjercicio.set(s.ejercicio_asignado_id, []);
+        porEjercicio.get(s.ejercicio_asignado_id).push(s);
+      }
+      for (const [ejId, sets] of porEjercicio) {
+        if (!base[ejId]) continue;
+        const reales = sets.filter((s) => !s.es_dropset).sort((a, b) => a.numero_serie - b.numero_serie);
+        const dropsets = sets.filter((s) => s.es_dropset);
+        const nuevasReales = base[ejId].map((row, idx) => (reales[idx]
+          ? { peso: String(reales[idx].peso), reps: String(reales[idx].reps), rir: reales[idx].rir ?? 1, esDropset: false }
+          : row));
+        base[ejId] = [...nuevasReales, ...dropsets.map((d) => ({ peso: String(d.peso), reps: String(d.reps), rir: d.rir ?? 1, esDropset: true }))];
+      }
+    }
+
     const borrador = leerBorrador(borradorKey) || {};
     for (const [ejId, sets] of Object.entries(borrador)) {
       if (!base[ejId]) continue;
