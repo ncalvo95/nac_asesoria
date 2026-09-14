@@ -319,6 +319,12 @@ export function eliminarRutina(rutinaId) {
   db.prepare('DELETE FROM rutina WHERE id = ?').run(rutinaId);
 }
 
+// Nombre elegido por el usuario para identificarla en "Mis rutinas" - vacio
+// o null vuelve a mostrar el split_asignado de siempre.
+export function renombrarRutina(rutinaId, nombre) {
+  db.prepare('UPDATE rutina SET nombre = ? WHERE id = ?').run(nombre, rutinaId);
+}
+
 export function reordenarEjercicios(diaRutinaId, orden) {
   const update = db.prepare('UPDATE ejercicio_asignado SET orden = ? WHERE id = ? AND dia_rutina_id = ?');
   const tx = db.transaction((items) => {

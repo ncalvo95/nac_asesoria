@@ -191,7 +191,11 @@ CREATE TABLE IF NOT EXISTS rutina (
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   split_asignado TEXT NOT NULL,
   fecha_inicio TEXT NOT NULL DEFAULT (date('now')),
-  estado TEXT NOT NULL DEFAULT 'activa' CHECK (estado IN ('activa', 'pausada', 'finalizada'))
+  estado TEXT NOT NULL DEFAULT 'activa' CHECK (estado IN ('activa', 'pausada', 'finalizada')),
+  -- Nombre elegido por el usuario para identificarla en "Mis rutinas" (ej.
+  -- "Rutina de verano") - si es NULL se sigue mostrando split_asignado, como
+  -- siempre.
+  nombre TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_rutina_usuario ON rutina(usuario_id);
@@ -254,6 +258,9 @@ CREATE TABLE IF NOT EXISTS microciclo (
   estado TEXT NOT NULL DEFAULT 'en_curso' CHECK (estado IN ('en_curso', 'cerrado')),
   tipo TEXT NOT NULL DEFAULT 'normal' CHECK (tipo IN ('normal', 'testeo', 'descarga')),
   borrador_semana0 TEXT,
+  -- Fase nutricional que el usuario esta llevando esa semana (informativo,
+  -- no afecta el motor de progresion) - NULL = sin definir.
+  fase_nutricional TEXT CHECK (fase_nutricional IN ('volumen', 'definicion', 'mantenimiento')),
   UNIQUE (rutina_id, numero)
 );
 

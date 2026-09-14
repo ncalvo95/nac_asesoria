@@ -938,6 +938,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           <div className="flex items-center gap-2">
             <h1 className="text-[17px] font-bold">{CAPITALIZAR(dia.dia_semana)}</h1>
             <span className="tabular text-[12px] text-text-muted">Microciclo {microciclo.numero}</span>
+            <FaseNutricional rutinaId={rutina.id} faseActual={microciclo.fase_nutricional} onCambiada={onRutinaCambiada} />
           </div>
           <ExportarExcel rutinaId={rutina.id} />
         </div>
@@ -1098,6 +1099,35 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     return map;
   }, [series, dia.ejercicios]);
 
+  // AjusteSeries (el +/- de "Series") cambia series_actuales en el backend y
+  // refetchea la rutina, pero "series" ya tenia una entrada para ese
+  // ejercicio desde el mount - sin esto, seriesPorEjercicio de arriba nunca
+  // volvia a mirar series_actuales (el "??" no dispara con un array ya
+  // existente) y la fila nueva/quitada no aparecia hasta recargar la pagina
+  // entera. Agrega o saca filas reales al final (nunca toca las de dropset)
+  // preservando lo que el usuario ya tipeo en las que quedan.
+  const seriesActualesKey = dia.ejercicios.map((e) => `${e.id}:${e.series_actuales}`).join(',');
+  useEffect(() => {
+    setSeries((prev) => {
+      let cambio = false;
+      const copia = { ...prev };
+      for (const ej of dia.ejercicios) {
+        const actual = copia[ej.id];
+        if (!actual) continue;
+        const reales = actual.filter((s) => !s.esDropset);
+        const dropsets = actual.filter((s) => s.esDropset);
+        if (reales.length === ej.series_actuales) continue;
+        cambio = true;
+        const nuevasReales = reales.length < ej.series_actuales
+          ? [...reales, ...Array.from({ length: ej.series_actuales - reales.length }, () => ({ peso: '', reps: '', rir: 1, esDropset: false }))]
+          : reales.slice(0, ej.series_actuales);
+        copia[ej.id] = [...nuevasReales, ...dropsets];
+      }
+      return cambio ? copia : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesActualesKey]);
+
   const notasPorEjercicio = useMemo(() => {
     const map = new Map();
     for (const e of progreso?.ejercicios ?? []) map.set(e.id, e);
@@ -1110,6 +1140,23 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
       const copia = { ...prev, [ejercicioId]: [...actual] };
       copia[ejercicioId][idx] = { ...copia[ejercicioId][idx], [campo]: valor };
       return copia;
+    });
+  }
+
+  // Carga de una el peso de referencia (el mismo que ya se ve como
+  // placeholder gris) y la baja de reps esperada en cada serie, para no
+  // tener que tipearlos serie por serie. Pisa lo que ya este tipeado en las
+  // filas reales (no toca las de dropset) - es una carga explicita, no un
+  // autocompletado silencioso.
+  function autocompletarReferencia(ejercicioId) {
+    setSeries((prev) => {
+      const ej = dia.ejercicios.find((e) => e.id === ejercicioId);
+      const actuales = prev[ejercicioId] ?? seriesPorEjercicio[ejercicioId];
+      if (!ej || ej.peso_actual == null || !actuales) return prev;
+      const pesoRef = String(ej.peso_actual);
+      const base = actuales.map((s) => (s.esDropset ? s : { ...s, peso: pesoRef, reps: '' }));
+      const conReps = base.map((s, idx) => (s.esDropset ? s : { ...s, reps: calcularSugerenciaReps(ej, base, idx) ?? '' }));
+      return { ...prev, [ejercicioId]: conReps };
     });
   }
 
@@ -1362,6 +1409,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 esUltimoDelMusculo={esUltimoDelMusculo}
                 dropsetActivo={seriesPorEjercicio[ej.id].some((s) => s.esDropset)}
                 onToggleDropset={() => toggleDropset(ej.id)}
+                onAutocompletar={() => autocompletarReferencia(ej.id)}
               />
             </div>
           );
@@ -1392,7 +1440,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   );
 }
 
-function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUltimoDelMusculo, dropsetActivo, onToggleDropset }) {
+function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUltimoDelMusculo, dropsetActivo, onToggleDropset, onAutocompletar }) {
   const advertenciaQuitar = ejercicio.es_top_de_musculo || esUltimoDelMusculo
     ? `Este es el ejercicio ${ejercicio.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ejercicio.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
     : null;
@@ -1446,6 +1494,15 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
             />
             <span className="text-[11px] font-semibold text-text-muted whitespace-nowrap">DS</span>
           </label>
+          <button
+            type="button"
+            onClick={onAutocompletar}
+            disabled={ejercicio.peso_actual == null}
+            title="Cargar el peso y las reps de referencia en todas las series"
+            className="text-[11px] font-semibold text-accent underline underline-offset-2 whitespace-nowrap disabled:opacity-40 disabled:no-underline"
+          >
+            Autocompletar
+          </button>
         </div>
 
         <div className="relative" ref={menuRef}>
@@ -1610,6 +1667,47 @@ function AjusteSeries({ ejercicioId, seriesActuales, onAjustado, onError }) {
         +
       </button>
     </div>
+  );
+}
+
+const FASE_LABEL = { volumen: 'Volumen', definicion: 'Definición', mantenimiento: 'Mantenimiento' };
+const FASE_CLASE = {
+  volumen: 'bg-success-bg text-success border-success',
+  definicion: 'bg-warning-bg text-warning border-warning',
+  mantenimiento: 'bg-bg text-text-muted border-border',
+};
+
+// Fase nutricional que el usuario dice estar llevando esta semana
+// (volumen/definicion/mantenimiento) - puramente informativo para que se
+// vea de un vistazo en Entrenamiento, no afecta al motor de progresion.
+function FaseNutricional({ rutinaId, faseActual, onCambiada }) {
+  const [enviando, setEnviando] = useState(false);
+
+  async function cambiar(fase) {
+    setEnviando(true);
+    try {
+      await api.patch(`/rutinas/${rutinaId}/fase-nutricional`, { fase: fase || null });
+      onCambiada();
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <select
+      value={faseActual || ''}
+      onChange={(e) => cambiar(e.target.value)}
+      disabled={enviando}
+      title="Fase nutricional esta semana"
+      className={`text-[11px] font-semibold rounded-full pl-2.5 pr-1.5 py-1 border outline-none disabled:opacity-60 ${
+        faseActual ? FASE_CLASE[faseActual] : 'bg-bg text-text-faint border-border'
+      }`}
+    >
+      <option value="">Fase: sin definir</option>
+      <option value="volumen">{FASE_LABEL.volumen}</option>
+      <option value="definicion">{FASE_LABEL.definicion}</option>
+      <option value="mantenimiento">{FASE_LABEL.mantenimiento}</option>
+    </select>
   );
 }
 

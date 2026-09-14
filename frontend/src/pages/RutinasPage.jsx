@@ -25,6 +25,9 @@ export default function RutinasPage() {
   const [rutinas, setRutinas] = useState(null);
   const [error, setError] = useState('');
   const [ocupada, setOcupada] = useState(null);
+  const [aBorrar, setABorrar] = useState(null); // rutina completa o null
+  const [editandoId, setEditandoId] = useState(null);
+  const [nombreDraft, setNombreDraft] = useState('');
 
   const linkNuevaRutina = usuarioIdParam ? `/coach/clientes/${usuarioIdParam}/onboarding` : '/onboarding';
   const linkEntrenamiento = usuarioIdParam ? `/coach/clientes/${usuarioIdParam}/entrenamiento` : '/entrenamiento';
@@ -53,15 +56,31 @@ export default function RutinasPage() {
     }
   }
 
-  async function borrar(rutinaId, activa) {
-    const aviso = activa
-      ? '¿Borrar esta rutina para siempre? Es la rutina activa - vas a quedarte sin ninguna, como si nunca hubieras generado una. No se puede deshacer.'
-      : '¿Borrar esta rutina para siempre? No se puede deshacer.';
-    if (!confirm(aviso)) return;
+  function editar(rutina) {
+    setEditandoId(rutina.id);
+    setNombreDraft(rutina.nombre || '');
+  }
+
+  async function guardarNombre(rutinaId) {
+    setOcupada(rutinaId);
+    setError('');
+    try {
+      await api.patch(`/rutinas/${rutinaId}/nombre`, { nombre: nombreDraft });
+      setEditandoId(null);
+      await cargar();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setOcupada(null);
+    }
+  }
+
+  async function borrar(rutinaId) {
     setOcupada(rutinaId);
     setError('');
     try {
       await api.del(`/rutinas/${rutinaId}`);
+      setABorrar(null);
       await cargar();
     } catch (err) {
       setError(err.message);
@@ -102,8 +121,47 @@ export default function RutinasPage() {
           return (
             <div key={r.id} className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-2.5">
               <div className="flex items-start justify-between gap-2">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[14px] font-semibold">{r.split_asignado}</span>
+                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                  {editandoId === r.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        autoFocus
+                        value={nombreDraft}
+                        onChange={(e) => setNombreDraft(e.target.value)}
+                        placeholder={r.split_asignado}
+                        maxLength={60}
+                        className="min-w-0 flex-1 h-8 rounded-md border border-border bg-bg px-2 text-[13px] outline-none focus:border-accent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => guardarNombre(r.id)}
+                        disabled={ocupada === r.id}
+                        className="flex-none text-[12px] font-semibold text-accent disabled:opacity-60"
+                      >
+                        Guardar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditandoId(null)}
+                        disabled={ocupada === r.id}
+                        className="flex-none text-[12px] text-text-muted disabled:opacity-60"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[14px] font-semibold truncate">{r.nombre || r.split_asignado}</span>
+                      <button
+                        type="button"
+                        onClick={() => editar(r)}
+                        title="Renombrar"
+                        className="flex-none text-[11px] text-text-faint underline underline-offset-2"
+                      >
+                        Renombrar
+                      </button>
+                    </div>
+                  )}
                   <span className="text-[12px] text-text-muted">Empezó el {formatearFecha(r.fecha_inicio)}</span>
                 </div>
                 <span
@@ -143,7 +201,7 @@ export default function RutinasPage() {
                 )}
                 <button
                   type="button"
-                  onClick={() => borrar(r.id, activa)}
+                  onClick={() => setABorrar(r)}
                   disabled={ocupada === r.id}
                   className="flex-1 h-9 rounded-lg border border-danger text-danger text-[12.5px] font-semibold disabled:opacity-60"
                 >
@@ -154,6 +212,44 @@ export default function RutinasPage() {
           );
         })}
       </div>
+
+      {aBorrar && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => ocupada !== aBorrar.id && setABorrar(null)}
+        >
+          <div
+            className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3 w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-[15px] font-bold">Borrar rutina</h2>
+            <p className="text-[13px] text-text-muted leading-relaxed">
+              {aBorrar.estado === 'activa'
+                ? '¿Borrar esta rutina para siempre? Es la rutina activa - vas a quedarte sin ninguna, como si nunca hubieras generado una. No se puede deshacer.'
+                : '¿Borrar esta rutina para siempre? No se puede deshacer.'}
+            </p>
+            {error && <p className="text-[12.5px] text-danger">{error}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setABorrar(null)}
+                disabled={ocupada === aBorrar.id}
+                className="flex-1 h-10 rounded-lg border border-border bg-bg text-text-muted text-[13px] font-semibold disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => borrar(aBorrar.id)}
+                disabled={ocupada === aBorrar.id}
+                className="flex-[2] h-10 rounded-lg border border-danger text-danger text-[13px] font-semibold disabled:opacity-60"
+              >
+                {ocupada === aBorrar.id ? 'Borrando…' : 'Sí, borrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -318,7 +318,7 @@ function AltaCuenta({ rolActor, onListo }) {
       <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre" required
         className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent" />
       <input value={nombreUsuario} onChange={(e) => setNombreUsuario(e.target.value)} type="text" placeholder="Usuario (4-10 caracteres)" required
-        minLength={4} maxLength={10} pattern="[A-Za-z0-9._-]+"
+        minLength={4} maxLength={10} pattern="[A-Za-z0-9._\-]+"
         className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent" />
       <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Contraseña" required
         className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent" />

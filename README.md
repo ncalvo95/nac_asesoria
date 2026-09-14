@@ -233,6 +233,42 @@ cierre de microciclo → progreso → export a Excel):
   ya se hizo uno. Un ejercicio agregado después de cerrado el testeo (ya
   en microciclo 1) no tenía nada que testear, así que no aparece en esta
   pantalla - se ignora si igual se manda en el pedido.
+- **Renombrar una rutina** (`rutina.nombre`, `PATCH /rutinas/:id/nombre`,
+  link "Renombrar" en cada tarjeta de "Mis rutinas"): nombre opcional
+  elegido por el usuario para identificarla en el historial - si está
+  vacío se sigue mostrando `split_asignado` como siempre.
+- **Bug arreglado:** borrar una rutina desde "Mis rutinas" usaba
+  `window.confirm()`, que en una PWA instalada en pantalla de inicio de iOS
+  no muestra ningún diálogo y devuelve falso sin avisar - el botón
+  "Borrar" quedaba sin hacer nada en ese contexto. Se reemplazó por el
+  mismo tipo de modal propio que ya se usa para quitar un ejercicio
+  (`RutinasPage.jsx`), que sí funciona en cualquier contexto.
+- **Bug arreglado:** el input de usuario en "Reclamar invitación" y en
+  "Cuenta directa" (`pattern="[A-Za-z0-9._-]+"`) rompía la validación
+  nativa del navegador en versiones de Chrome que compilan `pattern` con
+  el flag `v` (unicode sets) - el guión sin escapar antes del cierre de
+  la clase de caracteres es inválido en ese modo (`Invalid character in
+  character class`), lo que podía bloquear el submit sin ningún error
+  visible. Se escapó el guión (`._\-`) en ambos formularios.
+- **Bug arreglado:** el +/- de "Series" (`AjusteSeries`) actualiza
+  `series_actuales` en el backend y refresca la rutina, pero el estado
+  local de `RegistroDia` ya tenía una entrada para ese ejercicio desde el
+  montaje de la pantalla, así que la fila nueva (o la sacada) no aparecía
+  hasta recargar la página entera. Un efecto en `RegistroDia` reconcilia
+  ahora la cantidad de filas reales (no toca las de dropset) contra
+  `series_actuales` cada vez que cambia, preservando lo ya tipeado en las
+  que quedan.
+- **Autocompletar peso/reps de referencia** (botón junto a "DS" en cada
+  ejercicio de Entrenamiento): carga de una el peso de referencia y la
+  baja de reps esperada en cada serie (los mismos valores que ya se veían
+  como placeholder gris) para no tener que tipearlos serie por serie -
+  deshabilitado si el ejercicio todavía no tiene peso de referencia
+  cargado.
+- **Fase nutricional de la semana** (`microciclo.fase_nutricional`,
+  `PATCH /rutinas/:id/fase-nutricional`, selector junto a "Microciclo N"
+  en Entrenamiento): volumen/definición/mantenimiento/sin definir, elegido
+  libremente por el usuario para ese microciclo - puramente informativo,
+  no afecta en nada al motor de progresión ni al cálculo de series/peso.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

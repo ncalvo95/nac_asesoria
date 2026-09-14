@@ -4,10 +4,10 @@ import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
   agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, cambiarDiaSemana, copiarEjercicioADia, crearRutina,
   crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva,
-  quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
+  quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular, renombrarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import {
-  cerrarMicrociclo, editarResultadosSemana0, guardarBorradorSemana0, marcarNuevoTesteo, marcarSemanaDescarga, obtenerSemana0Editable, obtenerTesteos,
+  cerrarMicrociclo, editarResultadosSemana0, guardarBorradorSemana0, marcarFaseNutricional, marcarNuevoTesteo, marcarSemanaDescarga, obtenerSemana0Editable, obtenerTesteos,
   registrarSemana0, repsEfectivas, saltearTesteo,
 } from '../services/progressionEngine.js';
 import { generarWorkbookUsuario } from '../services/excelGenerator.js';
@@ -90,6 +90,17 @@ router.delete('/rutinas/:rutinaId', (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+router.patch('/rutinas/:rutinaId/nombre', (req, res) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  const { nombre } = req.body || {};
+  if (nombre != null && typeof nombre !== 'string') {
+    return res.status(400).json({ error: 'nombre debe ser texto.' });
+  }
+  renombrarRutina(rutina.id, nombre?.trim().slice(0, 60) || null);
+  res.status(204).end();
 });
 
 const DIAS_VALIDOS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
@@ -664,6 +675,24 @@ router.patch('/rutinas/:rutinaId/fecha-inicio', (req, res) => {
   db.prepare('UPDATE rutina SET fecha_inicio = ? WHERE id = ?').run(fecha_inicio, rutina.id);
   db.prepare('UPDATE microciclo SET fecha_inicio = ? WHERE id = ?').run(fecha_inicio, microciclo0.id);
   res.json({ rutina_id: rutina.id, fecha_inicio });
+});
+
+// Fase nutricional (volumen/definicion/mantenimiento) que el usuario dice
+// estar llevando esta semana - informativo, no toca el motor de progresion.
+// fase null vuelve a "sin definir".
+router.patch('/rutinas/:rutinaId/fase-nutricional', (req, res, next) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  const { fase } = req.body || {};
+  try {
+    marcarFaseNutricional(rutina.id, fase ?? null);
+    res.status(204).end();
+  } catch (err) {
+    if (err.message === 'Fase invalida.' || err.message === 'No hay microciclo en curso.') {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
 });
 
 // Guarda lo tipeado en la semana de testeo en curso sin cerrarla, para que

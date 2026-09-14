@@ -531,6 +531,19 @@ export const marcarSemanaDescarga = db.transaction((rutinaId) => {
   return { id: info.lastInsertRowid, microciclo_id: microciclo.id, detalle };
 });
 
+// Fase nutricional (volumen/definicion/mantenimiento) que el usuario dice
+// estar llevando en el microciclo en curso - puramente informativo, no
+// afecta al motor de progresion. null la borra (vuelve a "sin definir").
+const FASES_VALIDAS = ['volumen', 'definicion', 'mantenimiento'];
+export function marcarFaseNutricional(rutinaId, fase) {
+  if (fase != null && !FASES_VALIDAS.includes(fase)) {
+    throw new Error('Fase invalida.');
+  }
+  const microciclo = db.prepare("SELECT * FROM microciclo WHERE rutina_id = ? AND estado = 'en_curso'").get(rutinaId);
+  if (!microciclo) throw new Error('No hay microciclo en curso.');
+  db.prepare('UPDATE microciclo SET fase_nutricional = ? WHERE id = ?').run(fase, microciclo.id);
+}
+
 // Convierte el microciclo en curso en una nueva semana de testeo (2 series
 // por ejercicio, como la inicial) para recalibrar peso/reps sin perder la
 // rutina ni el historial - el usuario la completa con registrarSemana0

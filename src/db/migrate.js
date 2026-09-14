@@ -27,6 +27,8 @@ const columnasNuevas = [
   { tabla: 'microciclo', columna: 'tipo', definicion: "TEXT NOT NULL DEFAULT 'normal'" },
   { tabla: 'registro_serie', columna: 'es_dropset', definicion: 'INTEGER NOT NULL DEFAULT 0' },
   { tabla: 'microciclo', columna: 'borrador_semana0', definicion: 'TEXT' },
+  { tabla: 'rutina', columna: 'nombre', definicion: 'TEXT' },
+  { tabla: 'microciclo', columna: 'fase_nutricional', definicion: "TEXT CHECK (fase_nutricional IN ('volumen', 'definicion', 'mantenimiento'))" },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

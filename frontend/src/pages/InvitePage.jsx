@@ -123,7 +123,7 @@ export default function InvitePage() {
               required
               minLength={4}
               maxLength={10}
-              pattern="[A-Za-z0-9._-]+"
+              pattern="[A-Za-z0-9._\-]+"
               value={nombreUsuario}
               onChange={(e) => setNombreUsuario(e.target.value)}
               className="h-11.5 rounded-[10px] border border-border bg-surface px-3.5 text-[14.5px] text-text outline-none focus:border-accent"
