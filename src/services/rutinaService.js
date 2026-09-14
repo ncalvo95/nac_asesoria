@@ -1,6 +1,6 @@
 import db from '../db/index.js';
 import {
-  armarDia, armarRutina, armarSecuenciaDeDias, elegirEjercicioTop, ORDEN_DIAS,
+  armarDia, armarRutina, armarSecuenciaDeDias, construirPrioridad, elegirEjercicioTop, ORDEN_DIAS,
   rangoRepsPara, tagsDisponibles, topeSeriesPara, SERIES_MINIMO,
 } from './routineBuilder.js';
 import { aplicarDisponibilidad } from './perfilService.js';
@@ -69,7 +69,7 @@ function persistirDias(rutinaId, rutinaPorDia) {
         orden: ej.orden,
         es_top_de_musculo: ej.es_top_de_musculo ? 1 : 0,
         musculo_objetivo_id: getMusculoId.get(ej.musculo).id,
-        series_actuales: 2,
+        series_actuales: ej.series_iniciales ?? SERIES_MINIMO,
         rango_reps_min: ej.rango_reps_min,
         rango_reps_max: ej.rango_reps_max,
       });
@@ -80,7 +80,7 @@ function persistirDias(rutinaId, rutinaPorDia) {
 // Genera y persiste una rutina nueva para el usuario, en base al perfil ya
 // cargado (objetivo, disponibilidad, equipamiento, exclusiones). Finaliza
 // cualquier rutina activa previa. Crea el microciclo 0 (semana de testeo).
-export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_lower') => {
+export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_lower', musculosPrioritarios = []) => {
   const objetivo = getObjetivo.get(usuarioId);
   const disponibilidad = getDisponibilidad.get(usuarioId);
   const equipamiento = getEquipamiento.get(usuarioId);
@@ -102,6 +102,7 @@ export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_low
     exclusiones,
     duracionPorDia: JSON.parse(disponibilidad.duracion_sesion_json),
     varianteSplit,
+    musculosPrioritarios,
   });
 
   desactivarRutinasPrevias.run(usuarioId);
@@ -134,7 +135,7 @@ function describirSplit(nDias, rutinaPorDia) {
 // sin nada que testear) y arranca el microciclo 1 sin ejercicios; cada uno
 // que se agregue ahi pide su propia serie de referencia (ver
 // registrarReferenciaEjercicioNuevo), asi que no hace falta otro testeo.
-export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEjercicios = false }) => {
+export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEjercicios = false, musculosPrioritarios = [] }) => {
   const objetivo = getObjetivo.get(usuarioId);
   const equipamiento = getEquipamiento.get(usuarioId);
   if (!objetivo || !equipamiento) {
@@ -161,6 +162,7 @@ export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEje
       exclusiones,
       duracionPorDia,
       secuenciaPersonalizada,
+      musculosPrioritarios,
     });
   }
 
@@ -969,9 +971,14 @@ export const agregarDiaRutina = db.transaction((usuarioId, { diaSemana, duracion
   } else {
     const secuencia = armarSecuenciaDeDias(nuevosDiasEspecificos, varianteSplit);
     const entry = secuencia.find((d) => d.dia_semana === diaSemana);
+    // Sin musculos priorizados a mano en este flujo (es agregar un dia
+    // suelto, no armar la rutina completa) - si la rutina ya tiene 4+
+    // dias/semana, igual aplica la jerarquia por defecto (ver
+    // construirPrioridad en routineBuilder.js).
+    const prioridad = construirPrioridad({ musculosPrioritarios: [], cantidadDias: nuevosDiasEspecificos.length });
     const ejerciciosDia = armarDia({
       musculos: entry.musculos, objetivo: objetivo.tipo, equipamiento, exclusiones,
-      minutosDisponibles: duracionMinutos || 60,
+      minutosDisponibles: duracionMinutos || 60, prioridad,
     });
     const { lastInsertRowid: diaRutinaId } = insertDiaRutina.run({
       rutina_id: rutina.id, numero_dia: diasActivos.length + 1, dia_semana: diaSemana,
@@ -981,7 +988,7 @@ export const agregarDiaRutina = db.transaction((usuarioId, { diaSemana, duracion
       insertEjercicioAsignado.run({
         dia_rutina_id: diaRutinaId, ejercicio_id: ej.ejercicio_id, orden: ej.orden,
         es_top_de_musculo: ej.es_top_de_musculo ? 1 : 0, musculo_objetivo_id: getMusculoId.get(ej.musculo).id,
-        series_actuales: SERIES_MINIMO, rango_reps_min: ej.rango_reps_min, rango_reps_max: ej.rango_reps_max,
+        series_actuales: ej.series_iniciales ?? SERIES_MINIMO, rango_reps_min: ej.rango_reps_min, rango_reps_max: ej.rango_reps_max,
       });
     });
   }

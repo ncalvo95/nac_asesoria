@@ -163,6 +163,65 @@ export function segundosEstimadosEjercicio(ejercicio, series = SERIES_MINIMO) {
   return SEGUNDOS_POR_SERIE * series + descansoSegundosPara(ejercicio) * (series - 1) + SEGUNDOS_TRANSICION;
 }
 
+// ---------------------------------------------------------------------------
+// Priorizar musculo(s) al armar un dia: mas ejercicios (y, si el usuario lo
+// eligio a mano, mas series) para los musculos prioritarios. Dos modos:
+//
+// - Explicito (el usuario elige que musculo(s) priorizar al armar la
+//   rutina): esos musculos arrancan con 3 series en vez de 2, y quedan como
+//   "prioritario" contra el resto de los musculos de cada dia (sin
+//   distincion torso/piernas - el usuario eligio a mano).
+// - Por defecto (el usuario no eligio nada): jerarquia fija pensada para
+//   torso y piernas por separado (nunca se mezclan en un mismo dia, asi que
+//   no hace falta distinguir "grupo" - alcanza con mirar que musculos
+//   comparten el dia). Solo series = SERIES_MINIMO en este modo, la ventaja
+//   es unicamente en cantidad de ejercicios.
+//
+// En ambos casos, nunca aplica a rutinas de menos de 4 dias/semana: con tan
+// poco tiempo repartido entre pocos dias no alcanza para priorizar nada.
+const TORSO_PRIORITARIO_DEFAULT = new Set(['pecho', 'espalda', DELT_LATERAL]);
+const TORSO_SECUNDARIO_DEFAULT = new Set(['biceps', 'triceps', 'dorsales', DELT_ANTERIOR, DELT_POSTERIOR]);
+const PIERNAS_PRIORITARIO_DEFAULT = new Set(['cuadriceps', 'isquiotibiales']);
+const PIERNAS_TERCIARIO_DEFAULT = new Set(['abductores', 'aductores', 'pantorrillas']);
+
+function tierPorDefecto(musculo) {
+  if (TORSO_PRIORITARIO_DEFAULT.has(musculo) || PIERNAS_PRIORITARIO_DEFAULT.has(musculo)) return 'prioritario';
+  if (PIERNAS_TERCIARIO_DEFAULT.has(musculo)) return 'terciario';
+  return 'secundario'; // TORSO_SECUNDARIO_DEFAULT, gluteos, y cualquier otro (abdominales/lumbares) sin regla especifica
+}
+
+// Minimo de ejercicios que un musculo secundario/terciario deberia tener
+// (si el tiempo y el catalogo lo permiten) antes de que los prioritarios
+// seden mas terreno - solo se aplica con la jerarquia por defecto.
+const PISO_EJERCICIOS_DEFAULT = {
+  biceps: 2, triceps: 2,
+  dorsales: 1, [DELT_ANTERIOR]: 1, [DELT_POSTERIOR]: 1,
+  gluteos: 1, abductores: 1, aductores: 1, pantorrillas: 1,
+};
+
+const PENALIZACION_POR_TIER = { prioritario: 0, secundario: 1, terciario: 2 };
+
+// musculosPrioritarios (opcional): musculos que el usuario eligio priorizar
+// a mano al armar la rutina. Si viene vacio, se usa la jerarquia por
+// defecto de arriba. cantidadDias: dias/semana de la rutina completa (no
+// del dia puntual) - determina si la prioridad aplica en absoluto.
+export function construirPrioridad({ musculosPrioritarios = [], cantidadDias }) {
+  if (cantidadDias < 4) return null;
+  if (musculosPrioritarios.length > 0) {
+    const prioritarios = new Set(musculosPrioritarios);
+    return {
+      explicita: true,
+      tierDe: (m) => (prioritarios.has(m) ? 'prioritario' : 'secundario'),
+      pisoDe: () => null,
+    };
+  }
+  return {
+    explicita: false,
+    tierDe: tierPorDefecto,
+    pisoDe: (m) => PISO_EJERCICIOS_DEFAULT[m] ?? null,
+  };
+}
+
 function candidatosPara(musculo, equipamiento, excluidos) {
   const tags = tagsDisponibles({ ...equipamiento, musculo });
   const candidatos = getEjerciciosPorMusculo.all(musculo).filter((ej) => {
@@ -195,11 +254,20 @@ export function elegirEjercicioTop({ musculo, equipamiento, exclusiones = [] }) 
 // (arma la semana entera) y por agregarDiaRutina/reorganizarRutina en
 // rutinaService.js (arman o reacomodan un dia suelto de una rutina ya
 // existente).
-export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], minutosDisponibles = 60 }) {
+// prioridad (opcional, ver construirPrioridad): si viene, cambia como se
+// reparten los ejercicios extra entre musculos del dia -y, en el modo
+// explicito, las series iniciales de los musculos priorizados-. Sin
+// prioridad, el comportamiento es exactamente el de antes (el musculo con
+// menos ejercicios gana el empate).
+export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], minutosDisponibles = 60, prioridad = null }) {
   const excluidos = new Set(exclusiones);
   const usadosEnElDia = new Set();
   const elegidosPorMusculo = new Map();
   const restantesPorMusculo = new Map();
+
+  function seriesInicialesDe(musculo) {
+    return prioridad?.explicita && prioridad.tierDe(musculo) === 'prioritario' ? 3 : SERIES_MINIMO;
+  }
 
   for (const musculo of musculos) {
     const ordenados = candidatosPara(musculo, equipamiento, excluidos);
@@ -214,34 +282,72 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], m
     restantesPorMusculo.set(musculo, ordenados.slice(1));
   }
 
-  let segundosUsados = [...elegidosPorMusculo.values()]
-    .flat()
-    .reduce((acc, { ejercicio }) => acc + segundosEstimadosEjercicio(ejercicio), 0);
+  let segundosUsados = [...elegidosPorMusculo.entries()]
+    .flatMap(([musculo, arr]) => arr.map(({ ejercicio }) => segundosEstimadosEjercicio(ejercicio, seriesInicialesDe(musculo))))
+    .reduce((a, b) => a + b, 0);
 
+  // Redondeando el total para abajo al comparar contra minutosDisponibles
+  // (en vez de exigir que entre exacto), un ejercicio que en teoria se pasa
+  // por unos segundos -como la 3ra serie de un ejercicio, 9.5 min en vez de
+  // 9- igual entra si el sobrante es menor a un minuto.
+  const cabeEn = (costo) => Math.floor((segundosUsados + costo) / 60) <= minutosDisponibles;
+
+  function agregar(musculo, ejercicio) {
+    usadosEnElDia.add(ejercicio.nombre);
+    elegidosPorMusculo.get(musculo).push({ ejercicio, esTop: false });
+    restantesPorMusculo.set(musculo, restantesPorMusculo.get(musculo).filter((c) => c !== ejercicio));
+    segundosUsados += segundosEstimadosEjercicio(ejercicio, seriesInicialesDe(musculo));
+  }
+
+  // Fase de pisos minimos (solo con la jerarquia por defecto): biceps y
+  // triceps a 2 ejercicios, dorsales/deltoides restantes a 1 (que ya
+  // tienen del paso anterior, asi que en la practica solo completa
+  // biceps/triceps) - siempre que el tiempo declarado alcance.
+  if (prioridad && !prioridad.explicita) {
+    for (const musculo of musculos) {
+      const piso = prioridad.pisoDe(musculo);
+      if (!piso) continue;
+      while (elegidosPorMusculo.get(musculo).length < piso) {
+        const siguiente = restantesPorMusculo.get(musculo)?.find((c) => !usadosEnElDia.has(c.nombre));
+        if (!siguiente || !cabeEn(segundosEstimadosEjercicio(siguiente, seriesInicialesDe(musculo)))) break;
+        agregar(musculo, siguiente);
+      }
+    }
+  }
+
+  // Reparto del tiempo sobrante, musculo por musculo. Sin prioridad: el que
+  // menos ejercicios tiene hasta ahora gana el empate (comportamiento de
+  // siempre). Con prioridad: los musculos prioritarios ganan la mayoria de
+  // los empates (penalizacion mas baja), pero nunca sacan mas de 2
+  // ejercicios de ventaja sobre el que menos tiene entre los no
+  // prioritarios del mismo dia (si no hay ninguno con quien comparar, sin
+  // tope).
   for (;;) {
-    const musculoElegido = musculos
-      .filter((m) => restantesPorMusculo.get(m)?.length > 0)
-      .sort((a, b) => elegidosPorMusculo.get(a).length - elegidosPorMusculo.get(b).length)[0];
-    if (!musculoElegido) break;
+    const elegibles = musculos.filter((m) => restantesPorMusculo.get(m)?.length > 0);
+    const candidato = elegibles
+      .filter((m) => {
+        if (!prioridad || prioridad.tierDe(m) !== 'prioritario') return true;
+        const otros = musculos.filter((x) => x !== m && prioridad.tierDe(x) !== 'prioritario');
+        if (otros.length === 0) return true;
+        const minOtros = Math.min(...otros.map((x) => elegidosPorMusculo.get(x).length));
+        return elegidosPorMusculo.get(m).length < minOtros + 2;
+      })
+      .sort((a, b) => {
+        const penA = prioridad ? PENALIZACION_POR_TIER[prioridad.tierDe(a)] ?? 1 : 0;
+        const penB = prioridad ? PENALIZACION_POR_TIER[prioridad.tierDe(b)] ?? 1 : 0;
+        return (elegidosPorMusculo.get(a).length + penA) - (elegidosPorMusculo.get(b).length + penB);
+      })[0];
+    if (!candidato) break;
 
-    const cola = restantesPorMusculo.get(musculoElegido);
+    const cola = restantesPorMusculo.get(candidato);
     const siguiente = cola.find((c) => !usadosEnElDia.has(c.nombre));
     if (!siguiente) {
-      restantesPorMusculo.set(musculoElegido, []);
+      restantesPorMusculo.set(candidato, []);
       continue;
     }
 
-    // Redondeando el total para abajo al comparar contra minutosDisponibles
-    // (en vez de exigir que entre exacto), un ejercicio que en teoria se
-    // pasa por unos segundos -como la 3ra serie de un ejercicio, 9.5 min en
-    // vez de 9- igual entra si el sobrante es menor a un minuto.
-    const costo = segundosEstimadosEjercicio(siguiente);
-    if (Math.floor((segundosUsados + costo) / 60) > minutosDisponibles) break;
-
-    usadosEnElDia.add(siguiente.nombre);
-    elegidosPorMusculo.get(musculoElegido).push({ ejercicio: siguiente, esTop: false });
-    restantesPorMusculo.set(musculoElegido, cola.filter((c) => c !== siguiente));
-    segundosUsados += costo;
+    if (!cabeEn(segundosEstimadosEjercicio(siguiente, seriesInicialesDe(candidato)))) break;
+    agregar(candidato, siguiente);
   }
 
   const ejercicios = [];
@@ -262,6 +368,7 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], m
         rango_reps_min: rango.min,
         rango_reps_max: rango.max,
         tope_series: topeSeriesPara({ objetivo, esCompuestoPrincipalFuerza: Boolean(ejercicio.es_compuesto_principal_fuerza) }),
+        series_iniciales: seriesInicialesDe(musculo),
       });
     }
   }
@@ -273,10 +380,15 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], m
 // fija de armarSecuenciaDeDias - el resto de la logica (filtro por
 // equipamiento, reparto del tiempo disponible, rango de reps) es identica
 // sin importar de donde salio la secuencia.
-export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusiones = [], duracionPorDia = {}, secuenciaPersonalizada = null, varianteSplit = 'upper_lower' }) {
+export function armarRutina({
+  diasEspecificos, objetivo, equipamiento, exclusiones = [], duracionPorDia = {},
+  secuenciaPersonalizada = null, varianteSplit = 'upper_lower', musculosPrioritarios = [],
+}) {
   const secuencia = secuenciaPersonalizada
     ? secuenciaPersonalizada.map((d) => ({ dia_semana: d.dia_semana, nombre: 'Personalizado', musculos: d.musculos }))
     : armarSecuenciaDeDias(diasEspecificos, varianteSplit);
+
+  const prioridad = construirPrioridad({ musculosPrioritarios, cantidadDias: diasEspecificos.length });
 
   return secuencia.map((diaInfo, numeroDia) => ({
     numero_dia: numeroDia + 1,
@@ -288,6 +400,7 @@ export function armarRutina({ diasEspecificos, objetivo, equipamiento, exclusion
       equipamiento,
       exclusiones,
       minutosDisponibles: duracionPorDia[diaInfo.dia_semana] || 60,
+      prioridad,
     }),
   }));
 }

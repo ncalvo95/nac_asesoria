@@ -35,19 +35,33 @@ function getRutinaOr404(req, res) {
   return rutina;
 }
 
+function validarMusculosPrioritarios(res, musculos_prioritarios) {
+  if (musculos_prioritarios == null) return [];
+  if (!Array.isArray(musculos_prioritarios) || musculos_prioritarios.some((m) => !TODOS_MUSCULOS.includes(m))) {
+    res.status(400).json({ error: `musculos_prioritarios debe ser un array de: ${TODOS_MUSCULOS.join(', ')}.` });
+    return null;
+  }
+  return musculos_prioritarios;
+}
+
 router.post('/usuarios/:usuarioId/rutina', (req, res, next) => {
   const usuarioId = Number(req.params.usuarioId);
   if (!checkAccesoUsuario(req, res, usuarioId)) return;
-  const { variante_split } = req.body || {};
+  const { variante_split, musculos_prioritarios } = req.body || {};
   if (variante_split && !['upper_lower', 'push_pull'].includes(variante_split)) {
     return res.status(400).json({ error: 'variante_split debe ser upper_lower o push_pull.' });
   }
+  const prioritarios = validarMusculosPrioritarios(res, musculos_prioritarios);
+  if (prioritarios === null) return;
   if (debeQuedarPendiente(req.usuario, usuarioId)) {
-    const s = crearSolicitudCambio({ usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_auto', payload: { variante_split } });
+    const s = crearSolicitudCambio({
+      usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_auto',
+      payload: { variante_split, musculos_prioritarios: prioritarios },
+    });
     return res.status(202).json({ pendiente: true, solicitud_id: s.id });
   }
   try {
-    const rutina = crearRutina(usuarioId, variante_split);
+    const rutina = crearRutina(usuarioId, variante_split, prioritarios);
     res.status(201).json(rutina);
   } catch (err) {
     if (err.message.includes('Falta completar')) return res.status(400).json({ error: err.message });
@@ -154,7 +168,7 @@ router.post('/usuarios/:usuarioId/rutina/split', (req, res, next) => {
   const usuarioId = Number(req.params.usuarioId);
   if (!checkAccesoUsuario(req, res, usuarioId)) return;
 
-  const { dias, diferir_ejercicios } = req.body || {};
+  const { dias, diferir_ejercicios, musculos_prioritarios } = req.body || {};
   if (!Array.isArray(dias) || dias.length < 2 || dias.length > 6) {
     return res.status(400).json({ error: 'dias debe tener entre 2 y 6 elementos.' });
   }
@@ -171,17 +185,19 @@ router.post('/usuarios/:usuarioId/rutina/split', (req, res, next) => {
       return res.status(400).json({ error: `El dia ${dia.dia_semana} necesita duracion_minutos (numero mayor a 0).` });
     }
   }
+  const prioritarios = validarMusculosPrioritarios(res, musculos_prioritarios);
+  if (prioritarios === null) return;
 
   if (debeQuedarPendiente(req.usuario, usuarioId)) {
     const s = crearSolicitudCambio({
       usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_split',
-      payload: { dias, diferirEjercicios: Boolean(diferir_ejercicios) },
+      payload: { dias, diferirEjercicios: Boolean(diferir_ejercicios), musculosPrioritarios: prioritarios },
     });
     return res.status(202).json({ pendiente: true, solicitud_id: s.id });
   }
 
   try {
-    const rutina = crearRutinaConSplit(usuarioId, { dias, diferirEjercicios: Boolean(diferir_ejercicios) });
+    const rutina = crearRutinaConSplit(usuarioId, { dias, diferirEjercicios: Boolean(diferir_ejercicios), musculosPrioritarios: prioritarios });
     res.status(201).json(rutina);
   } catch (err) {
     if (err.message.includes('objetivo') || err.message.includes('equipamiento')) {

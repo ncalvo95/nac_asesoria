@@ -292,6 +292,45 @@ cierre de microciclo → progreso → export a Excel):
   por progresión, o los que el usuario ajustó a mano con +/- Series o
   Descanso) - a diferencia del cálculo de `armarDia`, que solo corre una
   vez al armar el día y se congela en 2 series.
+- **Rutina Express** (botón "⚡ Poco tiempo hoy" en Entrenamiento,
+  `activarModoExpress`/`desactivarModoExpress` en `RegistroDia`): para
+  cuando hay tiempo de ir al gimnasio pero no de hacer el día completo
+  como está planeado. No es una rutina aparte ni se persiste en ningún
+  lado -reescribe el estado local `series` de este día, como si el
+  usuario hubiera tipeado todo a mano-, así que no hace falta borrarla
+  después: si se registra la sesión queda como una sesión más (igual que
+  cualquier otra), y si se abandona sin registrar es un borrador más que
+  se pisa la próxima vez. Por ejercicio: 2 series reales al mismo peso
+  que ya tenía (la 1ra con el objetivo de reps de siempre, la 2da libre)
+  + 1 dropset a mitad de ese peso; el descanso de 60s entre la serie 1 y
+  la 2 es solo una indicación en el cartel (no se persiste - la próxima
+  semana el día vuelve a su descanso normal sin tocar nada).
+- **Priorizar músculo(s) al armar la rutina** (checklist en el
+  onboarding, modo automático, visible desde 4 días/semana; `POST
+  /usuarios/:id/rutina` y `/rutina/split` aceptan `musculos_prioritarios`):
+  el/los músculo(s) elegidos arrancan con 3 series por ejercicio en vez
+  de 2, y ganan la mayoría de los ejercicios extra al repartir el tiempo
+  disponible del día (`construirPrioridad`/`armarDia` en
+  `routineBuilder.js`). Con 2 o más músculos priorizados se avisa que
+  puede ser contraproducente (más fatiga, el día puede durar más de lo
+  declarado). No aplica a rutinas de menos de 4 días/semana - no da el
+  tiempo para priorizar nada. Por ahora solo en modo "Generarla
+  automáticamente" (no en "Elegir mi split").
+- **Jerarquía de músculos por defecto** (cuando el usuario NO elige
+  ningún músculo prioritario, en rutinas de 4+ días/semana): pecho,
+  espalda y deltoides lateral quedan 1-2 ejercicios por delante de
+  bíceps/tríceps/dorsales/deltoides anterior/deltoides posterior; en
+  piernas, cuádriceps e isquiotibiales por delante de glúteos, que a su
+  vez va por delante de abductores/aductores/pantorrillas. Antes de
+  favorecer a los prioritarios, se asegura un piso mínimo para los demás
+  si el tiempo alcanza (bíceps y tríceps a 2 ejercicios; dorsales,
+  deltoides anterior y posterior a 1 - ya cubierto por el ejercicio top
+  de cada uno). Es el mismo mecanismo que la prioridad explícita de
+  arriba (`construirPrioridad`), solo que con esta jerarquía fija en vez
+  de la elegida a mano, y sin el extra de series (se queda en las 2 de
+  siempre). Aplica también al agregar un día suelto más adelante (no solo
+  al armar la rutina completa), siempre que la rutina ya tenga 4+
+  días/semana.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

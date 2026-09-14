@@ -1108,8 +1108,43 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [ok, setOk] = useState(false);
+  const [modoExpress, setModoExpress] = useState(false);
 
   useEffect(() => { guardarBorrador(borradorKey, series); }, [borradorKey, series]);
+
+  // Rutina Express: para cuando hay tiempo de ir al gimnasio pero no de
+  // hacer el dia entero como esta planeado. No es una rutina aparte ni se
+  // persiste en ningun lado -solo reescribe el estado local "series" de
+  // este dia, como si el usuario hubiera tipeado todo esto a mano- asi que
+  // no hace falta borrarla despues: si se registra la sesion, queda como
+  // una sesion mas (igual que cualquier otra); si se abandona sin
+  // registrar, es un borrador mas que se pisa la proxima vez que se entra.
+  // Por ejercicio: 2 series reales al mismo peso que ya tenia (la 1ra con
+  // el objetivo de reps de siempre, la 2da libre - sin reps fijadas) + 1
+  // dropset a la mitad de ese peso. El descanso de 60s entre series 1 y 2
+  // es solo una indicacion en el cartel de abajo, no se persiste (asi la
+  // proxima semana el dia vuelve a su descanso normal sin tocar nada).
+  function activarModoExpress() {
+    setSeries((prev) => {
+      const copia = { ...prev };
+      for (const ej of dia.ejercicios) {
+        const peso = ej.peso_actual != null ? String(ej.peso_actual) : '';
+        const pesoDropset = ej.peso_actual != null ? String(Math.round(ej.peso_actual) / 2) : '';
+        copia[ej.id] = [
+          { peso, reps: ej.piso_reps != null ? String(ej.piso_reps) : '', rir: 1, esDropset: false },
+          { peso, reps: '', rir: 1, esDropset: false },
+          { peso: pesoDropset, reps: '', rir: 1, esDropset: true },
+        ];
+      }
+      return copia;
+    });
+    setModoExpress(true);
+  }
+
+  function desactivarModoExpress() {
+    setSeries(construirEstadoInicial(dia));
+    setModoExpress(false);
+  }
 
   // Como el guardado/agregado/reordenado ya no fuerza un remount de este
   // componente (ver onRutinaCambiada en EntrenamientoPage - antes recargaba
@@ -1332,6 +1367,27 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
       {ok && (
         <div className="bg-success-bg text-success text-[13px] font-semibold rounded-lg px-3 py-2.5">
           Sesión guardada.
+        </div>
+      )}
+
+      {!modoExpress && (
+        <button
+          type="button"
+          onClick={activarModoExpress}
+          className="self-start text-[12px] font-semibold text-accent underline underline-offset-2"
+        >
+          ⚡ Poco tiempo hoy — armar rutina express
+        </button>
+      )}
+      {modoExpress && (
+        <div className="bg-warning-bg text-warning text-[12.5px] rounded-lg px-3 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+          <span>
+            <strong>Modo express:</strong> 2 series al mismo peso de siempre (la 2da sin objetivo de reps fijo)
+            + 1 dropset a mitad de peso. Descansá 60s entre la serie 1 y la 2.
+          </span>
+          <button type="button" onClick={desactivarModoExpress} className="font-semibold underline underline-offset-2 whitespace-nowrap">
+            Volver a la rutina normal
+          </button>
         </div>
       )}
 

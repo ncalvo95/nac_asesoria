@@ -52,6 +52,7 @@ export default function OnboardingPage() {
   const [deporte, setDeporte] = useState('');
   const [dias, setDias] = useState(['lunes', 'martes', 'jueves', 'viernes']);
   const [varianteSplit, setVarianteSplit] = useState('upper_lower');
+  const [musculosPrioritarios, setMusculosPrioritarios] = useState([]);
   const [duracion, setDuracion] = useState(60);
   const [equipoTipo, setEquipoTipo] = useState('gimnasio');
   const [checklist, setChecklist] = useState(EQUIPO_TAGS);
@@ -61,6 +62,9 @@ export default function OnboardingPage() {
 
   function toggleDia(id) {
     setDias((prev) => (prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]));
+  }
+  function toggleMusculoPrioritario(id) {
+    setMusculosPrioritarios((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
   }
   function toggleTag(tag) {
     setChecklist((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
@@ -151,6 +155,7 @@ export default function OnboardingPage() {
         }));
         marcar(await api.post(`/usuarios/${usuario.id}/rutina`, {
           variante_split: (dias.length === 4 || dias.length === 5) ? varianteSplit : undefined,
+          musculos_prioritarios: dias.length >= 4 ? musculosPrioritarios : undefined,
         }));
       }
 
@@ -302,6 +307,34 @@ export default function OnboardingPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {dias.length >= 4 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-[12px] text-text-muted">
+                  Priorizar algún músculo (opcional) — recibe 1 o 2 ejercicios más que el resto, con más series:
+                </span>
+                <div className="flex gap-1.5 flex-wrap">
+                  {MUSCULOS.filter((m) => m.id !== 'abdominales' && m.id !== 'lumbares').map((m) => (
+                    <button
+                      type="button"
+                      key={m.id}
+                      onClick={() => toggleMusculoPrioritario(m.id)}
+                      className={`px-3 h-8 rounded-full border text-[12px] font-medium ${
+                        musculosPrioritarios.includes(m.id) ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                {musculosPrioritarios.length >= 2 && (
+                  <p className="text-[11.5px] text-warning leading-relaxed">
+                    Priorizar 2 o más músculos puede ser contraproducente: induce mayor fatiga, y ese día
+                    puede terminar durando más de lo declarado porque hay más series.
+                  </p>
+                )}
               </div>
             )}
           </section>
