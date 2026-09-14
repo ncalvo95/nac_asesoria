@@ -1109,8 +1109,19 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   const [enviando, setEnviando] = useState(false);
   const [ok, setOk] = useState(false);
   const [modoExpress, setModoExpress] = useState(false);
+  // Confirmacion antes de pisar datos ya tipeados (ver mas abajo) - null
+  // cuando no hay ningun cambio de modo esperando confirmacion.
+  const [confirmarCambioModo, setConfirmarCambioModo] = useState(null); // 'activar' | 'desactivar' | null
 
   useEffect(() => { guardarBorrador(borradorKey, series); }, [borradorKey, series]);
+
+  // true si hay algun peso/reps ya tipeado en el dia actual (series reales,
+  // no dropset) - para no pisarlo sin avisar al activar/desactivar el modo
+  // express (bug real: antes esto pisaba el progreso ya cargado sin
+  // preguntar nada, incluso si ya se habian tipeado series reales de hoy).
+  function hayDatosTipeados() {
+    return dia.ejercicios.some((ej) => (series[ej.id] || []).some((s) => s.peso !== '' || s.reps !== ''));
+  }
 
   // Rutina Express: para cuando hay tiempo de ir al gimnasio pero no de
   // hacer el dia entero como esta planeado. No es una rutina aparte ni se
@@ -1125,6 +1136,14 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   // es solo una indicacion en el cartel de abajo, no se persiste (asi la
   // proxima semana el dia vuelve a su descanso normal sin tocar nada).
   function activarModoExpress() {
+    if (hayDatosTipeados()) {
+      setConfirmarCambioModo('activar');
+      return;
+    }
+    aplicarModoExpress();
+  }
+
+  function aplicarModoExpress() {
     setSeries((prev) => {
       const copia = { ...prev };
       for (const ej of dia.ejercicios) {
@@ -1139,11 +1158,21 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
       return copia;
     });
     setModoExpress(true);
+    setConfirmarCambioModo(null);
   }
 
   function desactivarModoExpress() {
+    if (hayDatosTipeados()) {
+      setConfirmarCambioModo('desactivar');
+      return;
+    }
+    aplicarDesactivarModoExpress();
+  }
+
+  function aplicarDesactivarModoExpress() {
     setSeries(construirEstadoInicial(dia));
     setModoExpress(false);
+    setConfirmarCambioModo(null);
   }
 
   // Como el guardado/agregado/reordenado ya no fuerza un remount de este
@@ -1388,6 +1417,41 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
           <button type="button" onClick={desactivarModoExpress} className="font-semibold underline underline-offset-2 whitespace-nowrap">
             Volver a la rutina normal
           </button>
+        </div>
+      )}
+
+      {confirmarCambioModo && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setConfirmarCambioModo(null)}
+        >
+          <div
+            className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3 w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-[15px] font-bold">Ya tenés datos cargados hoy</h2>
+            <p className="text-[13px] text-text-muted leading-relaxed">
+              {confirmarCambioModo === 'activar'
+                ? 'Armar la rutina express va a reemplazar el peso y las reps que ya tipeaste en este día. ¿Seguro que querés continuar?'
+                : 'Volver a la rutina normal va a reemplazar el peso y las reps que ya tipeaste en este día. ¿Seguro que querés continuar?'}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmarCambioModo(null)}
+                className="flex-1 h-10 rounded-lg border border-border bg-bg text-text-muted text-[13px] font-semibold"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => (confirmarCambioModo === 'activar' ? aplicarModoExpress() : aplicarDesactivarModoExpress())}
+                className="flex-[2] h-10 rounded-lg border border-danger text-danger text-[13px] font-semibold"
+              >
+                Sí, reemplazar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
