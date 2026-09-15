@@ -10,17 +10,21 @@ const EQUIPO_TAGS = ['barra', 'mancuernas', 'banco', 'polea', 'maquina', 'banda'
 export default function CatalogoPage() {
   const [musculos, setMusculos] = useState(null);
   const [ejercicios, setEjercicios] = useState(null);
+  const [personalizados, setPersonalizados] = useState(null);
   const [error, setError] = useState('');
   const [mostrarAlta, setMostrarAlta] = useState(false);
+  const [publicandoId, setPublicandoId] = useState(null);
 
   async function cargar() {
     try {
-      const [m, e] = await Promise.all([
+      const [m, e, p] = await Promise.all([
         api.get('/catalogo/musculos'),
         api.get('/catalogo/ejercicios?incluir_inactivos=1'),
+        api.get('/catalogo/ejercicios-personalizados'),
       ]);
       setMusculos(m);
       setEjercicios(e);
+      setPersonalizados(p);
     } catch (err) {
       setError(err.message);
     }
@@ -52,57 +56,112 @@ export default function CatalogoPage() {
         </div>
       </header>
 
-      <div className="p-4 flex flex-col gap-5 max-w-xl w-full mx-auto">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-[16px] font-bold">Catálogo de ejercicios</h1>
-            <p className="text-[12.5px] text-text-muted mt-0.5">Lo que agregues acá lo ven y lo pueden usar todos los usuarios.</p>
-          </div>
-          <button
-            onClick={() => setMostrarAlta((v) => !v)}
-            className="text-[12.5px] font-semibold text-accent border border-accent rounded-lg px-3 py-1.5 whitespace-nowrap"
-          >
-            {mostrarAlta ? 'Cancelar' : '+ Ejercicio'}
-          </button>
-        </div>
-
+      <div className="p-4 flex flex-col gap-6 max-w-xl w-full mx-auto">
         {error && <p className="text-[13px] text-danger">{error}</p>}
 
-        {mostrarAlta && musculos && (
-          <AltaEjercicio musculos={musculos} onListo={() => { setMostrarAlta(false); cargar(); }} />
+        {personalizados?.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <h2 className="text-[13px] font-bold text-text-muted uppercase tracking-wide">
+              Particulares para revisar ({personalizados.length})
+            </h2>
+            <p className="text-[12px] text-text-faint -mt-1">
+              Ejercicios que coaches o clientes cargaron a mano en algún día. Publicalos al catálogo si conviene que estén disponibles para todos.
+            </p>
+            <div className="flex flex-col gap-2">
+              {personalizados.map((e) => (
+                <div key={e.id} className="bg-surface border border-border rounded-xl p-3.5 flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="text-[13.5px] font-semibold truncate">{e.nombre}</span>
+                      <span className="text-[10.5px] font-semibold uppercase text-text-faint bg-bg border border-border rounded-md px-1.5 py-0.5 w-fit">
+                        {formatearMusculo(e.musculo_nombre)}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setPublicandoId((v) => (v === e.id ? null : e.id))}
+                      className="text-[12px] font-semibold text-accent whitespace-nowrap"
+                    >
+                      {publicandoId === e.id ? 'Cancelar' : 'Publicar'}
+                    </button>
+                  </div>
+                  {e.usado_por?.length > 0 && (
+                    <span className="text-[11.5px] text-text-faint">
+                      Usado por: {e.usado_por.map((u) => u.nombre).join(', ')}
+                    </span>
+                  )}
+                  {publicandoId === e.id && musculos && (
+                    <FormularioEjercicio
+                      musculos={musculos}
+                      valoresIniciales={{ nombre: e.nombre, musculoId: e.musculo_id }}
+                      textoBoton="Publicar al catálogo"
+                      onGuardar={(payload) => api.patch(`/catalogo/ejercicios/${e.id}/publicar`, payload)}
+                      onListo={() => { setPublicandoId(null); cargar(); }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
-        {ejercicios === null && <p className="text-[13px] text-text-muted">Cargando…</p>}
-
-        <div className="flex flex-col gap-2">
-          {ejercicios?.map((e) => (
-            <div key={e.id} className="bg-surface border border-border rounded-xl p-3.5 flex items-center justify-between gap-3">
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className={`text-[13.5px] font-semibold truncate ${!e.activo ? 'text-text-faint line-through' : ''}`}>{e.nombre}</span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10.5px] font-semibold uppercase text-text-faint bg-bg border border-border rounded-md px-1.5 py-0.5">
-                    {formatearMusculo(e.musculo_nombre)}
-                  </span>
-                  <span className="text-[10.5px] text-text-faint capitalize">{e.tipo}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => toggleActivo(e.id, !e.activo)}
-                className="text-[11.5px] font-semibold text-text-muted whitespace-nowrap"
-              >
-                {e.activo ? 'Desactivar' : 'Activar'}
-              </button>
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-[16px] font-bold">Catálogo de ejercicios</h1>
+              <p className="text-[12.5px] text-text-muted mt-0.5">Lo que agregues acá lo ven y lo pueden usar todos los usuarios.</p>
             </div>
-          ))}
-        </div>
+            <button
+              onClick={() => setMostrarAlta((v) => !v)}
+              className="text-[12.5px] font-semibold text-accent border border-accent rounded-lg px-3 py-1.5 whitespace-nowrap"
+            >
+              {mostrarAlta ? 'Cancelar' : '+ Ejercicio'}
+            </button>
+          </div>
+
+          {mostrarAlta && musculos && (
+            <FormularioEjercicio
+              musculos={musculos}
+              textoBoton="Agregar al catálogo"
+              onGuardar={(payload) => api.post('/catalogo/ejercicios', payload)}
+              onListo={() => { setMostrarAlta(false); cargar(); }}
+            />
+          )}
+
+          {ejercicios === null && <p className="text-[13px] text-text-muted">Cargando…</p>}
+
+          <div className="flex flex-col gap-2">
+            {ejercicios?.map((e) => (
+              <div key={e.id} className="bg-surface border border-border rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className={`text-[13.5px] font-semibold truncate ${!e.activo ? 'text-text-faint line-through' : ''}`}>{e.nombre}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10.5px] font-semibold uppercase text-text-faint bg-bg border border-border rounded-md px-1.5 py-0.5">
+                      {formatearMusculo(e.musculo_nombre)}
+                    </span>
+                    <span className="text-[10.5px] text-text-faint capitalize">{e.tipo}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleActivo(e.id, !e.activo)}
+                  className="text-[11.5px] font-semibold text-text-muted whitespace-nowrap"
+                >
+                  {e.activo ? 'Desactivar' : 'Activar'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );
 }
 
-function AltaEjercicio({ musculos, onListo }) {
-  const [nombre, setNombre] = useState('');
-  const [musculoId, setMusculoId] = useState(musculos[0]?.id ?? '');
+// Mismo formulario para dar de alta un ejercicio nuevo y para "publicar" uno
+// particular ya cargado (ver arriba) - solo cambia el endpoint al que pega
+// (onGuardar) y si arranca con nombre/musculo ya cargados.
+function FormularioEjercicio({ musculos, valoresIniciales, onGuardar, onListo, textoBoton }) {
+  const [nombre, setNombre] = useState(valoresIniciales?.nombre ?? '');
+  const [musculoId, setMusculoId] = useState(valoresIniciales?.musculoId ?? musculos[0]?.id ?? '');
   const [tipo, setTipo] = useState('compuesto');
   const [patronMovimiento, setPatronMovimiento] = useState('');
   const [equipo, setEquipo] = useState([]);
@@ -124,7 +183,7 @@ function AltaEjercicio({ musculos, onListo }) {
     }
     setEnviando(true);
     try {
-      await api.post('/catalogo/ejercicios', {
+      await onGuardar({
         nombre, musculo_id: Number(musculoId), tipo, patron_movimiento: patronMovimiento,
         equipamiento_requerido: equipo,
         es_compuesto_principal_fuerza: esCompuestoFuerza,
@@ -193,7 +252,7 @@ function AltaEjercicio({ musculos, onListo }) {
 
       {error && <p className="text-[12.5px] text-danger">{error}</p>}
       <button type="submit" disabled={enviando} className="h-10 rounded-lg bg-accent text-accent-fg text-[13.5px] font-semibold disabled:opacity-60">
-        {enviando ? 'Guardando…' : 'Agregar al catálogo'}
+        {enviando ? 'Guardando…' : textoBoton}
       </button>
     </form>
   );

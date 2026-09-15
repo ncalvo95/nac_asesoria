@@ -394,6 +394,28 @@ cierre de microciclo → progreso → export a Excel):
   semana, el formulario se precarga con los valores realmente guardados -
   funciona incluso sin el borrador local (otro dispositivo, caché
   limpiado), porque lee directo de lo que ya está en la base.
+- **Publicar ejercicios particulares al catálogo global** (sección
+  "Particulares para revisar" en Catálogo, admin; `GET
+  /catalogo/ejercicios-personalizados`, `PATCH
+  /catalogo/ejercicios/:id/publicar`): un ejercicio "particular" que un
+  coach o cliente carga a mano en un día (`patron_movimiento =
+  'personalizado'`, ver `crearEjercicioPersonalizado` en
+  `rutinaService.js`) ya tiene su propia fila en la tabla `ejercicio` -
+  "publicarlo" es completar los datos que le faltan (tipo real, patrón de
+  movimiento, equipamiento, unilateral/compuesto de fuerza) con el mismo
+  formulario que se usa para dar de alta un ejercicio nuevo. Como el `id`
+  no cambia, las rutinas que ya lo tienen asignado lo ven de inmediato
+  como un ejercicio de catálogo más, sin tocar nada. La lista muestra
+  quién lo está usando (`ejercicio_asignado` → `dia_rutina` → `rutina` →
+  `usuarios`) para ayudar a decidir si conviene publicarlo.
+- **Feedback / reportar un problema** (botón "Reportar un problema" en el
+  menú de cuenta, tabla `feedback`, `POST /feedback`): cualquier usuario
+  logueado (cliente, coach o admin) puede mandar un mensaje corto (bug,
+  sugerencia u otro) que le llega al admin. El admin lo ve en una sección
+  propia del panel ("Feedback recibido", ordenado con lo pendiente
+  primero) y lo puede marcar como revisado. No reemplaza `solicitud_cambio`
+  (eso es "aplicar un cambio real" con aprobación del coach) - esto es
+  solo un canal de texto libre hacia el admin.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

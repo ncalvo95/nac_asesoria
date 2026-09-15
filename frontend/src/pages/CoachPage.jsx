@@ -22,6 +22,7 @@ export default function CoachPage() {
   const [usuarios, setUsuarios] = useState(null);
   const [solicitudes, setSolicitudes] = useState(null);
   const [invitesPendientes, setInvitesPendientes] = useState(null);
+  const [feedback, setFeedback] = useState(null);
   const [error, setError] = useState('');
   const [mostrarAlta, setMostrarAlta] = useState(false);
   const [mostrarInvitar, setMostrarInvitar] = useState(false);
@@ -36,6 +37,10 @@ export default function CoachPage() {
       setUsuarios(u);
       setSolicitudes(s);
       setInvitesPendientes(i);
+      // Solo el admin puede ver el feedback (llega de todos los usuarios,
+      // no solo de los clientes de este coach) - GET /feedback tira 403
+      // para un coach, asi que ni se pide.
+      if (usuario.rol === 'admin') setFeedback(await api.get('/feedback'));
     } catch (err) {
       setError(err.message);
     }
@@ -46,6 +51,15 @@ export default function CoachPage() {
   async function resolverSolicitud(id, accion) {
     try {
       await api.post(`/solicitudes/${id}/${accion}`);
+      cargar();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function marcarFeedbackRevisado(id) {
+    try {
+      await api.patch(`/feedback/${id}/revisar`, {});
       cargar();
     } catch (err) {
       setError(err.message);
@@ -109,6 +123,44 @@ export default function CoachPage() {
                     >
                       Rechazar
                     </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {usuario.rol === 'admin' && feedback?.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <h2 className="text-[13px] font-bold text-text-muted uppercase tracking-wide">
+              Feedback recibido ({feedback.filter((f) => f.estado === 'pendiente').length} sin revisar)
+            </h2>
+            <div className="flex flex-col gap-2">
+              {feedback.map((f) => (
+                <div
+                  key={f.id}
+                  className={`bg-surface border border-border rounded-xl p-3.5 flex flex-col gap-2 ${f.estado === 'revisado' ? 'opacity-60' : ''}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[13px] font-semibold truncate">{f.usuario_nombre}</span>
+                      <span className="text-[11px] text-text-faint whitespace-nowrap">@{f.usuario_usuario}</span>
+                    </div>
+                    <span className="text-[10.5px] font-semibold uppercase text-text-faint bg-bg border border-border rounded-md px-1.5 py-0.5 whitespace-nowrap">
+                      {f.tipo}
+                    </span>
+                  </div>
+                  <p className="text-[13px] text-text whitespace-pre-wrap">{f.mensaje}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-text-faint">{f.created_at?.slice(0, 10)}</span>
+                    {f.estado === 'pendiente' && (
+                      <button
+                        onClick={() => marcarFeedbackRevisado(f.id)}
+                        className="text-[12px] font-semibold text-accent whitespace-nowrap"
+                      >
+                        Marcar revisado
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

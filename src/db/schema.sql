@@ -346,3 +346,20 @@ CREATE TABLE IF NOT EXISTS reporte_progreso (
 );
 
 CREATE INDEX IF NOT EXISTS idx_reporte_progreso_usuario ON reporte_progreso(usuario_id);
+
+-- Feedback / reportes de bug / pedidos de cualquier usuario logueado hacia
+-- el admin (ver src/routes/feedback.js) - un canal de texto libre, no
+-- reemplaza solicitud_cambio (eso es "aplicar un cambio real" con
+-- aprobacion del coach).
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL DEFAULT 'otro' CHECK (tipo IN ('bug', 'sugerencia', 'otro')),
+  mensaje TEXT NOT NULL,
+  estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'revisado')),
+  nota_admin TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resuelto_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_estado ON feedback(estado, created_at);

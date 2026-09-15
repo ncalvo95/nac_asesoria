@@ -4,6 +4,7 @@ import { useTheme } from '../context/ThemeContext.jsx';
 import { useInstallPrompt } from '../context/InstallPromptContext.jsx';
 import ChangePasswordModal from './ChangePasswordModal.jsx';
 import SessionsModal from './SessionsModal.jsx';
+import FeedbackModal from './FeedbackModal.jsx';
 
 const TEMAS = [
   { id: 'sistema', label: 'Auto' },
@@ -22,6 +23,7 @@ export default function AccountMenu() {
   const [abierto, setAbierto] = useState(false);
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [mostrarSesiones, setMostrarSesiones] = useState(false);
+  const [mostrarFeedback, setMostrarFeedback] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -90,6 +92,13 @@ export default function AccountMenu() {
           >
             Mis sesiones
           </button>
+          <button
+            type="button"
+            onClick={() => { setAbierto(false); setMostrarFeedback(true); }}
+            className="text-left h-9 rounded-lg px-2 text-[12.5px] font-medium text-text hover:bg-bg"
+          >
+            Reportar un problema
+          </button>
 
           <div className="border-t border-border my-1" />
 
@@ -105,6 +114,7 @@ export default function AccountMenu() {
 
       {mostrarPassword && <ChangePasswordModal onClose={() => setMostrarPassword(false)} />}
       {mostrarSesiones && <SessionsModal onClose={() => setMostrarSesiones(false)} />}
+      {mostrarFeedback && <FeedbackModal onClose={() => setMostrarFeedback(false)} />}
     </div>
   );
 }
