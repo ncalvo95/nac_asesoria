@@ -412,18 +412,33 @@ const insertEjercicioPersonalizado = db.prepare(`
   VALUES (?, ?, 'aislado', 'personalizado', '[]', 1)
 `);
 const getMusculoPorId = db.prepare('SELECT nombre, region FROM musculo WHERE id = ?');
+// Deteccion de nombre repetido: comparacion simple (recortado + sin
+// mayusculas, no busca sinonimos ni tolera tildes distintas) contra
+// CUALQUIER ejercicio activo del mismo musculo - catalogo o particular -
+// para no ir acumulando filas casi identicas cada vez que un coach/cliente
+// distinto (o el mismo, en otro dia) escribe el mismo nombre a mano.
+const getEjercicioPorNombreYMusculo = db.prepare(`
+  SELECT id FROM ejercicio
+  WHERE musculo_primario_id = ? AND activo = 1 AND LOWER(TRIM(nombre)) = LOWER(TRIM(?))
+`);
 
 // Da de alta un ejercicio "particular" (no esta en el catalogo global ni en
 // el de preferencias) con equipamiento_requerido_json vacio (siempre
 // compatible), para el musculo indicado. Devuelve el mismo shape que
 // getEjercicioCatalogo (con musculo_nombre/musculo_region via JOIN) para que
 // el resto del codigo (rangoRepsPara, etc.) no tenga que distinguir de donde
-// salio el ejercicio.
+// salio el ejercicio. Si ya existe uno activo con el mismo nombre para ese
+// musculo (catalogo o particular de otro usuario/dia), reutiliza ese en vez
+// de crear un duplicado.
 export function crearEjercicioPersonalizado(nombre, musculoId) {
   const nombreLimpio = (nombre || '').trim();
   if (!nombreLimpio) throw new Error('El nombre del ejercicio no puede estar vacio.');
   const musculo = getMusculoPorId.get(musculoId);
   if (!musculo) throw new Error('Musculo no encontrado.');
+
+  const existente = getEjercicioPorNombreYMusculo.get(musculoId, nombreLimpio);
+  if (existente) return getEjercicioCatalogo.get(existente.id);
+
   const { lastInsertRowid: ejercicioId } = insertEjercicioPersonalizado.run(nombreLimpio, musculoId);
   return getEjercicioCatalogo.get(ejercicioId);
 }

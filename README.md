@@ -444,6 +444,21 @@ cierre de microciclo → progreso → export a Excel):
   como top de su músculo al generar una rutina nueva; un "agregado propio"
   vía preferencias queda disponible en el catálogo de ese músculo y
   aparece en la cola de revisión del admin.
+- **Detección de nombre repetido al crear un ejercicio particular**
+  (`crearEjercicioPersonalizado` en `rutinaService.js`, usada por los 3
+  puntos de entrada: agregar ejercicio particular a un día, sustituir con
+  nombre particular, y "Agregar propio" en Preferencias de arriba): antes
+  cada alta insertaba una fila nueva sin mirar si ya existía una igual, así
+  que dos coaches/clientes distintos (o el mismo, en otro día) escribiendo
+  el mismo nombre para el mismo músculo terminaban con filas duplicadas en
+  el catálogo. Ahora, antes de crear, busca un ejercicio activo del mismo
+  músculo con el mismo nombre (recortado y sin distinguir mayúsculas -
+  comparación simple, no busca sinónimos ni tolera tildes distintas) y
+  reutiliza ese en vez de duplicar - incluye ejercicios del catálogo real,
+  no solo otros particulares (si alguien escribe a mano un nombre que ya
+  existe en el catálogo, termina usando ese, no un doble). Verificado:
+  mismo nombre con mayúsculas/espacios distintos devuelve el mismo
+  `ejercicio.id`; un nombre distinto sigue creando uno nuevo.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de
