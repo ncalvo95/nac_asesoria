@@ -416,6 +416,34 @@ cierre de microciclo → progreso → export a Excel):
   primero) y lo puede marcar como revisado. No reemplaza `solicitud_cambio`
   (eso es "aplicar un cambio real" con aprobación del coach) - esto es
   solo un canal de texto libre hacia el admin.
+- **Fix: "Preferir" y "Agregar propio" en Preferencias de ejercicios no
+  hacían nada** (`preferencia_ejercicio_usuario`, pantalla
+  `PreferenciasPage.jsx`): de los 3 tipos de preferencia, solo `exclusion`
+  se leía en algún lado (`rutinaService.js`) - `preferencia` y
+  `agregado_personalizado` se guardaban en la base y se mostraban en la
+  lista, pero nunca afectaban nada real, pese a lo que decía la propia
+  pantalla ("se prioriza sobre otros del mismo músculo" / "entra al pool
+  de sustitución"). Arreglado en los dos casos:
+  - **`preferencia`**: ahora se lee al armar/agregar/reorganizar un día
+    (`getPreferidos` en `rutinaService.js`, mismo patrón que ya existía
+    para `exclusion`) y se pasa a `armarDia`/`elegirEjercicioTop`, donde
+    `candidatosPara` en `routineBuilder.js` adelanta los ejercicios
+    preferidos dentro de su propio grupo de tipo (compuesto/aislado) - un
+    aislado preferido no salta por delante de un compuesto sin marcar,
+    solo gana el desempate contra otros aislados.
+  - **`agregado_personalizado`**: en vez de guardar nombre/músculo sueltos
+    sin ningún efecto, ahora crea de una un ejercicio "particular" real
+    (`crearEjercicioPersonalizado`, la misma función y la misma marca
+    `patron_movimiento = 'personalizado'` que usa cargar un ejercicio
+    particular desde un día) - como los candidatos para sustituir/agregar
+    ya leen cualquier fila de `ejercicio` para ese músculo sin filtrar por
+    esto, aparece de entrada como una opción más. De paso, también entra
+    a "Particulares para revisar" en Catálogo (arriba), así que el admin
+    lo puede publicar al catálogo global igual que cualquier otro.
+  Verificado: marcar una preferencia hace que ese ejercicio salga elegido
+  como top de su músculo al generar una rutina nueva; un "agregado propio"
+  vía preferencias queda disponible en el catálogo de ese músculo y
+  aparece en la cola de revisión del admin.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

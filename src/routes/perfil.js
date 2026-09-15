@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import { TODOS_MUSCULOS } from '../services/routineBuilder.js';
 import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
+import { crearEjercicioPersonalizado } from '../services/rutinaService.js';
 import { aplicarDisponibilidad, aplicarEquipamiento, aplicarObjetivo } from '../services/perfilService.js';
 
 const router = Router({ mergeParams: true });
@@ -175,14 +176,32 @@ router.post('/:usuarioId/preferencias-ejercicio', (req, res) => {
   if (tipo !== 'agregado_personalizado' && !ejercicio_id) {
     return res.status(400).json({ error: 'ejercicio_id es obligatorio para exclusion/preferencia.' });
   }
+
+  // "agregado_personalizado" antes solo guardaba nombre/musculo sueltos,
+  // sin crear nada real - nunca entraba al pool de sustitucion pese a lo
+  // que decia la pantalla. Ahora crea de una el mismo tipo de ejercicio
+  // "particular" que ya se usa al cargarlo desde un dia (ver
+  // crearEjercicioPersonalizado en rutinaService.js, misma marca
+  // patron_movimiento='personalizado'), asi que aparece de entrada como
+  // candidato para ese musculo (armarDia/sustituir/agregar ya leen
+  // cualquier fila de "ejercicio" para el musculo, sin filtrar por esto).
+  let ejercicioIdFinal = ejercicio_id || null;
+  if (tipo === 'agregado_personalizado') {
+    try {
+      ejercicioIdFinal = crearEjercicioPersonalizado(nombre_personalizado, musculo_asignado_id).id;
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
+
   const info = insertPreferencia.run({
     usuario_id,
-    ejercicio_id: ejercicio_id || null,
+    ejercicio_id: ejercicioIdFinal,
     tipo,
     nombre_personalizado: nombre_personalizado || null,
     musculo_asignado_id: musculo_asignado_id || null,
   });
-  res.status(201).json({ id: info.lastInsertRowid });
+  res.status(201).json({ id: info.lastInsertRowid, ejercicio_id: ejercicioIdFinal });
 });
 
 router.delete('/:usuarioId/preferencias-ejercicio/:prefId', (req, res) => {

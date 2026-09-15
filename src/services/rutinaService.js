@@ -11,6 +11,13 @@ const getEquipamiento = db.prepare('SELECT * FROM equipamiento WHERE usuario_id 
 const getExclusiones = db.prepare(
   "SELECT ejercicio_id FROM preferencia_ejercicio_usuario WHERE usuario_id = ? AND tipo = 'exclusion' AND ejercicio_id IS NOT NULL"
 );
+// Ejercicios que el usuario marco como preferidos (ver tipo='preferencia'
+// en preferencia_ejercicio_usuario) - se adelantan dentro de su propio
+// grupo de tipo (compuesto/aislado) al elegir candidatos, ver
+// candidatosPara en routineBuilder.js.
+const getPreferidos = db.prepare(
+  "SELECT ejercicio_id FROM preferencia_ejercicio_usuario WHERE usuario_id = ? AND tipo = 'preferencia' AND ejercicio_id IS NOT NULL"
+);
 const getMusculoId = db.prepare('SELECT id FROM musculo WHERE nombre = ?');
 
 const insertRutina = db.prepare(`
@@ -90,6 +97,7 @@ export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_low
 
   const diasEspecificos = JSON.parse(disponibilidad.dias_especificos_json);
   const exclusiones = getExclusiones.all(usuarioId).map((r) => r.ejercicio_id);
+  const preferidos = getPreferidos.all(usuarioId).map((r) => r.ejercicio_id);
 
   const rutinaPorDia = armarRutina({
     diasEspecificos,
@@ -100,6 +108,7 @@ export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_low
       musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
     },
     exclusiones,
+    preferidos,
     duracionPorDia: JSON.parse(disponibilidad.duracion_sesion_json),
     varianteSplit,
     musculosPrioritarios,
@@ -147,6 +156,7 @@ export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEje
     rutinaPorDia = dias.map((d, idx) => ({ numero_dia: idx + 1, dia_semana: d.dia_semana, musculos: d.musculos, ejercicios: [] }));
   } else {
     const exclusiones = getExclusiones.all(usuarioId).map((r) => r.ejercicio_id);
+    const preferidos = getPreferidos.all(usuarioId).map((r) => r.ejercicio_id);
     const diasEspecificos = dias.map((d) => d.dia_semana);
     const duracionPorDia = Object.fromEntries(dias.map((d) => [d.dia_semana, d.duracion_minutos]));
     const secuenciaPersonalizada = dias.map((d) => ({ dia_semana: d.dia_semana, musculos: d.musculos }));
@@ -160,6 +170,7 @@ export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEje
         musculosUbicacion: JSON.parse(equipamiento.musculos_ubicacion_json || '{}'),
       },
       exclusiones,
+      preferidos,
       duracionPorDia,
       secuenciaPersonalizada,
       musculosPrioritarios,
@@ -408,7 +419,7 @@ const getMusculoPorId = db.prepare('SELECT nombre, region FROM musculo WHERE id 
 // getEjercicioCatalogo (con musculo_nombre/musculo_region via JOIN) para que
 // el resto del codigo (rangoRepsPara, etc.) no tenga que distinguir de donde
 // salio el ejercicio.
-function crearEjercicioPersonalizado(nombre, musculoId) {
+export function crearEjercicioPersonalizado(nombre, musculoId) {
   const nombreLimpio = (nombre || '').trim();
   if (!nombreLimpio) throw new Error('El nombre del ejercicio no puede estar vacio.');
   const musculo = getMusculoPorId.get(musculoId);
@@ -842,7 +853,7 @@ export function obtenerImpactoQuitarDia(diaRutinaId) {
 // split se borran (si nunca tuvieron una sesion registrada) o se desactivan
 // (si ya tienen historial, para no perderlo). Devuelve un
 // Map<dia_semana, dia_rutina_id> del resultado.
-function reorganizarRutina(rutinaId, nuevosDiasEspecificos, varianteSplit, { objetivo, equipamiento, exclusiones }) {
+function reorganizarRutina(rutinaId, nuevosDiasEspecificos, varianteSplit, { objetivo, equipamiento, exclusiones, preferidos = [] }) {
   const nuevaSecuencia = armarSecuenciaDeDias(nuevosDiasEspecificos, varianteSplit);
   const diasActivos = getDiasActivosRutina.all(rutinaId);
   const diaPorSemana = new Map(diasActivos.map((d) => [d.dia_semana, d]));
@@ -905,7 +916,7 @@ function reorganizarRutina(rutinaId, nuevosDiasEspecificos, varianteSplit, { obj
         continue;
       }
 
-      const elegido = elegirEjercicioTop({ musculo: musculoNombre, equipamiento, exclusiones });
+      const elegido = elegirEjercicioTop({ musculo: musculoNombre, equipamiento, exclusiones, preferidos });
       if (elegido) {
         const rango = rangoRepsPara({
           musculo: musculoNombre, objetivo,
@@ -970,6 +981,7 @@ export const agregarDiaRutina = db.transaction((usuarioId, { diaSemana, duracion
     throw new Error('Falta completar el equipamiento antes de agregar un dia automatico.');
   }
   const exclusiones = getExclusiones.all(usuarioId).map((r) => r.ejercicio_id);
+  const preferidos = getPreferidos.all(usuarioId).map((r) => r.ejercicio_id);
 
   if (modo === 'manual') {
     if (!Array.isArray(ejercicios) || ejercicios.length === 0) {
@@ -1003,7 +1015,7 @@ export const agregarDiaRutina = db.transaction((usuarioId, { diaSemana, duracion
       });
     });
   } else if (modo === 'auto_reorganizar') {
-    reorganizarRutina(rutina.id, nuevosDiasEspecificos, varianteSplit, { objetivo: objetivo.tipo, equipamiento, exclusiones });
+    reorganizarRutina(rutina.id, nuevosDiasEspecificos, varianteSplit, { objetivo: objetivo.tipo, equipamiento, exclusiones, preferidos });
   } else {
     const secuencia = armarSecuenciaDeDias(nuevosDiasEspecificos, varianteSplit);
     const entry = secuencia.find((d) => d.dia_semana === diaSemana);
@@ -1013,7 +1025,7 @@ export const agregarDiaRutina = db.transaction((usuarioId, { diaSemana, duracion
     // construirPrioridad en routineBuilder.js).
     const prioridad = construirPrioridad({ musculosPrioritarios: [], cantidadDias: nuevosDiasEspecificos.length });
     const ejerciciosDia = armarDia({
-      musculos: entry.musculos, objetivo: objetivo.tipo, equipamiento, exclusiones,
+      musculos: entry.musculos, objetivo: objetivo.tipo, equipamiento, exclusiones, preferidos,
       minutosDisponibles: duracionMinutos || 60, prioridad,
     });
     const { lastInsertRowid: diaRutinaId } = insertDiaRutina.run({
@@ -1062,13 +1074,14 @@ export const quitarDiaRutina = db.transaction((diaRutinaId, { redistribuir = fal
     const objetivo = getObjetivo.get(usuarioId);
     const equipamiento = equipamientoPara(usuarioId);
     const exclusiones = getExclusiones.all(usuarioId).map((r) => r.ejercicio_id);
+    const preferidos = getPreferidos.all(usuarioId).map((r) => r.ejercicio_id);
     const otrosDias = diasActivos.filter((d) => d.id !== Number(diaRutinaId));
     const contarEjercicios = db.prepare('SELECT COUNT(*) AS n FROM ejercicio_asignado WHERE dia_rutina_id = ?');
 
     for (const m of impacto.musculos.filter((m) => m.solo_en_este_dia)) {
       const destino = [...otrosDias].sort((a, b) => contarEjercicios.get(a.id).n - contarEjercicios.get(b.id).n)[0];
       if (!destino || !equipamiento) continue;
-      const elegido = elegirEjercicioTop({ musculo: m.musculo_nombre, equipamiento, exclusiones });
+      const elegido = elegirEjercicioTop({ musculo: m.musculo_nombre, equipamiento, exclusiones, preferidos });
       if (!elegido) continue;
       const rango = rangoRepsPara({
         musculo: m.musculo_nombre, objetivo: objetivo?.tipo,

@@ -237,15 +237,24 @@ export function construirPrioridad({ musculosPrioritarios = [], cantidadDias }) 
   };
 }
 
-function candidatosPara(musculo, equipamiento, excluidos) {
+// preferidos (ids de ejercicio, ver tipo='preferencia' en
+// preferencia_ejercicio_usuario): se adelantan dentro de su propio grupo de
+// tipo (compuesto/aislado), sin romper la prioridad "compuesto primero" de
+// abajo - un aislado marcado como preferido no salta por delante de un
+// compuesto sin marcar, solo gana el desempate contra otros aislados.
+function candidatosPara(musculo, equipamiento, excluidos, preferidos = new Set()) {
   const tags = tagsDisponibles({ ...equipamiento, musculo });
   const candidatos = getEjerciciosPorMusculo.all(musculo).filter((ej) => {
     if (excluidos.has(ej.id)) return false;
     const requeridos = JSON.parse(ej.equipamiento_requerido_json);
     return requeridos.every((tag) => tags.has(tag));
   });
-  const compuestos = candidatos.filter((c) => c.tipo === 'compuesto');
-  const aislados = candidatos.filter((c) => c.tipo !== 'compuesto');
+  const porPreferido = (grupo) => [
+    ...grupo.filter((c) => preferidos.has(c.id)),
+    ...grupo.filter((c) => !preferidos.has(c.id)),
+  ];
+  const compuestos = porPreferido(candidatos.filter((c) => c.tipo === 'compuesto'));
+  const aislados = porPreferido(candidatos.filter((c) => c.tipo !== 'compuesto'));
   return [...compuestos, ...aislados];
 }
 
@@ -254,8 +263,8 @@ function candidatosPara(musculo, equipamiento, excluidos) {
 // armar un dia entero (armarDia) como al agregar un musculo nuevo a una
 // rutina ya existente (agregar/reorganizar dias, ver rutinaService.js).
 // Devuelve null si no hay ningun candidato compatible.
-export function elegirEjercicioTop({ musculo, equipamiento, exclusiones = [] }) {
-  const ordenados = candidatosPara(musculo, equipamiento, new Set(exclusiones));
+export function elegirEjercicioTop({ musculo, equipamiento, exclusiones = [], preferidos = [] }) {
+  const ordenados = candidatosPara(musculo, equipamiento, new Set(exclusiones), new Set(preferidos));
   return ordenados[0] || null;
 }
 
@@ -274,8 +283,9 @@ export function elegirEjercicioTop({ musculo, equipamiento, exclusiones = [] }) 
 // explicito, las series iniciales de los musculos priorizados-. Sin
 // prioridad, el comportamiento es exactamente el de antes (el musculo con
 // menos ejercicios gana el empate).
-export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], minutosDisponibles = 60, prioridad = null }) {
+export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], preferidos = [], minutosDisponibles = 60, prioridad = null }) {
   const excluidos = new Set(exclusiones);
+  const preferidosSet = new Set(preferidos);
   const usadosEnElDia = new Set();
   const elegidosPorMusculo = new Map();
   const restantesPorMusculo = new Map();
@@ -285,7 +295,7 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], m
   }
 
   for (const musculo of musculos) {
-    const ordenados = candidatosPara(musculo, equipamiento, excluidos);
+    const ordenados = candidatosPara(musculo, equipamiento, excluidos, preferidosSet);
     if (ordenados.length === 0) {
       elegidosPorMusculo.set(musculo, []);
       restantesPorMusculo.set(musculo, []);
@@ -396,7 +406,7 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], m
 // equipamiento, reparto del tiempo disponible, rango de reps) es identica
 // sin importar de donde salio la secuencia.
 export function armarRutina({
-  diasEspecificos, objetivo, equipamiento, exclusiones = [], duracionPorDia = {},
+  diasEspecificos, objetivo, equipamiento, exclusiones = [], preferidos = [], duracionPorDia = {},
   secuenciaPersonalizada = null, varianteSplit = 'upper_lower', musculosPrioritarios = [],
 }) {
   const secuencia = secuenciaPersonalizada
@@ -414,6 +424,7 @@ export function armarRutina({
       objetivo,
       equipamiento,
       exclusiones,
+      preferidos,
       minutosDisponibles: duracionPorDia[diaInfo.dia_semana] || 60,
       prioridad,
     }),
