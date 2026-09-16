@@ -45,8 +45,18 @@ export default function CatalogoPage() {
   // Patrones de movimiento ya usados en el catalogo, para sugerirlos en el
   // formulario (antes era un texto libre sin ninguna referencia - facil
   // terminar escribiendo variantes del mismo patron sin darse cuenta, ej.
-  // "empuje_horizontal" vs "Empuje Horizontal").
+  // "empuje_horizontal" vs "Empuje Horizontal"). patronesPorMusculoId ademas
+  // permite sugerir solo los que ya se usaron para ESE musculo puntual (ej.
+  // al elegir deltoides_lateral, sugerir "abduccion" en vez de la lista
+  // completa de los 16 musculos - hombro no comparte patron con brazo).
   const patronesExistentes = [...new Set((ejercicios || []).map((e) => e.patron_movimiento).filter(Boolean))].sort();
+  const patronesPorMusculoId = {};
+  for (const e of ejercicios || []) {
+    if (!e.patron_movimiento) continue;
+    if (!patronesPorMusculoId[e.musculo_id]) patronesPorMusculoId[e.musculo_id] = new Set();
+    patronesPorMusculoId[e.musculo_id].add(e.patron_movimiento);
+  }
+  for (const id in patronesPorMusculoId) patronesPorMusculoId[id] = [...patronesPorMusculoId[id]].sort();
 
   return (
     <div className="min-h-dvh bg-bg flex flex-col">
@@ -98,6 +108,7 @@ export default function CatalogoPage() {
                     <FormularioEjercicio
                       musculos={musculos}
                       patronesExistentes={patronesExistentes}
+                      patronesPorMusculoId={patronesPorMusculoId}
                       valoresIniciales={{ nombre: e.nombre, musculoId: e.musculo_id }}
                       textoBoton="Publicar al catálogo"
                       onGuardar={(payload) => api.patch(`/catalogo/ejercicios/${e.id}/publicar`, payload)}
@@ -128,6 +139,7 @@ export default function CatalogoPage() {
             <FormularioEjercicio
               musculos={musculos}
               patronesExistentes={patronesExistentes}
+              patronesPorMusculoId={patronesPorMusculoId}
               textoBoton="Agregar al catálogo"
               onGuardar={(payload) => api.post('/catalogo/ejercicios', payload)}
               onListo={() => { setMostrarAlta(false); cargar(); }}
@@ -166,7 +178,7 @@ export default function CatalogoPage() {
 // Mismo formulario para dar de alta un ejercicio nuevo y para "publicar" uno
 // particular ya cargado (ver arriba) - solo cambia el endpoint al que pega
 // (onGuardar) y si arranca con nombre/musculo ya cargados.
-function FormularioEjercicio({ musculos, patronesExistentes = [], valoresIniciales, onGuardar, onListo, textoBoton }) {
+function FormularioEjercicio({ musculos, patronesExistentes = [], patronesPorMusculoId = {}, valoresIniciales, onGuardar, onListo, textoBoton }) {
   const [nombre, setNombre] = useState(valoresIniciales?.nombre ?? '');
   const [musculoId, setMusculoId] = useState(valoresIniciales?.musculoId ?? musculos[0]?.id ?? '');
   const [tipo, setTipo] = useState('compuesto');
@@ -180,6 +192,8 @@ function FormularioEjercicio({ musculos, patronesExistentes = [], valoresInicial
   function toggleEquipo(tag) {
     setEquipo((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
   }
+
+  const sugeridosMusculo = patronesPorMusculoId[musculoId] || [];
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -243,6 +257,22 @@ function FormularioEjercicio({ musculos, patronesExistentes = [], valoresInicial
       <datalist id="patrones-movimiento-existentes">
         {patronesExistentes.map((p) => <option key={p} value={p} />)}
       </datalist>
+      {sugeridosMusculo.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap -mt-1">
+          {sugeridosMusculo.map((p) => (
+            <button
+              type="button"
+              key={p}
+              onClick={() => setPatronMovimiento(p)}
+              className={`px-2.5 h-7 rounded-full border text-[11.5px] font-medium ${
+                patronMovimiento === p ? 'bg-accent text-accent-fg border-accent' : 'bg-bg border-border text-text-muted'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <span className="text-[11.5px] font-semibold text-text-muted uppercase tracking-wide">Equipamiento que requiere</span>

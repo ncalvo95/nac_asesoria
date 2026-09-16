@@ -16,7 +16,7 @@ router.get('/musculos', (req, res) => {
 router.get('/ejercicios', (req, res) => {
   const { musculo_id, incluir_inactivos } = req.query;
   const base = `
-    SELECT e.id, e.nombre, e.tipo, e.activo, e.patron_movimiento, m.nombre AS musculo_nombre
+    SELECT e.id, e.nombre, e.tipo, e.activo, e.patron_movimiento, m.id AS musculo_id, m.nombre AS musculo_nombre
     FROM ejercicio e JOIN musculo m ON m.id = e.musculo_primario_id
     WHERE ${incluir_inactivos ? '1=1' : 'e.activo = 1'}
   `;
