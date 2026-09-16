@@ -459,6 +459,14 @@ cierre de microciclo → progreso → export a Excel):
   existe en el catálogo, termina usando ese, no un doble). Verificado:
   mismo nombre con mayúsculas/espacios distintos devuelve el mismo
   `ejercicio.id`; un nombre distinto sigue creando uno nuevo.
+- **Sugerir patrones de movimiento existentes al dar de alta un ejercicio**
+  (`<datalist>` en `FormularioEjercicio`, Catálogo): el campo "Patrón de
+  movimiento" era texto libre sin ninguna referencia de lo que ya existía
+  - fácil terminar escribiendo variantes del mismo patrón sin darse cuenta
+  (`empuje_horizontal` vs `Empuje Horizontal`). Ahora sugiere los patrones
+  ya usados en el catálogo (`GET /catalogo/ejercicios` ahora también
+  devuelve `patron_movimiento`) - se puede elegir uno existente o escribir
+  uno nuevo si hace falta, no restringe.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

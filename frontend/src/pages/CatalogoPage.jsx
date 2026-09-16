@@ -42,6 +42,11 @@ export default function CatalogoPage() {
   }
 
   const musculosPorId = Object.fromEntries((musculos || []).map((m) => [m.id, m.nombre]));
+  // Patrones de movimiento ya usados en el catalogo, para sugerirlos en el
+  // formulario (antes era un texto libre sin ninguna referencia - facil
+  // terminar escribiendo variantes del mismo patron sin darse cuenta, ej.
+  // "empuje_horizontal" vs "Empuje Horizontal").
+  const patronesExistentes = [...new Set((ejercicios || []).map((e) => e.patron_movimiento).filter(Boolean))].sort();
 
   return (
     <div className="min-h-dvh bg-bg flex flex-col">
@@ -92,6 +97,7 @@ export default function CatalogoPage() {
                   {publicandoId === e.id && musculos && (
                     <FormularioEjercicio
                       musculos={musculos}
+                      patronesExistentes={patronesExistentes}
                       valoresIniciales={{ nombre: e.nombre, musculoId: e.musculo_id }}
                       textoBoton="Publicar al catálogo"
                       onGuardar={(payload) => api.patch(`/catalogo/ejercicios/${e.id}/publicar`, payload)}
@@ -121,6 +127,7 @@ export default function CatalogoPage() {
           {mostrarAlta && musculos && (
             <FormularioEjercicio
               musculos={musculos}
+              patronesExistentes={patronesExistentes}
               textoBoton="Agregar al catálogo"
               onGuardar={(payload) => api.post('/catalogo/ejercicios', payload)}
               onListo={() => { setMostrarAlta(false); cargar(); }}
@@ -159,7 +166,7 @@ export default function CatalogoPage() {
 // Mismo formulario para dar de alta un ejercicio nuevo y para "publicar" uno
 // particular ya cargado (ver arriba) - solo cambia el endpoint al que pega
 // (onGuardar) y si arranca con nombre/musculo ya cargados.
-function FormularioEjercicio({ musculos, valoresIniciales, onGuardar, onListo, textoBoton }) {
+function FormularioEjercicio({ musculos, patronesExistentes = [], valoresIniciales, onGuardar, onListo, textoBoton }) {
   const [nombre, setNombre] = useState(valoresIniciales?.nombre ?? '');
   const [musculoId, setMusculoId] = useState(valoresIniciales?.musculoId ?? musculos[0]?.id ?? '');
   const [tipo, setTipo] = useState('compuesto');
@@ -222,8 +229,20 @@ function FormularioEjercicio({ musculos, valoresIniciales, onGuardar, onListo, t
         ))}
       </div>
 
-      <input value={patronMovimiento} onChange={(e) => setPatronMovimiento(e.target.value)} placeholder="Patrón de movimiento (ej. empuje_horizontal)" required
-        className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent" />
+      <input
+        value={patronMovimiento}
+        onChange={(e) => setPatronMovimiento(e.target.value)}
+        placeholder="Patrón de movimiento (ej. empuje_horizontal)"
+        list="patrones-movimiento-existentes"
+        required
+        className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent"
+      />
+      {/* Sugiere los patrones ya usados en el catalogo (antes era texto
+          libre sin ninguna referencia) - datalist permite elegir uno
+          existente o escribir uno nuevo si hace falta, sin restringir. */}
+      <datalist id="patrones-movimiento-existentes">
+        {patronesExistentes.map((p) => <option key={p} value={p} />)}
+      </datalist>
 
       <div className="flex flex-col gap-1.5">
         <span className="text-[11.5px] font-semibold text-text-muted uppercase tracking-wide">Equipamiento que requiere</span>
