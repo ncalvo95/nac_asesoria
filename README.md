@@ -493,6 +493,23 @@ cierre de microciclo → progreso → export a Excel):
   mostrar). Verificado con Playwright de punta a punta (login, abrir el
   modal, elegir "Una sesión", descargar) y releyendo el .xlsx resultante
   con ExcelJS para confirmar colores, resumen por ejercicio y el dropset.
+- **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
+  en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
+  `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se
+  decidía releyendo `getBoundingClientRect()` de TODAS las tarjetas en cada
+  `pointermove`, pero para ese momento el DOM ya reflejaba el último swap
+  (las tarjetas ya se habían corrido) - así que un swap podía dejar el
+  puntero "cayendo" sobre otra tarjeta sin que el mouse se hubiera movido
+  más, disparando otro swap encadenado de una. Con eventos de mouse en PC
+  (mucho más finos que el touch) esto se sentía como un intercambio rápido
+  entre ejercicios apenas se tocaba el borde de una tarjeta. Ahora el swap
+  se decide comparando contra los centros de cada tarjeta capturados UNA
+  SOLA VEZ al arrancar el arrastre (nunca recalculados en el medio) más el
+  delta del puntero - mismo enfoque que usan las listas ordenables
+  estándar. Verificado con Playwright simulando un mouse real: 150px de
+  movimiento fino (1px por paso) sobre 16 ejercicios produjo un solo
+  cambio de orden limpio, sin ninguna oscilación de ida y vuelta (antes
+  este mismo movimiento habría generado varios cambios encadenados).
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

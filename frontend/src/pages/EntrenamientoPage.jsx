@@ -7,6 +7,7 @@ import QuitarDiaModal from '../components/QuitarDiaModal.jsx';
 import CambiarDiaModal from '../components/CambiarDiaModal.jsx';
 import EditarSemana0Modal from '../components/EditarSemana0Modal.jsx';
 import ExportarExcelModal from '../components/ExportarExcelModal.jsx';
+import { useArrastreOrden } from '../hooks/useArrastreOrden.js';
 import { formatearMusculo } from '../utils/musculo.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -305,58 +306,8 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
     });
   }
 
-  // Reordenar arrastrando la etiqueta del ejercicio (mismo patrón de Pointer
-  // Events que en RegistroDia, en vez de flechas - ver ese componente para
-  // el detalle de por qué Pointer Events y no drag-and-drop nativo).
-  const [ordenArrastre, setOrdenArrastre] = useState(null);
-  const arrastreRef = useRef({ activo: false, ejercicioId: null });
-  const cardRefs = useRef({});
-
-  function iniciarArrastreSemana0(e, ejercicioId) {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    arrastreRef.current = { activo: true, ejercicioId };
-    setOrdenArrastre(diaActual.ejercicios.map((ej) => ej.id));
-    window.addEventListener('pointermove', onPointerMoveArrastreSemana0);
-    window.addEventListener('pointerup', onPointerUpArrastreSemana0);
-    window.addEventListener('pointercancel', onPointerUpArrastreSemana0);
-  }
-
-  function onPointerMoveArrastreSemana0(e) {
-    if (!arrastreRef.current.activo) return;
-    const y = e.clientY;
-    setOrdenArrastre((prev) => {
-      if (!prev) return prev;
-      let nuevoIndex = null;
-      for (const [idStr, node] of Object.entries(cardRefs.current)) {
-        if (!node) continue;
-        const rect = node.getBoundingClientRect();
-        if (y >= rect.top && y <= rect.bottom) {
-          nuevoIndex = prev.indexOf(Number(idStr));
-          break;
-        }
-      }
-      if (nuevoIndex == null) return prev;
-      const idxActual = prev.indexOf(arrastreRef.current.ejercicioId);
-      if (idxActual === -1 || idxActual === nuevoIndex) return prev;
-      const copia = [...prev];
-      copia.splice(idxActual, 1);
-      copia.splice(nuevoIndex, 0, arrastreRef.current.ejercicioId);
-      return copia;
-    });
-  }
-
-  function onPointerUpArrastreSemana0() {
-    window.removeEventListener('pointermove', onPointerMoveArrastreSemana0);
-    window.removeEventListener('pointerup', onPointerUpArrastreSemana0);
-    window.removeEventListener('pointercancel', onPointerUpArrastreSemana0);
-    arrastreRef.current.activo = false;
-    setOrdenArrastre((prev) => {
-      if (prev) guardarOrdenArrastreSemana0(prev);
-      return null;
-    });
-  }
-
+  // Reordenar arrastrando la etiqueta del ejercicio (mismo hook que
+  // RegistroDia, ver useArrastreOrden.js para el detalle del algoritmo).
   async function guardarOrdenArrastreSemana0(ids) {
     const nuevosEjercicios = ids.map((id) => diaActual.ejercicios.find((ej) => ej.id === id)).filter(Boolean);
     setDias((prev) => prev.map((d) => (d.id === diaActual.id ? { ...d, ejercicios: nuevosEjercicios } : d)));
@@ -367,6 +318,11 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
       setError(err.message);
     }
   }
+
+  const { ordenArrastre, arrastrandoId, cardRefs, iniciarArrastre: iniciarArrastreSemana0 } = useArrastreOrden(
+    diaActual.ejercicios.map((ej) => ej.id),
+    guardarOrdenArrastreSemana0
+  );
 
   const ejerciciosMostrados = ordenArrastre
     ? ordenArrastre.map((id) => diaActual.ejercicios.find((ej) => ej.id === id)).filter(Boolean)
@@ -498,7 +454,7 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
               key={ej.id}
               ref={(node) => { cardRefs.current[ej.id] = node; }}
               className={`bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0 ${
-                ordenArrastre && arrastreRef.current.ejercicioId === ej.id ? 'opacity-60 ring-2 ring-accent' : ''
+                arrastrandoId === ej.id ? 'opacity-60 ring-2 ring-accent' : ''
               }`}
             >
               <div className="flex items-center justify-between">
@@ -1407,62 +1363,6 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     });
   }
 
-  // Reordenar arrastrando la etiqueta del ejercicio (mantener presionado y
-  // mover arriba/abajo), en vez de flechas - con Pointer Events en vez de
-  // drag-and-drop nativo de HTML5, que no anda bien con touch en varios
-  // navegadores de celular (esta app es mobile-first). ordenArrastre es el
-  // orden temporal (array de ids) mientras se arrastra, null cuando no hay
-  // ningun arrastre en curso; cardRefs guarda el nodo DOM de cada tarjeta
-  // para saber, en cada pointermove, sobre cual esta el puntero.
-  const [ordenArrastre, setOrdenArrastre] = useState(null);
-  const arrastreRef = useRef({ activo: false, ejercicioId: null });
-  const cardRefs = useRef({});
-
-  function iniciarArrastre(e, ejercicioId) {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    arrastreRef.current = { activo: true, ejercicioId };
-    setOrdenArrastre(dia.ejercicios.map((ej) => ej.id));
-    window.addEventListener('pointermove', onPointerMoveArrastre);
-    window.addEventListener('pointerup', onPointerUpArrastre);
-    window.addEventListener('pointercancel', onPointerUpArrastre);
-  }
-
-  function onPointerMoveArrastre(e) {
-    if (!arrastreRef.current.activo) return;
-    const y = e.clientY;
-    setOrdenArrastre((prev) => {
-      if (!prev) return prev;
-      let nuevoIndex = null;
-      for (const [idStr, node] of Object.entries(cardRefs.current)) {
-        if (!node) continue;
-        const rect = node.getBoundingClientRect();
-        if (y >= rect.top && y <= rect.bottom) {
-          nuevoIndex = prev.indexOf(Number(idStr));
-          break;
-        }
-      }
-      if (nuevoIndex == null) return prev;
-      const idxActual = prev.indexOf(arrastreRef.current.ejercicioId);
-      if (idxActual === -1 || idxActual === nuevoIndex) return prev;
-      const copia = [...prev];
-      copia.splice(idxActual, 1);
-      copia.splice(nuevoIndex, 0, arrastreRef.current.ejercicioId);
-      return copia;
-    });
-  }
-
-  function onPointerUpArrastre() {
-    window.removeEventListener('pointermove', onPointerMoveArrastre);
-    window.removeEventListener('pointerup', onPointerUpArrastre);
-    window.removeEventListener('pointercancel', onPointerUpArrastre);
-    arrastreRef.current.activo = false;
-    setOrdenArrastre((prev) => {
-      if (prev) guardarOrdenArrastre(prev);
-      return null;
-    });
-  }
-
   async function guardarOrdenArrastre(ids) {
     const orden = ids.map((id, i) => ({ ejercicio_asignado_id: id, orden: i + 1 }));
     try {
@@ -1472,6 +1372,11 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
       setError(err.message);
     }
   }
+
+  const { ordenArrastre, arrastrandoId, cardRefs, iniciarArrastre } = useArrastreOrden(
+    dia.ejercicios.map((ej) => ej.id),
+    guardarOrdenArrastre
+  );
 
   const ejerciciosMostrados = ordenArrastre
     ? ordenArrastre.map((id) => dia.ejercicios.find((ej) => ej.id === id)).filter(Boolean)
@@ -1607,7 +1512,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
               key={ej.id}
               ref={(node) => { cardRefs.current[ej.id] = node; }}
               className={`bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-3 min-w-0 ${
-                ordenArrastre && arrastreRef.current.ejercicioId === ej.id ? 'opacity-60 ring-2 ring-accent' : ''
+                arrastrandoId === ej.id ? 'opacity-60 ring-2 ring-accent' : ''
               }`}
             >
               <div className="flex items-start justify-between gap-2">
