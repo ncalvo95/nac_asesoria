@@ -2,8 +2,8 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
-  agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, cambiarDiaSemana, copiarEjercicioADia, crearRutina,
-  crearRutinaConSplit, crearRutinaManual, eliminarRutina, listarRutinas, moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva,
+  agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, cambiarDiaSemana, copiarDia, copiarEjercicioADia, crearRutina,
+  crearRutinaConSplit, crearRutinaManual, eliminarRutina, intercambiarDias, listarRutinas, moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva,
   quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular, renombrarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import {
@@ -462,12 +462,12 @@ router.patch('/ejercicios/:ejercicioAsignadoId/musculos-secundarios', (req, res)
 router.post('/ejercicios/:ejercicioAsignadoId/mover', (req, res, next) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;
-  const { dia_rutina_id } = req.body || {};
+  const { dia_rutina_id, reemplazar } = req.body || {};
   if (!dia_rutina_id) return res.status(400).json({ error: 'dia_rutina_id es obligatorio.' });
   try {
-    res.json(moverEjercicioADia(ea.id, Number(dia_rutina_id)));
+    res.json(moverEjercicioADia(ea.id, Number(dia_rutina_id), { reemplazar: Boolean(reemplazar) }));
   } catch (err) {
-    if (/no encontrado|misma rutina|ya esta/i.test(err.message)) return res.status(400).json({ error: err.message });
+    if (/no encontrado|misma rutina|ya esta|reemplazarlo/i.test(err.message)) return res.status(400).json({ error: err.message });
     next(err);
   }
 });
@@ -475,12 +475,47 @@ router.post('/ejercicios/:ejercicioAsignadoId/mover', (req, res, next) => {
 router.post('/ejercicios/:ejercicioAsignadoId/copiar', (req, res, next) => {
   const ea = getEjercicioAsignadoOr404(req, res);
   if (!ea) return;
-  const { dia_rutina_id } = req.body || {};
+  const { dia_rutina_id, reemplazar } = req.body || {};
   if (!dia_rutina_id) return res.status(400).json({ error: 'dia_rutina_id es obligatorio.' });
   try {
-    res.status(201).json(copiarEjercicioADia(ea.id, Number(dia_rutina_id)));
+    res.status(201).json(copiarEjercicioADia(ea.id, Number(dia_rutina_id), { reemplazar: Boolean(reemplazar) }));
   } catch (err) {
-    if (/no encontrado|misma rutina|ya esta/i.test(err.message)) return res.status(400).json({ error: err.message });
+    if (/no encontrado|misma rutina|ya esta|reemplazarlo/i.test(err.message)) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Intercambia dos dias activos entre si (ver intercambiarDias) - los dos
+// tienen que ser dias de la MISMA rutina del usuario, se valida server-side
+// con getDiaOr404 (chequea acceso) sobre el dia origen y una consulta
+// directa sobre el destino.
+router.post('/dias/:diaRutinaId/intercambiar', (req, res, next) => {
+  const dia = getDiaOr404(req, res);
+  if (!dia) return;
+  const { dia_rutina_id_destino } = req.body || {};
+  if (!dia_rutina_id_destino) return res.status(400).json({ error: 'dia_rutina_id_destino es obligatorio.' });
+  const destino = db.prepare('SELECT dr.*, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?').get(dia_rutina_id_destino);
+  if (!destino) return res.status(404).json({ error: 'Dia destino no encontrado.' });
+  if (!checkAccesoUsuario(req, res, destino.usuario_id)) return;
+  try {
+    res.json(intercambiarDias(dia.id, Number(dia_rutina_id_destino)));
+  } catch (err) {
+    if (/no encontrado|misma rutina|activos|distintos/i.test(err.message)) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
+// Duplica un dia entero a otro dia de la semana que este libre (ver
+// copiarDia) - para entrenar el mismo dia 2 veces en la misma semana.
+router.post('/dias/:diaRutinaId/copiar', (req, res, next) => {
+  const dia = getDiaOr404(req, res);
+  if (!dia) return;
+  const { dia_semana_destino } = req.body || {};
+  if (!dia_semana_destino) return res.status(400).json({ error: 'dia_semana_destino es obligatorio.' });
+  try {
+    res.status(201).json(copiarDia(dia.id, dia_semana_destino));
+  } catch (err) {
+    if (/no encontrado|no esta activo|invalido|ya hay un dia|mas de 6/i.test(err.message)) return res.status(400).json({ error: err.message });
     next(err);
   }
 });

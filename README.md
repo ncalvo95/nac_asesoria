@@ -125,7 +125,15 @@ cierre de microciclo → progreso → export a Excel):
   a otro día** de la misma rutina (`POST /ejercicios/:id/mover` conserva
   peso/series -es la misma instancia, solo cambia de día-, `POST
   /ejercicios/:id/copiar` arranca una instancia nueva a testear en el día
-  destino).
+  destino). Si el día destino ya tiene una instancia del mismo ejercicio,
+  el backend rechaza el mover/copiar con un 400 a menos que se mande
+  `reemplazar: true` en el body (`resolverConflictoDestino` en
+  `rutinaService.js` - borra la instancia en conflicto, con el mismo
+  reacomodo de `musculos_trabajados_json` que usa quitar ejercicio, antes
+  de mover/copiar la nueva); el frontend se adelanta a ese 409 lógico
+  fijándose en `diasHermanos[].ejercicios` (que ya tiene en memoria, sin
+  pedir nada más al backend) y muestra "¿Lo reemplazás?" con
+  Cancelar/Reemplazar antes de mandar el pedido.
 
 - Tanto un **ejercicio** (arriba a la derecha de la tarjeta, alineado con
   el nombre del ejercicio) como el **día en general** tienen un botón
@@ -172,6 +180,25 @@ cierre de microciclo → progreso → export a Excel):
     ese antes de confirmar: moverlo a un día que esté libre (con su
     progreso intacto también) o eliminarlo (se borra o se desactiva, según
     si ya tiene historial, igual que Quitar día).
+  - **Intercambiar día**: a diferencia de "Cambiar día" (que mueve UN día
+    y tiene que resolver qué hacer con lo que ya había en destino),
+    intercambia directamente la etiqueta `dia_semana` entre dos días YA
+    ACTIVOS -y la duración declarada en disponibilidad, que viaja con el
+    día- sin pisar ni redistribuir nada de ninguno de los dos (`POST
+    /dias/:id/intercambiar`, `intercambiarDias` en `rutinaService.js`).
+    Útil para canjear qué día se entrena qué, sin conflicto que resolver.
+  - **Copiar día completo**: duplica TODOS los ejercicios de un día (con
+    su peso/series/descanso tal cual están, a diferencia de copiar
+    ejercicio por ejercicio -que resetea el peso a testear-, acá es
+    literalmente "la misma sesión de nuevo") a otro día de la semana que
+    esté libre (`POST /dias/:id/copiar`, `copiarDia` en
+    `rutinaService.js`, límite de 6 días activos por semana igual que
+    agregar día). Para cuando conviene entrenar el mismo día 2 veces en
+    la misma semana (ej. piernas lunes y viernes) sin armar un día nuevo
+    a mano ejercicio por ejercicio.
+  - Ambas viven en un modal nuevo (`MoverCopiarDiaModal.jsx`, link
+    "Intercambiar/copiar día" al lado de "Cambiar día") con un tab para
+    elegir el modo.
 - Semana 0 (testeo) y registro de sesión/serie (`src/services/progressionEngine.js`,
   `src/routes/sesiones.js`). Lo que se va tipeando (peso/reps/RIR de Semana 0
   y del registro normal del día) se guarda como borrador en `localStorage`

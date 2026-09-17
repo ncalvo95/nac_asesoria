@@ -1202,6 +1202,91 @@ export const cambiarDiaSemana = db.transaction((diaRutinaId, nuevoDiaSemana, con
   return obtenerRutinaActiva(usuarioId);
 });
 
+// Intercambia el dia_semana entre dos dias YA ACTIVOS de la misma rutina -
+// a diferencia de cambiarDiaSemana (que mueve UN dia y tiene que resolver
+// el conflicto con lo que ya haya en destino), aca los dos ya existen: es
+// solo trocar sus etiquetas de dia_semana entre si, sin tocar ejercicios ni
+// progreso de ninguno de los dos. La duracion declarada por dia
+// (disponibilidad) viaja con el dia_semana, asi que tambien se intercambia
+// - sino quedaria pegada al nombre del dia en vez de a lo que se entrena ahi.
+export const intercambiarDias = db.transaction((diaRutinaIdA, diaRutinaIdB) => {
+  if (diaRutinaIdA === diaRutinaIdB) throw new Error('Elegi dos dias distintos.');
+  const a = db.prepare('SELECT dr.*, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?').get(diaRutinaIdA);
+  const b = db.prepare('SELECT dr.*, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?').get(diaRutinaIdB);
+  if (!a || !b) throw new Error('Dia no encontrado.');
+  if (a.rutina_id !== b.rutina_id) throw new Error('Los dos dias tienen que ser de la misma rutina.');
+  if (!a.activo || !b.activo) throw new Error('Los dos dias tienen que estar activos.');
+
+  db.prepare('UPDATE dia_rutina SET dia_semana = ? WHERE id = ?').run(b.dia_semana, a.id);
+  db.prepare('UPDATE dia_rutina SET dia_semana = ? WHERE id = ?').run(a.dia_semana, b.id);
+
+  const disponibilidad = getDisponibilidad.get(a.usuario_id);
+  if (disponibilidad) {
+    const duracion = JSON.parse(disponibilidad.duracion_sesion_json);
+    const tmp = duracion[a.dia_semana];
+    duracion[a.dia_semana] = duracion[b.dia_semana];
+    duracion[b.dia_semana] = tmp;
+    const diasEspecificos = ordenarPorDiaSemana(getDiasActivosRutina.all(a.rutina_id).map((d) => d.dia_semana));
+    aplicarDisponibilidad(a.usuario_id, { dias_especificos: diasEspecificos, duracion_sesion: duracion });
+  }
+
+  return obtenerRutinaActiva(a.usuario_id);
+});
+
+const insertEjercicioAsignadoCopiaCompleta = db.prepare(`
+  INSERT INTO ejercicio_asignado (
+    dia_rutina_id, ejercicio_id, orden, es_top_de_musculo, musculo_objetivo_id,
+    series_actuales, peso_actual, rango_reps_min, rango_reps_max, descanso_segundos, musculos_secundarios_json
+  ) VALUES (
+    @dia_rutina_id, @ejercicio_id, @orden, @es_top_de_musculo, @musculo_objetivo_id,
+    @series_actuales, @peso_actual, @rango_reps_min, @rango_reps_max, @descanso_segundos, @musculos_secundarios_json
+  )
+`);
+
+// Duplica un dia ENTERO (todos sus ejercicios, con peso/series/descanso
+// TAL CUAL estan hoy - a diferencia de copiarEjercicioADia, que resetea el
+// peso para testear, aca es literalmente "la misma sesion de nuevo", asi
+// que no hay motivo para blanquear nada) a otro dia de la semana que este
+// libre - para cuando conviene entrenar el mismo dia 2 veces en la misma
+// semana (ej. piernas lunes Y viernes) en vez de armar un dia nuevo a mano.
+// Solo apunta a un dia_semana sin ningun dia activo - no resuelve conflicto
+// como cambiarDiaSemana, para eso ya esta esa funcion.
+export const copiarDia = db.transaction((diaRutinaId, nuevoDiaSemana) => {
+  const origen = db.prepare('SELECT dr.*, r.usuario_id, r.id AS rutina_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?').get(diaRutinaId);
+  if (!origen) throw new Error('Dia no encontrado.');
+  if (!origen.activo) throw new Error('Ese dia no esta activo.');
+  if (!ORDEN_DIAS.includes(nuevoDiaSemana)) throw new Error('Dia de la semana invalido.');
+
+  const diasActivos = getDiasActivosRutina.all(origen.rutina_id);
+  if (diasActivos.some((d) => d.dia_semana === nuevoDiaSemana)) throw new Error('Ya hay un dia activo en ese dia de la semana.');
+  if (diasActivos.length >= 6) throw new Error('No se pueden tener mas de 6 dias por semana.');
+
+  const { lastInsertRowid: nuevoId } = insertDiaRutina.run({
+    rutina_id: origen.rutina_id, numero_dia: diasActivos.length + 1, dia_semana: nuevoDiaSemana,
+    musculos_trabajados_json: origen.musculos_trabajados_json,
+  });
+
+  const ejercicios = db.prepare('SELECT * FROM ejercicio_asignado WHERE dia_rutina_id = ? ORDER BY orden').all(diaRutinaId);
+  for (const ej of ejercicios) {
+    insertEjercicioAsignadoCopiaCompleta.run({
+      dia_rutina_id: nuevoId, ejercicio_id: ej.ejercicio_id, orden: ej.orden, es_top_de_musculo: ej.es_top_de_musculo,
+      musculo_objetivo_id: ej.musculo_objetivo_id, series_actuales: ej.series_actuales, peso_actual: ej.peso_actual,
+      rango_reps_min: ej.rango_reps_min, rango_reps_max: ej.rango_reps_max, descanso_segundos: ej.descanso_segundos,
+      musculos_secundarios_json: ej.musculos_secundarios_json,
+    });
+  }
+
+  renumerarDias(origen.rutina_id);
+
+  const disponibilidad = getDisponibilidad.get(origen.usuario_id);
+  const duracion = disponibilidad ? JSON.parse(disponibilidad.duracion_sesion_json) : {};
+  duracion[nuevoDiaSemana] = duracion[origen.dia_semana] || 60;
+  const diasEspecificosFinal = ordenarPorDiaSemana([...diasActivos.map((d) => d.dia_semana), nuevoDiaSemana]);
+  aplicarDisponibilidad(origen.usuario_id, { dias_especificos: diasEspecificosFinal, duracion_sesion: duracion });
+
+  return obtenerRutinaActiva(origen.usuario_id);
+});
+
 // ---------------------------------------------------------------------------
 // Mover / copiar un ejercicio ya asignado a otro dia de la MISMA rutina -
 // por si durante el entrenamiento se decide que un ejercicio queda mejor en
@@ -1227,24 +1312,44 @@ function reacomodarMusculoTrasQuitar(diaRutinaId, musculoId, eraTop) {
   }
 }
 
+// Ya no tira si el ejercicio ya esta asignado en destino - devuelve ese
+// conflicto para que el caller decida (ver reemplazar en moverEjercicioADia/
+// copiarEjercicioADia). El frontend ya puede detectarlo de antemano (tiene
+// los ejercicios de diasHermanos en pantalla), esto es la red de seguridad
+// server-side.
 function validarDestinoMismaRutina(ea, diaRutinaIdDestino) {
   const destino = getDiaRutinaPorId.get(diaRutinaIdDestino);
   if (!destino) throw new Error('Dia destino no encontrado.');
   const origen = getDiaRutinaPorId.get(ea.dia_rutina_id);
   if (origen.rutina_id !== destino.rutina_id) throw new Error('El dia destino tiene que ser de la misma rutina.');
-  const yaUsado = db.prepare('SELECT 1 FROM ejercicio_asignado WHERE dia_rutina_id = ? AND ejercicio_id = ?')
+  const conflicto = db.prepare('SELECT * FROM ejercicio_asignado WHERE dia_rutina_id = ? AND ejercicio_id = ?')
     .get(diaRutinaIdDestino, ea.ejercicio_id);
-  if (yaUsado) throw new Error('Ese ejercicio ya esta asignado en el dia destino.');
-  return { origen, destino };
+  return { origen, destino, conflicto };
+}
+
+// Si hay conflicto (el ejercicio ya esta asignado en destino) y se pidio
+// reemplazar, borra esa fila de destino (arrastra su propio historial de
+// registro_serie por cascada) para dejar lugar - nunca se mezclan las dos
+// instancias, una reemplaza a la otra de una.
+function resolverConflictoDestino(conflicto, reemplazar) {
+  if (!conflicto) return;
+  if (!reemplazar) {
+    throw new Error('Ese ejercicio ya esta asignado en el dia destino. Elegi si queres reemplazarlo.');
+  }
+  reacomodarMusculoTrasQuitar(conflicto.dia_rutina_id, conflicto.musculo_objetivo_id, Boolean(conflicto.es_top_de_musculo));
+  db.prepare('DELETE FROM ejercicio_asignado WHERE id = ?').run(conflicto.id);
 }
 
 // Mueve el ejercicio_asignado a otro dia, conservando su peso/series
 // actuales (es la misma instancia de progresion, solo cambia de dia).
-export const moverEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutinaIdDestino) => {
+// reemplazar=true resuelve el conflicto si el destino ya tiene ese
+// ejercicio (ver resolverConflictoDestino) en vez de tirar error.
+export const moverEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutinaIdDestino, { reemplazar = false } = {}) => {
   const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
   if (!ea) throw new Error('Ejercicio asignado no encontrado.');
   if (ea.dia_rutina_id === diaRutinaIdDestino) throw new Error('Ese ejercicio ya esta en ese dia.');
-  const { origen } = validarDestinoMismaRutina(ea, diaRutinaIdDestino);
+  const { origen, conflicto } = validarDestinoMismaRutina(ea, diaRutinaIdDestino);
+  resolverConflictoDestino(conflicto, reemplazar);
 
   const musculoNombre = getMusculoNombrePorId.get(ea.musculo_objetivo_id).nombre;
   const esTopEnDestino = calcularTopYActualizarDia(diaRutinaIdDestino, ea.musculo_objetivo_id, musculoNombre);
@@ -1266,10 +1371,11 @@ export const moverEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutina
 // instancia nueva (peso_actual NULL, a testear) en vez de heredar el
 // peso/series del original, para no asumir que el mismo peso sirve ahora
 // con la frecuencia mas alta que implica repetirlo en dos dias.
-export const copiarEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutinaIdDestino) => {
+export const copiarEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutinaIdDestino, { reemplazar = false } = {}) => {
   const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
   if (!ea) throw new Error('Ejercicio asignado no encontrado.');
-  validarDestinoMismaRutina(ea, diaRutinaIdDestino);
+  const { conflicto } = validarDestinoMismaRutina(ea, diaRutinaIdDestino);
+  resolverConflictoDestino(conflicto, reemplazar);
 
   const musculoNombre = getMusculoNombrePorId.get(ea.musculo_objetivo_id).nombre;
   const esTop = calcularTopYActualizarDia(diaRutinaIdDestino, ea.musculo_objetivo_id, musculoNombre);

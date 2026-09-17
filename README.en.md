@@ -128,7 +128,15 @@ sessions → closing a microcycle → progress → Excel export):
   **move/copy it to another day** in the same routine (`POST
   /ejercicios/:id/mover` keeps weight/sets - it's the same instance, it
   just changes days -, `POST /ejercicios/:id/copiar` starts a brand new
-  instance to be tested on the destination day).
+  instance to be tested on the destination day). If the destination day
+  already has an instance of the same exercise, the backend rejects the
+  move/copy with a 400 unless `reemplazar: true` is sent in the body
+  (`resolverConflictoDestino` in `rutinaService.js` - deletes the
+  conflicting instance, with the same `musculos_trabajados_json`
+  bookkeeping as removing an exercise, before moving/copying the new one);
+  the frontend heads that logical 409 off by checking
+  `diasHermanos[].ejercicios` (already in memory, no extra request) and
+  shows "Replace it?" with Cancel/Replace before sending the request.
 
 - Both an **exercise** (top-right of its card, aligned with the exercise
   name) and the **day as a whole** have a "Comment" button that opens a
@@ -178,6 +186,24 @@ sessions → closing a microcycle → progress → Excel export):
     confirming: move it to a day that's free (its progress stays intact
     too) or delete it (deleted or deactivated depending on whether it
     already has history, same as Remove a day).
+  - **Swap day**: unlike "Change a day" (which moves ONE day and has to
+    resolve whatever's already sitting on the destination), this directly
+    swaps the `dia_semana` label between two days that are BOTH already
+    active - and the duration declared in availability, which travels
+    with the day - without touching or redistributing anything on either
+    one (`POST /dias/:id/intercambiar`, `intercambiarDias` in
+    `rutinaService.js`). Useful for swapping which day trains what, with
+    no conflict to resolve.
+  - **Copy an entire day**: duplicates ALL of a day's exercises (with
+    weight/sets/rest exactly as they are - unlike copying exercise by
+    exercise, which resets the weight to be tested, this is literally
+    "the same session again") to another day of the week that's free
+    (`POST /dias/:id/copiar`, `copiarDia` in `rutinaService.js`, same
+    6-active-days-per-week cap as adding a day). For when it makes sense
+    to train the same day twice in the same week (e.g. legs on Monday and
+    Friday) without building a new day from scratch exercise by exercise.
+  - Both live in a new modal (`MoverCopiarDiaModal.jsx`, "Swap/copy day"
+    link next to "Change day") with a tab to pick the mode.
 - Week 0 (testing) and session/set logging (`src/services/progressionEngine.js`,
   `src/routes/sesiones.js`). Whatever gets typed in (weight/reps/RIR for
   Week 0 and for the day's regular log) is saved as a draft in the

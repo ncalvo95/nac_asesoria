@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import AgregarDiaModal from '../components/AgregarDiaModal.jsx';
 import QuitarDiaModal from '../components/QuitarDiaModal.jsx';
 import CambiarDiaModal from '../components/CambiarDiaModal.jsx';
+import MoverCopiarDiaModal from '../components/MoverCopiarDiaModal.jsx';
 import EditarSemana0Modal from '../components/EditarSemana0Modal.jsx';
 import ExportarExcelModal from '../components/ExportarExcelModal.jsx';
 import { useArrastreOrden } from '../hooks/useArrastreOrden.js';
@@ -922,6 +923,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
   const [mostrarAgregarDia, setMostrarAgregarDia] = useState(false);
   const [mostrarQuitarDia, setMostrarQuitarDia] = useState(false);
   const [mostrarCambiarDia, setMostrarCambiarDia] = useState(false);
+  const [mostrarMoverCopiarDia, setMostrarMoverCopiarDia] = useState(false);
   const [mostrarEditarSemana0, setMostrarEditarSemana0] = useState(false);
 
   // rutina.semana_actual (1 o 2, ver obtenerRutinaActiva en rutinaService.js)
@@ -1022,6 +1024,13 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
             >
               Cambiar día
             </button>
+            <button
+              type="button"
+              onClick={() => setMostrarMoverCopiarDia(true)}
+              className="text-[11.5px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+            >
+              Intercambiar/copiar día
+            </button>
             {microciclo.numero >= 1 && (
               <button
                 type="button"
@@ -1090,6 +1099,15 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           diasActivos={diasUnicos.filter((d) => d.id !== dia.id).map((d) => d.dia_semana)}
           onClose={() => setMostrarCambiarDia(false)}
           onCambiado={() => { setMostrarCambiarDia(false); onRutinaCambiada(); }}
+        />
+      )}
+      {mostrarMoverCopiarDia && (
+        <MoverCopiarDiaModal
+          diaRutinaId={dia.id}
+          diaSemanaActual={dia.dia_semana}
+          diasHermanos={diasUnicos.filter((d) => d.id !== dia.id)}
+          onClose={() => setMostrarMoverCopiarDia(false)}
+          onListo={() => { setMostrarMoverCopiarDia(false); onRutinaCambiada(); }}
         />
       )}
       {mostrarEditarSemana0 && (
@@ -1807,6 +1825,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
         <div className="flex justify-end">
           <MoverCopiarEjercicio
             ejercicioId={ejercicio.id}
+            ejercicioCatalogoId={ejercicio.ejercicio_id}
             diasHermanos={diasHermanos}
             onListo={() => { setMostrarMoverCopiar(false); onCambiado(); }}
             onError={setError}
@@ -2131,21 +2150,67 @@ function EditarNombreParticular({ ejercicioId, nombreActual, onEditado }) {
 // instancia nueva a testear) un ejercicio ya asignado a otro dia de la
 // misma rutina - por si durante el entrenamiento se decide que queda mejor
 // en otro dia, o que conviene repetirlo en dos.
-function MoverCopiarEjercicio({ ejercicioId, diasHermanos, onListo, onError }) {
+// Antes de mover/copiar, si el dia destino ya tiene un ejercicio_asignado
+// del mismo ejercicio_id (ver ejercicioCatalogoId), el backend rechaza con
+// 409 a menos que mandemos reemplazar:true - en vez de esperar ese rechazo,
+// nos fijamos de una en diasHermanos[].ejercicios (que ya tenemos en
+// memoria) y le preguntamos al usuario antes de mandar nada.
+function MoverCopiarEjercicio({ ejercicioId, ejercicioCatalogoId, diasHermanos, onListo, onError }) {
   const [modo, setModo] = useState('mover');
   const [enviando, setEnviando] = useState(null);
+  const [confirmarConflicto, setConfirmarConflicto] = useState(null);
 
-  async function elegirDia(diaRutinaId) {
+  async function enviar(diaRutinaId, reemplazar) {
     setEnviando(diaRutinaId);
     onError('');
     try {
-      await api.post(`/ejercicios/${ejercicioId}/${modo === 'mover' ? 'mover' : 'copiar'}`, { dia_rutina_id: diaRutinaId });
+      await api.post(`/ejercicios/${ejercicioId}/${modo === 'mover' ? 'mover' : 'copiar'}`, {
+        dia_rutina_id: diaRutinaId,
+        reemplazar,
+      });
       onListo();
     } catch (err) {
       onError(err.message);
     } finally {
       setEnviando(null);
+      setConfirmarConflicto(null);
     }
+  }
+
+  function elegirDia(d) {
+    const conflicto = d.ejercicios?.find((e) => e.ejercicio_id === ejercicioCatalogoId);
+    if (conflicto) {
+      setConfirmarConflicto({ dia: d, nombreExistente: conflicto.ejercicio_nombre });
+      return;
+    }
+    enviar(d.id, false);
+  }
+
+  if (confirmarConflicto) {
+    return (
+      <div className="flex flex-col gap-2 bg-bg border border-border rounded-lg p-2.5 max-w-[260px]">
+        <span className="text-[12px] text-warning leading-relaxed">
+          {CAPITALIZAR(confirmarConflicto.dia.dia_semana)} ya tiene "{confirmarConflicto.nombreExistente}" — ¿lo reemplazás?
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmarConflicto(null)}
+            className="flex-1 h-8 rounded-md border border-border bg-surface text-text-muted text-[12px] font-semibold"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={enviando !== null}
+            onClick={() => enviar(confirmarConflicto.dia.id, true)}
+            className="flex-1 h-8 rounded-md bg-danger text-white text-[12px] font-semibold disabled:opacity-60"
+          >
+            {enviando !== null ? 'Guardando…' : 'Reemplazar'}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -2170,7 +2235,7 @@ function MoverCopiarEjercicio({ ejercicioId, diasHermanos, onListo, onError }) {
             type="button"
             key={d.id}
             disabled={enviando !== null}
-            onClick={() => elegirDia(d.id)}
+            onClick={() => elegirDia(d)}
             className="px-2.5 h-7 rounded-full border border-border bg-bg text-text-muted text-[11.5px] font-medium capitalize disabled:opacity-60"
           >
             {enviando === d.id ? 'Guardando…' : CAPITALIZAR(d.dia_semana)}
