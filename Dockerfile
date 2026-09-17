@@ -34,6 +34,7 @@ WORKDIR /app
 COPY --from=server-deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 RUN mkdir -p /app/data
