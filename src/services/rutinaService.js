@@ -1327,29 +1327,48 @@ function validarDestinoMismaRutina(ea, diaRutinaIdDestino) {
   return { origen, destino, conflicto };
 }
 
-// Si hay conflicto (el ejercicio ya esta asignado en destino) y se pidio
-// reemplazar, borra esa fila de destino (arrastra su propio historial de
-// registro_serie por cascada) para dejar lugar - nunca se mezclan las dos
-// instancias, una reemplaza a la otra de una.
+// Si hay conflicto (el ejercicio ya esta asignado en destino) y no se pidio
+// reemplazar, tira error para que el frontend pregunte. Si se pidio
+// reemplazar, la fila que YA ESTA en destino gana tal cual esta -nunca se
+// borra ni se pisa- porque ya es el mismo ejercicio (mismo ejercicio_id,
+// por eso hay conflicto) con su propio peso/series/rango YA establecidos
+// ahi, y sobre todo con su propio historial de registro_serie (donde vive
+// el RIR de cada serie ya registrada) - borrarla para "hacer lugar" tiraria
+// ese historial por la cascada de ejercicio_asignado sin necesidad, cuando
+// lo unico que hace falta es no duplicar el ejercicio en destino. Devuelve
+// si habia conflicto (para que el caller sepa que no tiene que insertar/
+// mover nada nuevo, la fila de destino ya es la respuesta final).
 function resolverConflictoDestino(conflicto, reemplazar) {
-  if (!conflicto) return;
+  if (!conflicto) return false;
   if (!reemplazar) {
     throw new Error('Ese ejercicio ya esta asignado en el dia destino. Elegi si queres reemplazarlo.');
   }
-  reacomodarMusculoTrasQuitar(conflicto.dia_rutina_id, conflicto.musculo_objetivo_id, Boolean(conflicto.es_top_de_musculo));
-  db.prepare('DELETE FROM ejercicio_asignado WHERE id = ?').run(conflicto.id);
+  return true;
 }
 
 // Mueve el ejercicio_asignado a otro dia, conservando su peso/series
 // actuales (es la misma instancia de progresion, solo cambia de dia).
 // reemplazar=true resuelve el conflicto si el destino ya tiene ese
-// ejercicio (ver resolverConflictoDestino) en vez de tirar error.
+// ejercicio (ver resolverConflictoDestino): como esa fila de destino ya
+// tiene su propio peso/series/historial establecidos, gana ella tal cual
+// esta y la de origen (que ya no hace falta ahi) se descarta, en vez de
+// mover la de origen encima perdiendo lo que ya habia en destino.
 export const moverEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutinaIdDestino, { reemplazar = false } = {}) => {
   const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
   if (!ea) throw new Error('Ejercicio asignado no encontrado.');
   if (ea.dia_rutina_id === diaRutinaIdDestino) throw new Error('Ese ejercicio ya esta en ese dia.');
   const { origen, conflicto } = validarDestinoMismaRutina(ea, diaRutinaIdDestino);
-  resolverConflictoDestino(conflicto, reemplazar);
+  const yaEstabaEnDestino = resolverConflictoDestino(conflicto, reemplazar);
+
+  if (yaEstabaEnDestino) {
+    reacomodarMusculoTrasQuitar(origen.id, ea.musculo_objetivo_id, Boolean(ea.es_top_de_musculo));
+    db.prepare('DELETE FROM ejercicio_asignado WHERE id = ?').run(ejercicioAsignadoId);
+    const catalogo = getEjercicioCatalogo.get(conflicto.ejercicio_id);
+    return {
+      id: conflicto.id, dia_rutina_id: diaRutinaIdDestino, ejercicio_id: conflicto.ejercicio_id,
+      ejercicio_nombre: catalogo.nombre, es_top_de_musculo: Boolean(conflicto.es_top_de_musculo),
+    };
+  }
 
   const musculoNombre = getMusculoNombrePorId.get(ea.musculo_objetivo_id).nombre;
   const esTopEnDestino = calcularTopYActualizarDia(diaRutinaIdDestino, ea.musculo_objetivo_id, musculoNombre);
@@ -1370,12 +1389,25 @@ export const moverEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutina
 // Duplica el ejercicio en otro dia - a diferencia de mover, queda una
 // instancia nueva (peso_actual NULL, a testear) en vez de heredar el
 // peso/series del original, para no asumir que el mismo peso sirve ahora
-// con la frecuencia mas alta que implica repetirlo en dos dias.
+// con la frecuencia mas alta que implica repetirlo en dos dias. Pero si
+// reemplazar=true y ya existe ese ejercicio en destino, no tiene sentido
+// crear una copia en blanco encima de una fila que ya tiene peso/series/
+// historial propios - se deja esa tal cual esta (ver resolverConflictoDestino).
 export const copiarEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutinaIdDestino, { reemplazar = false } = {}) => {
   const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
   if (!ea) throw new Error('Ejercicio asignado no encontrado.');
   const { conflicto } = validarDestinoMismaRutina(ea, diaRutinaIdDestino);
-  resolverConflictoDestino(conflicto, reemplazar);
+  const yaEstabaEnDestino = resolverConflictoDestino(conflicto, reemplazar);
+
+  if (yaEstabaEnDestino) {
+    const catalogo = getEjercicioCatalogo.get(conflicto.ejercicio_id);
+    return {
+      id: conflicto.id, dia_rutina_id: diaRutinaIdDestino, ejercicio_id: conflicto.ejercicio_id,
+      ejercicio_nombre: catalogo.nombre, musculo_objetivo_id: conflicto.musculo_objetivo_id,
+      rango_reps_min: conflicto.rango_reps_min, rango_reps_max: conflicto.rango_reps_max,
+      es_top_de_musculo: Boolean(conflicto.es_top_de_musculo), series_actuales: conflicto.series_actuales,
+    };
+  }
 
   const musculoNombre = getMusculoNombrePorId.get(ea.musculo_objetivo_id).nombre;
   const esTop = calcularTopYActualizarDia(diaRutinaIdDestino, ea.musculo_objetivo_id, musculoNombre);

@@ -127,13 +127,23 @@ cierre de microciclo → progreso → export a Excel):
   /ejercicios/:id/copiar` arranca una instancia nueva a testear en el día
   destino). Si el día destino ya tiene una instancia del mismo ejercicio,
   el backend rechaza el mover/copiar con un 400 a menos que se mande
-  `reemplazar: true` en el body (`resolverConflictoDestino` en
-  `rutinaService.js` - borra la instancia en conflicto, con el mismo
-  reacomodo de `musculos_trabajados_json` que usa quitar ejercicio, antes
-  de mover/copiar la nueva); el frontend se adelanta a ese 409 lógico
+  `reemplazar: true` en el body; el frontend se adelanta a ese 409 lógico
   fijándose en `diasHermanos[].ejercicios` (que ya tiene en memoria, sin
   pedir nada más al backend) y muestra "¿Lo reemplazás?" con
-  Cancelar/Reemplazar antes de mandar el pedido.
+  Cancelar/Reemplazar antes de mandar el pedido. Con `reemplazar: true`,
+  la fila que YA ESTABA en destino gana tal cual está -nunca se borra ni
+  se pisa- porque ya es el mismo ejercicio (mismo `ejercicio_id`, por eso
+  hay conflicto) con su propio peso/series/rango de reps ya establecidos
+  ahí, y sobre todo con su propio historial de `registro_serie` (donde
+  vive el RIR de cada serie ya cargada): la primera versión de esto
+  borraba esa fila para "hacer lugar" -tirando ese historial por la
+  cascada de `ejercicio_asignado`- y volvía a insertar una instancia
+  nueva (en blanco si era copiar, o con el peso de origen si era mover),
+  perdiendo el peso/series/reps/RIR que ya estaban cargados en destino.
+  Ahora `resolverConflictoDestino` en `rutinaService.js` no toca esa fila
+  para nada: en **mover**, se borra la de origen (que ya no hace falta
+  ahí) y listo; en **copiar**, ni siquiera hace falta insertar nada, "la
+  copia" es directamente la fila que ya estaba.
 
 - Tanto un **ejercicio** (arriba a la derecha de la tarjeta, alineado con
   el nombre del ejercicio) como el **día en general** tienen un botón

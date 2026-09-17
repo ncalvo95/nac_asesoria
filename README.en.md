@@ -130,13 +130,25 @@ sessions → closing a microcycle → progress → Excel export):
   just changes days -, `POST /ejercicios/:id/copiar` starts a brand new
   instance to be tested on the destination day). If the destination day
   already has an instance of the same exercise, the backend rejects the
-  move/copy with a 400 unless `reemplazar: true` is sent in the body
-  (`resolverConflictoDestino` in `rutinaService.js` - deletes the
-  conflicting instance, with the same `musculos_trabajados_json`
-  bookkeeping as removing an exercise, before moving/copying the new one);
+  move/copy with a 400 unless `reemplazar: true` is sent in the body;
   the frontend heads that logical 409 off by checking
   `diasHermanos[].ejercicios` (already in memory, no extra request) and
   shows "Replace it?" with Cancel/Replace before sending the request.
+  With `reemplazar: true`, the row that was ALREADY in the destination
+  wins exactly as it is - it's never deleted or overwritten - because
+  it's already the same exercise (same `ejercicio_id`, that's why there's
+  a conflict) with its own weight/sets/rep range already established
+  there, and above all with its own `registro_serie` history (where the
+  RIR of every already-logged set lives): the first version of this
+  deleted that row to "make room" -dropping that history through
+  `ejercicio_asignado`'s cascade- and inserted a brand new instance
+  instead (blank if it was a copy, or with the source's weight if it was
+  a move), losing whatever weight/sets/reps/RIR were already logged at
+  the destination. Now `resolverConflictoDestino` in `rutinaService.js`
+  never touches that row at all: on **move**, the source's row gets
+  deleted (it's no longer needed there) and that's it; on **copy**, there
+  isn't even anything to insert - "the copy" is simply the row that was
+  already there.
 
 - Both an **exercise** (top-right of its card, aligned with the exercise
   name) and the **day as a whole** have a "Comment" button that opens a
