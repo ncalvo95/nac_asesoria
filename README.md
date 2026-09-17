@@ -198,17 +198,33 @@ cierre de microciclo → progreso → export a Excel):
     /dias/:id/intercambiar`, `intercambiarDias` en `rutinaService.js`).
     Útil para canjear qué día se entrena qué, sin conflicto que resolver.
   - **Copiar día completo**: duplica TODOS los ejercicios de un día (con
-    su peso/series/descanso tal cual están, a diferencia de copiar
-    ejercicio por ejercicio -que resetea el peso a testear-, acá es
-    literalmente "la misma sesión de nuevo") a otro día de la semana que
-    esté libre (`POST /dias/:id/copiar`, `copiarDia` en
-    `rutinaService.js`, límite de 6 días activos por semana igual que
-    agregar día). Para cuando conviene entrenar el mismo día 2 veces en
-    la misma semana (ej. piernas lunes y viernes) sin armar un día nuevo
-    a mano ejercicio por ejercicio.
-  - Ambas viven en un modal nuevo (`MoverCopiarDiaModal.jsx`, link
+    su peso/series/rango de reps/descanso tal cual están, es literalmente
+    "la misma sesión de nuevo") a otro día de la semana (`POST
+    /dias/:id/copiar`, `copiarDia` en `rutinaService.js`, límite de 6
+    días activos por semana igual que agregar día). Para cuando conviene
+    entrenar el mismo día 2 veces en la misma semana (ej. piernas lunes y
+    viernes) sin armar un día nuevo a mano ejercicio por ejercicio. Si el
+    día elegido ya tiene otro día activo, se puede **reemplazarlo**
+    (`reemplazar: true` en el body): ese día se borra directo si nunca
+    tuvo una sesión registrada, o se desactiva si ya tiene historial
+    (mismo criterio que Quitar día/Cambiar día), y la copia entra en su
+    lugar - sin preguntar por redistribuir músculos, ya que el usuario
+    eligió conscientemente reemplazarlo entero. También copia el
+    `progreso_ejercicio_microciclo` de cada ejercicio para el microciclo
+    en curso (peso prescrito/piso de reps), para que la sugerencia en gris
+    de la primera serie sea igual a la del original.
+  - **Copiar un ejercicio suelto** a otro día (`POST
+    /ejercicios/:id/copiar`, ver más arriba) también hereda su
+    peso/series/rango/descanso tal cual, en vez de arrancar en blanco a
+    testear - antes sí arrancaba en blanco (`series_actuales` fijo en 2 y
+    `peso_actual` en NULL), lo que hacía perder la referencia de peso/
+    series/reps ya conocida solo por entrenar el mismo ejercicio en un
+    segundo día en la misma semana.
+  - Todas estas (Intercambiar y Copiar día completo, con o sin reemplazo)
+    viven en un modal nuevo (`MoverCopiarDiaModal.jsx`, link
     "Intercambiar/copiar día" al lado de "Cambiar día") con un tab para
-    elegir el modo.
+    elegir el modo; si el día elegido para copiar ya está ocupado,
+    pregunta "¿Reemplazar [Día]?" antes de mandar el pedido.
 - Semana 0 (testeo) y registro de sesión/serie (`src/services/progressionEngine.js`,
   `src/routes/sesiones.js`). Lo que se va tipeando (peso/reps/RIR de Semana 0
   y del registro normal del día) se guarda como borrador en `localStorage`

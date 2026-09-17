@@ -505,17 +505,19 @@ router.post('/dias/:diaRutinaId/intercambiar', (req, res, next) => {
   }
 });
 
-// Duplica un dia entero a otro dia de la semana que este libre (ver
-// copiarDia) - para entrenar el mismo dia 2 veces en la misma semana.
+// Duplica un dia entero a otro dia de la semana (ver copiarDia) - para
+// entrenar el mismo dia 2 veces en la misma semana. reemplazar=true
+// permite apuntar a un dia_semana que ya tiene un dia activo (lo borra o
+// desactiva antes de insertar la copia en su lugar).
 router.post('/dias/:diaRutinaId/copiar', (req, res, next) => {
   const dia = getDiaOr404(req, res);
   if (!dia) return;
-  const { dia_semana_destino } = req.body || {};
+  const { dia_semana_destino, reemplazar } = req.body || {};
   if (!dia_semana_destino) return res.status(400).json({ error: 'dia_semana_destino es obligatorio.' });
   try {
-    res.status(201).json(copiarDia(dia.id, dia_semana_destino));
+    res.status(201).json(copiarDia(dia.id, dia_semana_destino, { reemplazar: Boolean(reemplazar) }));
   } catch (err) {
-    if (/no encontrado|no esta activo|invalido|ya hay un dia|mas de 6/i.test(err.message)) return res.status(400).json({ error: err.message });
+    if (/no encontrado|no esta activo|invalido|ya hay un dia|mas de 6|reemplazarlo/i.test(err.message)) return res.status(400).json({ error: err.message });
     next(err);
   }
 });

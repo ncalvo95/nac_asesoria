@@ -207,15 +207,32 @@ sessions → closing a microcycle → progress → Excel export):
     `rutinaService.js`). Useful for swapping which day trains what, with
     no conflict to resolve.
   - **Copy an entire day**: duplicates ALL of a day's exercises (with
-    weight/sets/rest exactly as they are - unlike copying exercise by
-    exercise, which resets the weight to be tested, this is literally
-    "the same session again") to another day of the week that's free
-    (`POST /dias/:id/copiar`, `copiarDia` in `rutinaService.js`, same
-    6-active-days-per-week cap as adding a day). For when it makes sense
-    to train the same day twice in the same week (e.g. legs on Monday and
-    Friday) without building a new day from scratch exercise by exercise.
-  - Both live in a new modal (`MoverCopiarDiaModal.jsx`, "Swap/copy day"
-    link next to "Change day") with a tab to pick the mode.
+    weight/sets/rep range/rest exactly as they are, literally "the same
+    session again") to another day of the week (`POST /dias/:id/copiar`,
+    `copiarDia` in `rutinaService.js`, same 6-active-days-per-week cap as
+    adding a day). For when it makes sense to train the same day twice in
+    the same week (e.g. legs on Monday and Friday) without building a new
+    day from scratch exercise by exercise. If the chosen day already has
+    another active day, it can be **replaced** (`reemplazar: true` in the
+    body): that day is deleted outright if it never had a logged session,
+    or deactivated if it already has history (same rule as Remove a
+    day/Change a day), and the copy takes its place - no muscle
+    redistribution prompt, since the user consciously chose to replace it
+    whole. It also copies each exercise's `progreso_ejercicio_microciclo`
+    for the current microcycle (prescribed weight/rep floor), so the gray
+    suggestion on the first set matches the original's.
+  - **Copying a single exercise** to another day (`POST
+    /ejercicios/:id/copiar`, see above) also inherits its
+    weight/sets/rep-range/rest exactly, instead of starting blank to be
+    tested - it used to start blank (`series_actuales` fixed at 2 and
+    `peso_actual` at NULL), which lost the already-known weight/sets/reps
+    reference just for training the same exercise on a second day in the
+    same week.
+  - All of these (Swap and Copy an entire day, with or without replacing)
+    live in a new modal (`MoverCopiarDiaModal.jsx`, "Swap/copy day"
+    link next to "Change day") with a tab to pick the mode; if the chosen
+    day for copying is already occupied, it asks "Replace [Day]?" before
+    sending the request.
 - Week 0 (testing) and session/set logging (`src/services/progressionEngine.js`,
   `src/routes/sesiones.js`). Whatever gets typed in (weight/reps/RIR for
   Week 0 and for the day's regular log) is saved as a draft in the

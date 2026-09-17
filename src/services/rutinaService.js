@@ -1244,21 +1244,35 @@ const insertEjercicioAsignadoCopiaCompleta = db.prepare(`
 `);
 
 // Duplica un dia ENTERO (todos sus ejercicios, con peso/series/descanso
-// TAL CUAL estan hoy - a diferencia de copiarEjercicioADia, que resetea el
-// peso para testear, aca es literalmente "la misma sesion de nuevo", asi
-// que no hay motivo para blanquear nada) a otro dia de la semana que este
-// libre - para cuando conviene entrenar el mismo dia 2 veces en la misma
-// semana (ej. piernas lunes Y viernes) en vez de armar un dia nuevo a mano.
-// Solo apunta a un dia_semana sin ningun dia activo - no resuelve conflicto
-// como cambiarDiaSemana, para eso ya esta esa funcion.
-export const copiarDia = db.transaction((diaRutinaId, nuevoDiaSemana) => {
+// TAL CUAL estan hoy - a diferencia de copiarEjercicioADia (antes de este
+// mismo cambio) esto siempre copio el peso/series tal cual, es literalmente
+// "la misma sesion de nuevo", asi que no hay motivo para blanquear nada) a
+// otro dia de la semana - para cuando conviene entrenar el mismo dia 2
+// veces en la misma semana (ej. piernas lunes Y viernes) en vez de armar un
+// dia nuevo a mano. Tambien copia el progreso_ejercicio_microciclo de cada
+// ejercicio para el microciclo en curso (peso prescrito/piso de reps), asi
+// la sugerencia en gris de la primera serie es identica a la del original.
+// reemplazar=true permite apuntar a un dia_semana que YA tiene un dia
+// activo: ese dia se borra (si nunca tuvo sesiones) o se desactiva (si ya
+// tiene historial, para no perder esas sesiones viejas) antes de insertar
+// la copia en su lugar - mismo criterio que quitarDiaRutina/cambiarDiaSemana,
+// pero sin preguntar por redistribuir musculos (el usuario ya eligio
+// conscientemente reemplazarlo entero).
+export const copiarDia = db.transaction((diaRutinaId, nuevoDiaSemana, { reemplazar = false } = {}) => {
   const origen = db.prepare('SELECT dr.*, r.usuario_id, r.id AS rutina_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?').get(diaRutinaId);
   if (!origen) throw new Error('Dia no encontrado.');
   if (!origen.activo) throw new Error('Ese dia no esta activo.');
   if (!ORDEN_DIAS.includes(nuevoDiaSemana)) throw new Error('Dia de la semana invalido.');
 
-  const diasActivos = getDiasActivosRutina.all(origen.rutina_id);
-  if (diasActivos.some((d) => d.dia_semana === nuevoDiaSemana)) throw new Error('Ya hay un dia activo en ese dia de la semana.');
+  let diasActivos = getDiasActivosRutina.all(origen.rutina_id);
+  const diaEnConflicto = diasActivos.find((d) => d.dia_semana === nuevoDiaSemana && d.id !== Number(diaRutinaId));
+  if (diaEnConflicto) {
+    if (!reemplazar) throw new Error('Ya hay un dia activo en ese dia de la semana. Elegi si queres reemplazarlo.');
+    const tieneSesiones = db.prepare('SELECT 1 FROM registro_sesion WHERE dia_rutina_id = ?').get(diaEnConflicto.id);
+    if (tieneSesiones) db.prepare('UPDATE dia_rutina SET activo = 0 WHERE id = ?').run(diaEnConflicto.id);
+    else db.prepare('DELETE FROM dia_rutina WHERE id = ?').run(diaEnConflicto.id);
+    diasActivos = diasActivos.filter((d) => d.id !== diaEnConflicto.id);
+  }
   if (diasActivos.length >= 6) throw new Error('No se pueden tener mas de 6 dias por semana.');
 
   const { lastInsertRowid: nuevoId } = insertDiaRutina.run({
@@ -1266,14 +1280,24 @@ export const copiarDia = db.transaction((diaRutinaId, nuevoDiaSemana) => {
     musculos_trabajados_json: origen.musculos_trabajados_json,
   });
 
+  const microciclo = getMicrocicloEnCurso.get(origen.rutina_id);
   const ejercicios = db.prepare('SELECT * FROM ejercicio_asignado WHERE dia_rutina_id = ? ORDER BY orden').all(diaRutinaId);
   for (const ej of ejercicios) {
-    insertEjercicioAsignadoCopiaCompleta.run({
+    const { lastInsertRowid: nuevoEjercicioId } = insertEjercicioAsignadoCopiaCompleta.run({
       dia_rutina_id: nuevoId, ejercicio_id: ej.ejercicio_id, orden: ej.orden, es_top_de_musculo: ej.es_top_de_musculo,
       musculo_objetivo_id: ej.musculo_objetivo_id, series_actuales: ej.series_actuales, peso_actual: ej.peso_actual,
       rango_reps_min: ej.rango_reps_min, rango_reps_max: ej.rango_reps_max, descanso_segundos: ej.descanso_segundos,
       musculos_secundarios_json: ej.musculos_secundarios_json,
     });
+    if (microciclo) {
+      const progreso = db.prepare('SELECT * FROM progreso_ejercicio_microciclo WHERE ejercicio_asignado_id = ? AND microciclo_id = ?').get(ej.id, microciclo.id);
+      if (progreso) {
+        upsertProgresoEjercicioSustitucion.run({
+          ejercicio_asignado_id: nuevoEjercicioId, microciclo_id: microciclo.id,
+          peso_prescrito: progreso.peso_prescrito, piso_reps: progreso.piso_reps, series_prescritas: progreso.series_prescritas,
+        });
+      }
+    }
   }
 
   renumerarDias(origen.rutina_id);
@@ -1386,17 +1410,23 @@ export const moverEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutina
   };
 });
 
-// Duplica el ejercicio en otro dia - a diferencia de mover, queda una
-// instancia nueva (peso_actual NULL, a testear) en vez de heredar el
-// peso/series del original, para no asumir que el mismo peso sirve ahora
-// con la frecuencia mas alta que implica repetirlo en dos dias. Pero si
-// reemplazar=true y ya existe ese ejercicio en destino, no tiene sentido
-// crear una copia en blanco encima de una fila que ya tiene peso/series/
-// historial propios - se deja esa tal cual esta (ver resolverConflictoDestino).
+// Duplica el ejercicio en otro dia - queda una instancia nueva (id propio,
+// para poder entrenarlo en los dos dias por separado), pero hereda el
+// peso/series/rango/descanso/musculos secundarios del original tal cual
+// estan hoy, en vez de arrancar en blanco a testear: si ya se sabe que
+// peso rinde para ese ejercicio, no hay motivo para perder esa referencia
+// solo por repetirlo en otro dia (la frecuencia mas alta se nota sola en
+// las proximas sesiones, no hace falta forzar un testeo). Tambien copia
+// el progreso_ejercicio_microciclo del microciclo en curso (peso
+// prescrito/piso de reps) para que la sugerencia en gris de la primera
+// serie sea la misma que la del original. Si reemplazar=true y ya existe
+// ese ejercicio en destino, no tiene sentido crear una copia encima de una
+// fila que ya tiene peso/series/historial propios - se deja esa tal cual
+// esta (ver resolverConflictoDestino).
 export const copiarEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutinaIdDestino, { reemplazar = false } = {}) => {
   const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
   if (!ea) throw new Error('Ejercicio asignado no encontrado.');
-  const { conflicto } = validarDestinoMismaRutina(ea, diaRutinaIdDestino);
+  const { origen, conflicto } = validarDestinoMismaRutina(ea, diaRutinaIdDestino);
   const yaEstabaEnDestino = resolverConflictoDestino(conflicto, reemplazar);
 
   if (yaEstabaEnDestino) {
@@ -1415,13 +1445,28 @@ export const copiarEjercicioADia = db.transaction((ejercicioAsignadoId, diaRutin
 
   const info = insertEjercicioAsignadoExtra.run({
     dia_rutina_id: diaRutinaIdDestino, ejercicio_id: ea.ejercicio_id, orden: maxOrden + 1, es_top_de_musculo: esTop ? 1 : 0,
-    musculo_objetivo_id: ea.musculo_objetivo_id, series_actuales: SERIES_MINIMO, rango_reps_min: ea.rango_reps_min, rango_reps_max: ea.rango_reps_max,
+    musculo_objetivo_id: ea.musculo_objetivo_id, series_actuales: ea.series_actuales, rango_reps_min: ea.rango_reps_min, rango_reps_max: ea.rango_reps_max,
   });
+  const nuevoId = info.lastInsertRowid;
+  db.prepare('UPDATE ejercicio_asignado SET peso_actual = ?, descanso_segundos = ?, musculos_secundarios_json = ? WHERE id = ?')
+    .run(ea.peso_actual, ea.descanso_segundos, ea.musculos_secundarios_json, nuevoId);
+
+  const microciclo = getMicrocicloEnCurso.get(origen.rutina_id);
+  if (microciclo) {
+    const progreso = db.prepare('SELECT * FROM progreso_ejercicio_microciclo WHERE ejercicio_asignado_id = ? AND microciclo_id = ?').get(ea.id, microciclo.id);
+    if (progreso) {
+      upsertProgresoEjercicioSustitucion.run({
+        ejercicio_asignado_id: nuevoId, microciclo_id: microciclo.id,
+        peso_prescrito: progreso.peso_prescrito, piso_reps: progreso.piso_reps, series_prescritas: progreso.series_prescritas,
+      });
+    }
+  }
+
   const catalogo = getEjercicioCatalogo.get(ea.ejercicio_id);
   return {
-    id: info.lastInsertRowid, dia_rutina_id: diaRutinaIdDestino, ejercicio_id: ea.ejercicio_id,
+    id: nuevoId, dia_rutina_id: diaRutinaIdDestino, ejercicio_id: ea.ejercicio_id,
     ejercicio_nombre: catalogo.nombre, musculo_objetivo_id: ea.musculo_objetivo_id,
     rango_reps_min: ea.rango_reps_min, rango_reps_max: ea.rango_reps_max,
-    es_top_de_musculo: esTop, series_actuales: SERIES_MINIMO,
+    es_top_de_musculo: esTop, series_actuales: ea.series_actuales, peso_actual: ea.peso_actual,
   };
 });
