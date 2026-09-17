@@ -93,9 +93,24 @@ export default function ProgresoPage() {
 
   useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [usuario.id]);
 
+  // Cerrar sin haber completado las 2 semanas evalúa el progreso con
+  // sem2_reps en null para TODOS los ejercicios (techoDesde devuelve null
+  // si falta cualquiera de las 2 semanas) - no pisa peso/series (el motor
+  // se salta el ejercicio entero si no hay techo), pero sí cierra este
+  // microciclo y abre el siguiente de una, dejando la Semana 1/2 actuales
+  // solo visibles como "pasadas" en vez de la vista activa - sin este
+  // aviso, un click sin querer (o sin saber lo que hace el botón) hacía
+  // que pareciera que "se borró todo": los pesos seguían ahí, pero el
+  // usuario ya no estaba parado en el microciclo que esperaba.
   async function cerrarMicrociclo() {
     const actual = rutina.microciclos.find((m) => m.estado === 'en_curso');
     if (!actual || actual.tipo === 'testeo') return;
+    const advertenciaTemprano = rutina.semana_actual === 1
+      ? '\n\nOJO: todavía estás en la Semana 1 de este microciclo (no pasaron las 2 semanas) - si cerrás ahora, se evalúa sin datos de la Semana 2 y saltás directo al próximo microciclo, dejando el actual atrás (con lo ya registrado, pero ya no como "el actual").'
+      : '';
+    if (!window.confirm(
+      `Esto cierra el microciclo ${actual.numero}, evalúa tu progreso de las últimas 2 semanas y arranca el próximo con el peso/series ajustados. No hay vuelta atrás desde la app (hay que restaurarlo a mano en la base de datos).${advertenciaTemprano}\n\n¿Confirmás que ya completaste (o saltaste) todo lo que ibas a registrar este microciclo?`
+    )) return;
     setCerrando(true);
     setError('');
     try {
