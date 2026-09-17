@@ -474,6 +474,25 @@ cierre de microciclo → progreso → export a Excel):
   sugiere `abduccion`/`empuje_vertical`/`abduccion_horizontal`, brazo
   (bíceps/tríceps) sugiere `flexion_codo`/`extension_codo`, cada uno el
   suyo, en vez de una lista plana de los 16 músculos mezclados.
+- **Exportar a Excel rediseñado: historial legible en vez de una planilla de
+  fórmulas** (`generarWorkbookHistorial` en `excelGenerator.js`,
+  `ExportarExcelModal.jsx`): el Excel de siempre (`generarWorkbookUsuario`,
+  ahora accesible con `?modo=plan`) es una planilla de cálculo con fórmulas
+  vivas pensada para PROYECTAR el resto del bloque, no para releer lo ya
+  entrenado - de ahí la queja de que "no hay una forma simple de seguir una
+  rutina". El nuevo modo por defecto exporta lo que REALMENTE se entrenó:
+  una tabla por sesión ya registrada (Ejercicio/Series/Repes/Peso/Descanso/
+  RIR/RE, una fila por ejercicio con todas sus series resumidas en un solo
+  texto - "20-18-16-14" en vez de 4 filas sueltas, dropsets aclarados
+  aparte), con los mismos colores de la app (banner de fecha en bordó
+  `#7A2E2B`, banner de día/músculos en ámbar `#B8842E`). El botón "Exportar
+  Excel" ahora abre un modal para elegir el alcance: toda la rutina, un
+  mesociclo (rango de microciclos), un microciclo puntual, o una sola
+  sesión (`GET /rutinas/:id/export.xlsx?microciclo_desde=&microciclo_hasta=
+  &sesion_id=`). Sesiones salteadas no se incluyen (no hay nada que
+  mostrar). Verificado con Playwright de punta a punta (login, abrir el
+  modal, elegir "Una sesión", descargar) y releyendo el .xlsx resultante
+  con ExcelJS para confirmar colores, resumen por ejercicio y el dropset.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

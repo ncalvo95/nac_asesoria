@@ -1,6 +1,11 @@
 import ExcelJS from 'exceljs';
 import db from '../db/index.js';
 import { armarRutina, topeSeriesPara } from './routineBuilder.js';
+import { repsEfectivas } from './progressionEngine.js';
+
+// "deltoides_lateral" -> "deltoides lateral" (igual que formatearMusculo en
+// frontend/src/utils/musculo.js, pero este archivo corre en el servidor).
+const formatearMusculo = (nombre) => (nombre || '').replace(/_/g, ' ');
 
 const NUM_MICROCICLOS_DEFAULT = 13; // 13 bloques de 2 semanas = 26 semanas ~ 6 meses
 const INCREMENTO_KG_DEFAULT = 2.5;
@@ -293,4 +298,152 @@ export function generarWorkbookUsuario(usuarioId) {
     progresionDatos,
   });
   return { workbook };
+}
+
+// ---------------------------------------------------------------------------
+// Historial de entrenamiento: a diferencia de generarWorkbookUsuario (una
+// planilla de calculo con formulas vivas para PROYECTAR el resto de la
+// rutina), esta exporta lo que REALMENTE se entreno - una tabla por sesion
+// ya registrada, pensada para leerse/imprimirse de corrido (pedido del
+// usuario: "no hay una forma simple de seguir una rutina"), con los colores
+// de la app (bordo/ambar, ver frontend/src/index.css --accent/--warning).
+// ---------------------------------------------------------------------------
+const COLOR_BORDO = 'FF7A2E2B'; // --accent (claro)
+const COLOR_AMBAR = 'FFB8842E'; // --warning (claro)
+const COLOR_HEADER_TABLA = 'FFF3E7E6'; // tinte claro del bordo
+const COLOR_FILA_PAR = 'FFFBF7F6';
+const COLOR_BLANCO = 'FFFFFFFF';
+const COLOR_TEXTO = 'FF23221F';
+
+const COLUMNAS_HISTORIAL = ['Ejercicio', 'Series', 'Repes', 'Peso (kg)', 'Descanso (min)', 'RIR', 'RE'];
+
+const getDiaDeSesion = db.prepare('SELECT dia_semana, musculos_trabajados_json FROM dia_rutina WHERE id = ?');
+const getSeriesDeSesion = db.prepare(`
+  SELECT rs.*, ea.orden, ea.descanso_segundos, e.nombre AS ejercicio_nombre
+  FROM registro_serie rs
+  JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
+  JOIN ejercicio e ON e.id = ea.ejercicio_id
+  WHERE rs.registro_sesion_id = ?
+  ORDER BY ea.orden, rs.numero_serie
+`);
+
+// Resume todas las series de UN ejercicio en una sesion a una sola fila
+// legible (en vez de una fila por serie) - "20-18-16-14" en vez de 4 filas
+// sueltas, que es justo lo que hacia ilegible el excel viejo para seguirlo
+// de corrido. El peso/reps del dropset se aclaran aparte si hubo alguno.
+function resumirEjercicioDeSesion(series) {
+  const reales = series.filter((s) => !s.es_dropset);
+  const dropsets = series.filter((s) => s.es_dropset);
+  const pesos = reales.map((s) => s.peso);
+  const pesoTexto = new Set(pesos).size <= 1 ? String(pesos[0] ?? '') : pesos.join('-');
+  const repsTexto = reales.map((s) => s.reps).join('-');
+  const repsEfectivasTotal = series.reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) ?? 0), 0);
+  const ultimaReal = reales[reales.length - 1];
+  return {
+    nombre: series[0].ejercicio_nombre + (dropsets.length ? ' (+ dropset)' : ''),
+    series: reales.length,
+    reps: dropsets.length ? `${repsTexto} + DS ${dropsets.map((d) => d.reps).join('-')}` : repsTexto,
+    peso: dropsets.length ? `${pesoTexto} (DS ${dropsets.map((d) => d.peso).join('-')})` : pesoTexto,
+    descansoMin: Math.round(((series[0].descanso_segundos || 90) / 60) * 10) / 10,
+    rir: ultimaReal?.rir ?? '',
+    repsEfectivas: repsEfectivasTotal,
+  };
+}
+
+function estilarBanner(row, worksheet, color) {
+  row.eachCell({ includeEmpty: true }, (cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
+    cell.font = { bold: true, color: { argb: COLOR_BLANCO }, size: 12 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  });
+  worksheet.mergeCells(row.number, 1, row.number, COLUMNAS_HISTORIAL.length);
+  // Altura fija para el banner de fecha (una linea); el de dia/musculos se
+  // deja mas alto porque un dia con varios musculos entrenados (ej. "Lunes -
+  // Pecho, Espalda, Biceps, Triceps...") puede necesitar 2 lineas para no
+  // quedar clippeado con wrapText.
+  row.height = color === COLOR_AMBAR ? 30 : 22;
+}
+
+function agregarSesionAlSheet(worksheet, sesion) {
+  const dia = getDiaDeSesion.get(sesion.dia_rutina_id);
+  const musculos = JSON.parse(dia?.musculos_trabajados_json || '[]').map(formatearMusculo);
+  const fechaFmt = new Date(`${sesion.fecha}T00:00:00`).toLocaleDateString('es-AR');
+
+  const filaFecha = worksheet.addRow([`Fecha: ${fechaFmt}`]);
+  estilarBanner(filaFecha, worksheet, COLOR_BORDO);
+
+  const tituloDia = `${CAPITALIZAR(dia?.dia_semana || '')} - ${musculos.map(CAPITALIZAR).join(', ')}`;
+  const filaTitulo = worksheet.addRow([tituloDia]);
+  estilarBanner(filaTitulo, worksheet, COLOR_AMBAR);
+
+  const filaHeader = worksheet.addRow(COLUMNAS_HISTORIAL);
+  filaHeader.eachCell((cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_HEADER_TABLA } };
+    cell.font = { bold: true, color: { argb: COLOR_TEXTO }, size: 11 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = { bottom: { style: 'thin', color: { argb: COLOR_BORDO } } };
+  });
+
+  const seriesPorEjercicio = new Map();
+  for (const s of getSeriesDeSesion.all(sesion.id)) {
+    if (!seriesPorEjercicio.has(s.ejercicio_asignado_id)) seriesPorEjercicio.set(s.ejercicio_asignado_id, []);
+    seriesPorEjercicio.get(s.ejercicio_asignado_id).push(s);
+  }
+
+  let i = 0;
+  for (const series of seriesPorEjercicio.values()) {
+    const r = resumirEjercicioDeSesion(series);
+    const fila = worksheet.addRow([r.nombre, r.series, r.reps, r.peso, r.descansoMin, r.rir, r.repsEfectivas]);
+    fila.eachCell((cell, colNumber) => {
+      cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
+      cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
+      if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
+    });
+    i += 1;
+  }
+
+  worksheet.addRow([]); // separador entre sesiones
+}
+
+// microcicloDesde/microcicloHasta (numero de microciclo, inclusive) filtran
+// el rango de bloques a incluir; sesionId, si viene, ignora el rango y
+// exporta esa unica sesion. Sin ninguno de los dos, exporta toda la rutina.
+export function generarWorkbookHistorial(usuarioId, { microcicloDesde = null, microcicloHasta = null, sesionId = null } = {}) {
+  const rutina = db.prepare("SELECT * FROM rutina WHERE usuario_id = ? AND estado = 'activa'").get(usuarioId);
+  if (!rutina) throw new Error('El usuario no tiene una rutina activa.');
+  const usuario = db.prepare('SELECT nombre FROM usuarios WHERE id = ?').get(usuarioId);
+
+  let sesiones;
+  if (sesionId) {
+    sesiones = db.prepare('SELECT * FROM registro_sesion WHERE id = ? AND usuario_id = ? AND salteada = 0').all(sesionId, usuarioId);
+    if (sesiones.length === 0) throw new Error('Esa sesion no existe o no tiene series registradas.');
+  } else {
+    const microciclos = db.prepare('SELECT id, numero FROM microciclo WHERE rutina_id = ?').all(rutina.id);
+    const idsPermitidos = microciclos
+      .filter((m) => (microcicloDesde == null || m.numero >= microcicloDesde) && (microcicloHasta == null || m.numero <= microcicloHasta))
+      .map((m) => m.id);
+    if (idsPermitidos.length === 0) throw new Error('No hay microciclos en ese rango.');
+    const placeholders = idsPermitidos.map(() => '?').join(',');
+    sesiones = db.prepare(
+      `SELECT * FROM registro_sesion WHERE usuario_id = ? AND salteada = 0 AND microciclo_id IN (${placeholders}) ORDER BY fecha ASC, id ASC`
+    ).all(usuarioId, ...idsPermitidos);
+  }
+  if (sesiones.length === 0) throw new Error('No hay sesiones registradas para exportar en ese rango.');
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'nac_asesoria';
+  wb.created = new Date();
+
+  const sheet = wb.addWorksheet('Historial');
+  sheet.columns = [{ width: 32 }, { width: 9 }, { width: 16 }, { width: 12 }, { width: 15 }, { width: 8 }, { width: 8 }];
+
+  const filaTitulo = sheet.addRow([`Historial de entrenamiento - ${usuario.nombre}`]);
+  sheet.mergeCells(filaTitulo.number, 1, filaTitulo.number, COLUMNAS_HISTORIAL.length);
+  filaTitulo.getCell(1).font = { bold: true, size: 14, color: { argb: COLOR_BORDO } };
+  filaTitulo.height = 26;
+  sheet.addRow([]);
+
+  for (const sesion of sesiones) agregarSesionAlSheet(sheet, sesion);
+
+  return { workbook: wb };
 }

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { api, API_BASE } from '../api/client.js';
+import { api } from '../api/client.js';
 import AgregarDiaModal from '../components/AgregarDiaModal.jsx';
 import QuitarDiaModal from '../components/QuitarDiaModal.jsx';
 import CambiarDiaModal from '../components/CambiarDiaModal.jsx';
 import EditarSemana0Modal from '../components/EditarSemana0Modal.jsx';
+import ExportarExcelModal from '../components/ExportarExcelModal.jsx';
 import { formatearMusculo } from '../utils/musculo.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -69,14 +70,26 @@ function duracionEstimadaDia(dia) {
   return Math.round(segundos / 60);
 }
 
-function ExportarExcel({ rutinaId }) {
+function ExportarExcel({ rutinaId, usuarioId, microciclos }) {
+  const [mostrar, setMostrar] = useState(false);
   return (
-    <a
-      href={`${API_BASE}/rutinas/${rutinaId}/export.xlsx`}
-      className="text-[12px] font-semibold text-accent border border-accent rounded-lg px-2.5 py-1.5 whitespace-nowrap"
-    >
-      Exportar Excel
-    </a>
+    <>
+      <button
+        type="button"
+        onClick={() => setMostrar(true)}
+        className="text-[12px] font-semibold text-accent border border-accent rounded-lg px-2.5 py-1.5 whitespace-nowrap"
+      >
+        Exportar Excel
+      </button>
+      {mostrar && (
+        <ExportarExcelModal
+          rutinaId={rutinaId}
+          usuarioId={usuarioId}
+          microciclos={microciclos}
+          onClose={() => setMostrar(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -429,7 +442,7 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
       <div className="px-1 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
           <h1 className="text-[17px] font-bold">{microciclo?.numero === 0 ? 'Semana 0 · Testeo' : 'Nueva semana de testeo'}</h1>
-          <ExportarExcel rutinaId={rutina.id} />
+          <ExportarExcel rutinaId={rutina.id} usuarioId={usuario.id} microciclos={rutina.microciclos} />
         </div>
         <p className="text-[13px] text-text-muted leading-relaxed">
           Elegí un peso con el que creas poder hacer entre 12 y 16 repeticiones, y cargá 2 series a ese mismo peso por cada ejercicio.
@@ -982,7 +995,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
             </span>
             <FaseNutricional rutinaId={rutina.id} faseActual={microciclo.fase_nutricional} onCambiada={onRutinaCambiada} />
           </div>
-          <ExportarExcel rutinaId={rutina.id} />
+          <ExportarExcel rutinaId={rutina.id} usuarioId={usuario.id} microciclos={rutina.microciclos} />
         </div>
         {rutina.semana_actual && (
           <div className="flex items-center gap-1.5 self-start">

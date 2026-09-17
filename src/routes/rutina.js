@@ -10,7 +10,7 @@ import {
   cerrarMicrociclo, editarResultadosSemana0, guardarBorradorSemana0, marcarFaseNutricional, marcarNuevoTesteo, marcarSemanaDescarga, obtenerSemana0Editable, obtenerTesteos,
   registrarSemana0, repsEfectivas, saltearTesteo,
 } from '../services/progressionEngine.js';
-import { generarWorkbookUsuario } from '../services/excelGenerator.js';
+import { generarWorkbookHistorial, generarWorkbookUsuario } from '../services/excelGenerator.js';
 import { musculosSecundariosDe, tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
 import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
 
@@ -957,13 +957,32 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
   });
 });
 
+// modo=historial (default): lo que REALMENTE se entreno, una tabla legible
+// por sesion (ver generarWorkbookHistorial) - opcionalmente acotado a un
+// rango de microciclos (microciclo_desde/microciclo_hasta, ambos inclusive
+// y opcionales - sin ninguno de los dos exporta toda la rutina) o a una
+// sola sesion puntual (sesion_id, ignora el rango si viene). modo=plan usa
+// la planilla vieja con formulas vivas para proyectar el resto del bloque.
 router.get('/rutinas/:rutinaId/export.xlsx', async (req, res) => {
   const rutina = getRutinaOr404(req, res);
   if (!rutina) return;
+  const { modo, microciclo_desde, microciclo_hasta, sesion_id } = req.query;
   try {
-    const { workbook } = generarWorkbookUsuario(rutina.usuario_id);
+    let workbook;
+    let filename;
+    if (modo === 'plan') {
+      ({ workbook } = generarWorkbookUsuario(rutina.usuario_id));
+      filename = 'plan-entrenamiento.xlsx';
+    } else {
+      ({ workbook } = generarWorkbookHistorial(rutina.usuario_id, {
+        microcicloDesde: microciclo_desde ? Number(microciclo_desde) : null,
+        microcicloHasta: microciclo_hasta ? Number(microciclo_hasta) : null,
+        sesionId: sesion_id ? Number(sesion_id) : null,
+      }));
+      filename = 'historial-entrenamiento.xlsx';
+    }
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="plan-entrenamiento.xlsx"');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {

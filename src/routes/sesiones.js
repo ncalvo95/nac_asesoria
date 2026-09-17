@@ -37,7 +37,11 @@ router.get('/usuarios/:usuarioId/sesiones', (req, res) => {
   if (!puedeAccederAUsuario(req.usuario, usuarioId)) {
     return res.status(403).json({ error: 'No autorizado.' });
   }
-  const sesiones = db.prepare('SELECT * FROM registro_sesion WHERE usuario_id = ? ORDER BY fecha DESC').all(usuarioId);
+  const sesiones = db.prepare(`
+    SELECT rs.*, dr.dia_semana
+    FROM registro_sesion rs JOIN dia_rutina dr ON dr.id = rs.dia_rutina_id
+    WHERE rs.usuario_id = ? ORDER BY rs.fecha DESC
+  `).all(usuarioId);
   const seriesStmt = db.prepare('SELECT * FROM registro_serie WHERE registro_sesion_id = ? ORDER BY ejercicio_asignado_id, numero_serie');
   res.json(sesiones.map((s) => ({ ...s, series: seriesStmt.all(s.id) })));
 });
