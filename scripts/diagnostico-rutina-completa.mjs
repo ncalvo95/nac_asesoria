@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Solo lectura - vuelca TODOS los dias activos de la rutina activa de un
-// usuario, con sus ejercicio_asignado (id, ejercicio, peso_actual,
-// series_actuales), para detectar dias duplicados o ejercicios repetidos
-// dentro de un mismo dia. No cambia nada.
+// Solo lectura - vuelca TODOS los dias (activos E inactivos) de la rutina
+// activa de un usuario, con sus ejercicio_asignado (id, ejercicio,
+// peso_actual, series_actuales) y, para cada ejercicio, en que
+// microciclo(s) tiene sesiones registradas - para diagnosticar duplicados
+// o dias reemplazados sin tener que adivinar. No cambia nada.
 //
 // Uso: node scripts/diagnostico-rutina-completa.mjs <usuario>
 
@@ -28,16 +29,20 @@ if (!rutina) { console.error('No tiene rutina activa.'); process.exit(1); }
 
 console.log(`Rutina activa id ${rutina.id}\n`);
 
-const dias = db.prepare('SELECT * FROM dia_rutina WHERE rutina_id = ? AND activo = 1 ORDER BY numero_dia').all(rutina.id);
-console.log(`--- Dias ACTIVOS (${dias.length}) ---`);
+const microciclos = db.prepare('SELECT * FROM microciclo WHERE rutina_id = ? ORDER BY numero').all(rutina.id);
+console.log('--- Microciclos ---');
+for (const m of microciclos) {
+  console.log(`numero ${m.numero} - id ${m.id} - estado ${m.estado} - tipo ${m.tipo} - fecha_inicio ${m.fecha_inicio} - fecha_fin ${m.fecha_fin}`);
+}
+
+const dias = db.prepare('SELECT * FROM dia_rutina WHERE rutina_id = ? ORDER BY dia_semana, id').all(rutina.id);
+console.log(`\n--- TODOS los dias (activos e inactivos) (${dias.length}) ---`);
 const porDiaSemana = {};
 for (const d of dias) {
-  porDiaSemana[d.dia_semana] = (porDiaSemana[d.dia_semana] || 0) + 1;
-  console.log(`dia_rutina id ${d.id} - numero_dia ${d.numero_dia} - dia_semana ${d.dia_semana}`);
+  porDiaSemana[d.dia_semana] = (porDiaSemana[d.dia_semana] || []).concat(d);
 }
-const duplicados = Object.entries(porDiaSemana).filter(([, n]) => n > 1);
-if (duplicados.length > 0) {
-  console.log(`\n*** OJO: hay mas de un dia_rutina activo para el mismo dia_semana: ${duplicados.map(([d, n]) => `${d} (x${n})`).join(', ')} ***`);
+for (const [diaSemana, lista] of Object.entries(porDiaSemana)) {
+  if (lista.length > 1) console.log(`*** ${diaSemana} tiene ${lista.length} filas de dia_rutina (una debe estar inactiva) ***`);
 }
 
 for (const d of dias) {
@@ -46,16 +51,18 @@ for (const d of dias) {
     FROM ejercicio_asignado ea JOIN ejercicio e ON e.id = ea.ejercicio_id
     WHERE ea.dia_rutina_id = ? ORDER BY ea.orden
   `).all(d.id);
-  console.log(`\n--- ${d.dia_semana} (dia_rutina id ${d.id}) - ${ejercicios.length} ejercicio(s) ---`);
+  console.log(`\n--- ${d.dia_semana} (dia_rutina id ${d.id}, activo=${d.activo}, numero_dia ${d.numero_dia}) - ${ejercicios.length} ejercicio(s) ---`);
   for (const ej of ejercicios) {
-    const tieneSeries = db.prepare('SELECT COUNT(*) AS n FROM registro_serie WHERE ejercicio_asignado_id = ?').get(ej.id).n;
-    console.log(`  ea ${ej.id} - ${ej.ejercicio_nombre} (ejercicio_id ${ej.ejercicio_id}) - peso_actual ${ej.peso_actual}, series_actuales ${ej.series_actuales}, top=${ej.es_top_de_musculo} - ${tieneSeries} serie(s) historicas registradas`);
-  }
-  // Marcar si dos ejercicio_asignado del mismo dia apuntan al mismo ejercicio_id (duplicado real)
-  const porEjercicioId = {};
-  for (const ej of ejercicios) porEjercicioId[ej.ejercicio_id] = (porEjercicioId[ej.ejercicio_id] || []).concat(ej.id);
-  const repetidos = Object.entries(porEjercicioId).filter(([, ids]) => ids.length > 1);
-  if (repetidos.length > 0) {
-    console.log(`  *** Ejercicios repetidos dentro de este dia: ${repetidos.map(([eid, ids]) => `ejercicio_id ${eid} en ea [${ids.join(', ')}]`).join(' | ')} ***`);
+    const sesiones = db.prepare(`
+      SELECT rs.microciclo_id, rs.fecha, COUNT(*) AS n_series
+      FROM registro_serie rse JOIN registro_sesion rs ON rs.id = rse.registro_sesion_id
+      WHERE rse.ejercicio_asignado_id = ?
+      GROUP BY rs.id
+      ORDER BY rs.fecha
+    `).all(ej.id);
+    const resumenSesiones = sesiones.length > 0
+      ? sesiones.map((s) => `[microciclo ${s.microciclo_id}, ${s.fecha}, ${s.n_series} serie(s)]`).join(' ')
+      : '(sin sesiones)';
+    console.log(`  ea ${ej.id} - ${ej.ejercicio_nombre} (ejercicio_id ${ej.ejercicio_id}) - peso_actual ${ej.peso_actual}, series_actuales ${ej.series_actuales} - ${resumenSesiones}`);
   }
 }
