@@ -266,6 +266,27 @@ sessions → closing a microcycle → progress → Excel export):
   `localStorage`. When the screen loads, the local draft and the backend
   one get merged field by field (whatever's typed on this device wins if
   it hasn't been pushed yet, filled in from the backend otherwise).
+- The regular day-to-day log (not Week 0) has the same **"Save draft"**
+  button next to "Skip session"/"Register session" (`PUT
+  /dias/:id/borrador`, `borrador_dia` table -keyed by (dia_rutina_id,
+  microciclo_id), a day gets trained across many microcycles over the
+  routine's lifetime, each with its own draft-, `guardarBorradorDia` in
+  `progressionEngine.js`, exposed as `dia.borrador_registro` from
+  `obtenerRutinaActiva`). Before this, the typed weight/reps/RIR -and the
+  **DropSet** checkbox in particular- only lived in that one device's
+  `localStorage`: planning the routine on a computer at home and then
+  opening the phone at the gym showed everything blank, with no trace of
+  what was loaded on the other side. The merge (backend first,
+  localStorage on top) has one extra wrinkle compared to Week 0's: a
+  draft row only overwrites if it has something ACTUALLY typed in it
+  (non-empty weight or reps) - simply opening the screen on a device
+  already left an empty local draft saved (the same `useEffect` that
+  persists it on every change also runs on mount), which without that
+  check would overwrite the backend draft just fetched with empty
+  strings. The draft clears itself once the real session gets registered
+  (`registrarSesion`), so an old one doesn't resurface the next time that
+  same day gets trained in that same microcycle (e.g. week 2 after
+  saving week 1).
 - **Bug fixed:** the whole Week 0 screen is a single `<form>` (the real
   submit is the "Save testing..." button), so hitting Enter/"Done" on the
   numeric keyboard while typing the weight or reps in the "+ Add exercise"

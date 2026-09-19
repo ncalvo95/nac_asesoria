@@ -363,3 +363,21 @@ CREATE TABLE IF NOT EXISTS feedback (
 );
 
 CREATE INDEX IF NOT EXISTS idx_feedback_estado ON feedback(estado, created_at);
+
+-- Borrador de lo que se va tipeando en el registro normal de un dia (peso/
+-- reps/RIR/dropset por ejercicio) SIN haber guardado la sesion todavia -
+-- mismo espiritu que microciclo.borrador_semana0, pero para el dia a dia:
+-- antes esto solo vivia en localStorage del dispositivo, asi que lo
+-- cargado en la compu en casa no se veia en el celular en el gimnasio
+-- hasta recien guardar la sesion entera. Un dia se entrena en muchos
+-- microciclos distintos a lo largo de la rutina, cada uno con su propio
+-- borrador -por eso la clave es (dia_rutina_id, microciclo_id), no solo
+-- dia_rutina_id.
+CREATE TABLE IF NOT EXISTS borrador_dia (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dia_rutina_id INTEGER NOT NULL REFERENCES dia_rutina(id) ON DELETE CASCADE,
+  microciclo_id INTEGER NOT NULL REFERENCES microciclo(id) ON DELETE CASCADE,
+  valores_json TEXT NOT NULL DEFAULT '{}',
+  actualizado_en TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (dia_rutina_id, microciclo_id)
+);

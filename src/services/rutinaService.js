@@ -299,6 +299,13 @@ export function obtenerRutinaActiva(usuarioId) {
     ORDER BY ea.orden
   `);
 
+  // Borrador del registro normal (peso/reps/RIR/dropset todavia sin
+  // guardar como sesion), empujado desde CUALQUIER dispositivo via PUT
+  // /dias/:id/borrador - ver guardarBorradorDia en progressionEngine.js.
+  // Scopeado por microciclo en curso: un dia se entrena en muchos
+  // microciclos distintos a lo largo de la rutina.
+  const getBorradorDia = db.prepare('SELECT valores_json FROM borrador_dia WHERE dia_rutina_id = ? AND microciclo_id = ?');
+
   // Rango de fechas de cada semana del microciclo en curso (numero>=1 -
   // testeo/numero 0 es una sola semana, se maneja aparte en Semana0Form) y
   // cual de las 2 es "hoy" - mismo criterio de semana1/semana2 que usa
@@ -322,11 +329,13 @@ export function obtenerRutinaActiva(usuarioId) {
       const registrosSemana = rangosSemana && microcicloActual
         ? { 1: registroDeSemana(d.id, microcicloActual.id, rangosSemana[1]), 2: registroDeSemana(d.id, microcicloActual.id, rangosSemana[2]) }
         : null;
+      const borrador = microcicloActual ? getBorradorDia.get(d.id, microcicloActual.id) : null;
       return {
         ...d,
         ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id),
         sesion_actual: registrosSemana ? registrosSemana[semanaActualNumero] : null,
         registros_semana: registrosSemana,
+        borrador_registro: borrador ? JSON.parse(borrador.valores_json) : null,
       };
     }),
     microciclos,

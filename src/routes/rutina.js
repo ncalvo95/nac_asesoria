@@ -7,7 +7,7 @@ import {
   quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular, renombrarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import {
-  cerrarMicrociclo, editarResultadosSemana0, guardarBorradorSemana0, marcarFaseNutricional, marcarNuevoTesteo, marcarSemanaDescarga, obtenerSemana0Editable, obtenerTesteos,
+  cerrarMicrociclo, editarResultadosSemana0, guardarBorradorDia, guardarBorradorSemana0, marcarFaseNutricional, marcarNuevoTesteo, marcarSemanaDescarga, obtenerSemana0Editable, obtenerTesteos,
   registrarSemana0, repsEfectivas, saltearTesteo,
 } from '../services/progressionEngine.js';
 import { generarWorkbookHistorial, generarWorkbookUsuario } from '../services/excelGenerator.js';
@@ -371,6 +371,23 @@ router.patch('/dias/:diaRutinaId/comentario', (req, res) => {
   db.prepare('UPDATE dia_rutina SET comentario = ?, comentario_recordar = ? WHERE id = ?')
     .run(comentario || null, recordar ? 1 : 0, dia.id);
   res.json({ id: dia.id, comentario: comentario || null, comentario_recordar: Boolean(recordar) });
+});
+
+// Empuja lo tipeado hasta ahora en el registro normal de este dia (peso/
+// reps/RIR/dropset por ejercicio) al servidor SIN registrar la sesion, para
+// que se vea desde otro dispositivo (ver guardarBorradorDia en
+// progressionEngine.js) - antes esto solo vivia en localStorage.
+router.put('/dias/:diaRutinaId/borrador', (req, res) => {
+  const dia = db.prepare(`
+    SELECT dr.*, r.usuario_id FROM dia_rutina dr JOIN rutina r ON r.id = dr.rutina_id WHERE dr.id = ?
+  `).get(req.params.diaRutinaId);
+  if (!dia) return res.status(404).json({ error: 'Dia no encontrado.' });
+  if (!checkAccesoUsuario(req, res, dia.usuario_id)) return;
+
+  const { microciclo_id, valores } = req.body || {};
+  if (!microciclo_id) return res.status(400).json({ error: 'microciclo_id es obligatorio.' });
+  guardarBorradorDia(dia.id, Number(microciclo_id), valores);
+  res.json({ ok: true });
 });
 
 function getEjercicioAsignadoOr404(req, res) {

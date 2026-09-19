@@ -304,7 +304,31 @@ export function registrarSesion({ usuarioId, diaRutinaId, microcicloId, fecha, s
       });
     }
   }
+  deleteBorradorDia.run(diaRutinaId, microcicloId);
   return sesionId;
+}
+
+const upsertBorradorDia = db.prepare(`
+  INSERT INTO borrador_dia (dia_rutina_id, microciclo_id, valores_json, actualizado_en)
+  VALUES (?, ?, ?, datetime('now'))
+  ON CONFLICT(dia_rutina_id, microciclo_id) DO UPDATE SET valores_json = excluded.valores_json, actualizado_en = excluded.actualizado_en
+`);
+const deleteBorradorDia = db.prepare('DELETE FROM borrador_dia WHERE dia_rutina_id = ? AND microciclo_id = ?');
+
+// Guarda lo tipeado hasta ahora en el registro normal de un dia (peso/reps/
+// RIR/dropset por ejercicio) SIN registrar la sesion - mismo espiritu que
+// guardarBorradorSemana0, pero para el dia a dia: antes esto solo vivia en
+// localStorage del dispositivo que lo tipeo, asi que lo cargado en la
+// compu en casa no se veia en el celular en el gimnasio hasta recien
+// guardar la sesion entera (y marcar el checkbox de DropSet, en particular,
+// no se notaba para nada hasta ese momento). Se guarda por (dia_rutina_id,
+// microciclo_id) - un dia se entrena en muchos microciclos a lo largo de
+// la rutina, cada uno con su propio borrador - y se limpia solo al
+// registrar la sesion real (ver registrarSesion), asi no queda un borrador
+// viejo resurgiendo la proxima vez que se entrene ese mismo dia en ese
+// mismo microciclo (ej. semana 2 despues de haber guardado la semana 1).
+export function guardarBorradorDia(diaRutinaId, microcicloId, valores) {
+  upsertBorradorDia.run(diaRutinaId, microcicloId, JSON.stringify(valores || {}));
 }
 
 // El nucleo del sistema: cierra un microciclo (bloque de 2 semanas),

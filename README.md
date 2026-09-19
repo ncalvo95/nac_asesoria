@@ -259,6 +259,27 @@ cierre de microciclo → progreso → export a Excel):
   dispositivo. Al abrir la pantalla, el borrador local y el del backend se
   mezclan campo por campo (gana lo tipeado en este mismo dispositivo si
   hay algo sin empujar todavía, y se completa con lo que venga del backend).
+- El registro normal de un día (no Semana 0) tiene el mismo botón
+  **"Guardar borrador"** junto a "Saltear sesión"/"Registrar sesión"
+  (`PUT /dias/:id/borrador`, tabla `borrador_dia` -clave (dia_rutina_id,
+  microciclo_id), un día se entrena en muchos microciclos a lo largo de la
+  rutina, cada uno con su propio borrador-, `guardarBorradorDia` en
+  `progressionEngine.js`, expuesto en `dia.borrador_registro` desde
+  `obtenerRutinaActiva`). Antes el peso/reps/RIR tipeados -y el checkbox de
+  **DropSet** en particular- solo vivían en el `localStorage` de ese
+  dispositivo puntual: armar la rutina en la compu en casa y después abrir
+  el celular en el gimnasio mostraba todo en blanco, sin ningún rastro de
+  lo cargado del otro lado. El merge (backend primero, localStorage
+  encima) tiene una vuelta extra respecto al de Semana 0: una fila del
+  borrador solo pisa si tiene ALGO realmente tipeado (peso o reps no
+  vacíos) - el simple hecho de abrir la pantalla en un dispositivo ya dejaba
+  un borrador local vacío guardado (el mismo `useEffect` que lo persiste en
+  cada cambio corre también al montar el componente), que sin ese chequeo
+  pisaba con strings vacíos el borrador recién traído del backend. El
+  borrador se limpia solo al registrar la sesión real (`registrarSesion`),
+  así no queda uno viejo resurgiendo la próxima vez que se entrene ese
+  mismo día en ese mismo microciclo (ej. semana 2 después de haber guardado
+  la semana 1).
 - **Bug arreglado:** toda la pantalla de Semana 0 es un solo `<form>` (el
   submit real es el botón "Guardar testeo..."), así que tocar Enter/"Listo"
   en el teclado numérico mientras se cargaba el peso o las reps del panel

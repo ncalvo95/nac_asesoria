@@ -1203,21 +1203,14 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
       }
     }
 
-    const borrador = leerBorrador(borradorKey) || {};
-    for (const [ejId, sets] of Object.entries(borrador)) {
-      if (!base[ejId]) continue;
-      sets.forEach((s, idx) => {
-        if (base[ejId][idx]) {
-          base[ejId][idx] = { ...base[ejId][idx], ...s };
-        } else if (s.esDropset) {
-          // La fila de dropset no forma parte de series_actuales (es una
-          // serie extra) - el merge de arriba la salteaba porque no hay
-          // indice previo con el que mezclarla, y se perdia silenciosamente
-          // si se recargaba la pagina antes de guardar la sesion.
-          base[ejId] = [...base[ejId], { peso: '', reps: '', rir: 1, esDropset: false, ...s }];
-        }
-      });
-    }
+    // Borrador del backend (dia.borrador_registro, empujado desde
+    // CUALQUIER dispositivo via el boton "Guardar borrador" - ver
+    // guardarBorradorDia en progressionEngine.js) primero, y el de
+    // localStorage de este mismo dispositivo encima - si hay tipeo local
+    // mas reciente que todavia no se empujo, gana ese (mismo criterio que
+    // el borrador de Semana 0).
+    if (dia.borrador_registro) aplicarBorradorEnBase(base, dia.borrador_registro);
+    aplicarBorradorEnBase(base, leerBorrador(borradorKey) || {});
     return base;
   });
   const [error, setError] = useState('');
@@ -1227,8 +1220,34 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   // Confirmacion antes de pisar datos ya tipeados (ver mas abajo) - null
   // cuando no hay ningun cambio de modo esperando confirmacion.
   const [confirmarCambioModo, setConfirmarCambioModo] = useState(null); // 'activar' | 'desactivar' | null
+  const [guardandoBorrador, setGuardandoBorrador] = useState(false);
+  const [borradorGuardado, setBorradorGuardado] = useState(false);
 
   useEffect(() => { guardarBorrador(borradorKey, series); }, [borradorKey, series]);
+  // El aviso "borrador guardado" es solo para el instante despues de
+  // tocar el boton - si se sigue tipeando despues, deja de ser cierto.
+  useEffect(() => { setBorradorGuardado(false); }, [series]);
+
+  // Empuja lo tipeado hasta ahora (peso/reps/RIR/dropset) al backend, sin
+  // registrar la sesion - para que se vea desde otro dispositivo (ej.
+  // cargar la rutina en la compu en casa y despues abrirla en el celular
+  // en el gimnasio). Antes esto solo vivia en localStorage de este mismo
+  // dispositivo/navegador, asi que un DropSet tildado (o cualquier peso/
+  // reps ya tipeado) no se veia del otro lado hasta recien registrar la
+  // sesion entera.
+  async function guardarBorradorRemoto() {
+    setError('');
+    setGuardandoBorrador(true);
+    setBorradorGuardado(false);
+    try {
+      await api.put(`/dias/${dia.id}/borrador`, { microciclo_id: microciclo.id, valores: series });
+      setBorradorGuardado(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardandoBorrador(false);
+    }
+  }
 
   // true si hay algun peso/reps ya tipeado en el dia actual (series reales,
   // no dropset) - para no pisarlo sin avisar al activar/desactivar el modo
@@ -1631,6 +1650,14 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
 
       <div className="flex gap-2">
         <button
+          type="button"
+          onClick={guardarBorradorRemoto}
+          disabled={guardandoBorrador}
+          className="h-11 px-3.5 rounded-[10px] border border-accent text-accent text-[13px] font-semibold disabled:opacity-60 whitespace-nowrap"
+        >
+          {guardandoBorrador ? 'Guardando…' : 'Guardar borrador'}
+        </button>
+        <button
           onClick={saltear}
           disabled={enviando}
           className="flex-1 h-11 rounded-[10px] border border-border bg-surface text-text-muted text-[13.5px] font-semibold disabled:opacity-60"
@@ -1645,6 +1672,11 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
           {enviando ? 'Guardando…' : 'Registrar sesión'}
         </button>
       </div>
+      {borradorGuardado && (
+        <p className="text-[12.5px] text-text-muted text-center">
+          Borrador guardado - ya lo podés ver desde otro dispositivo.
+        </p>
+      )}
     </>
   );
 }
@@ -2437,6 +2469,41 @@ function construirSeriesPorDefecto(ej) {
 
 function construirEstadoInicial(dia) {
   return Object.fromEntries(dia.ejercicios.map((ej) => [ej.id, construirSeriesPorDefecto(ej)]));
+}
+
+// Mezcla un borrador (del backend o de localStorage, misma forma: {
+// [ejercicioAsignadoId]: [{peso,reps,rir,esDropset}, ...] }) encima de
+// `base` (mutandola in-place) - usado dos veces en cascada al armar el
+// estado inicial de RegistroDia (ver mas abajo), primero con el borrador
+// del backend y despues con el de localStorage, para que el tipeo local
+// mas reciente (si lo hay) gane por sobre lo ultimo empujado al servidor.
+//
+// Solo pisa una fila si esa fila tiene ALGO realmente tipeado (peso o
+// reps no vacios) - si no, se deja lo que ya estaba en `base` (que puede
+// venir de una pasada anterior de esta misma funcion, ej. el borrador del
+// backend). Esto es clave para el segundo llamado (localStorage): el
+// simple hecho de abrir la pantalla en un dispositivo ya deja un borrador
+// local vacio guardado (mismo useEffect que lo persiste en cada cambio,
+// incluido el montaje inicial) - sin este chequeo, ese borrador vacio
+// pisaria con strings vacios lo que se acababa de traer del backend
+// (cargado en OTRO dispositivo), haciendo parecer que nunca llego nada.
+function aplicarBorradorEnBase(base, borrador) {
+  for (const [ejId, sets] of Object.entries(borrador)) {
+    if (!base[ejId]) continue;
+    sets.forEach((s, idx) => {
+      const tieneAlgoTipeado = (s.peso !== '' && s.peso != null) || (s.reps !== '' && s.reps != null);
+      if (!tieneAlgoTipeado) return;
+      if (base[ejId][idx]) {
+        base[ejId][idx] = { ...base[ejId][idx], ...s };
+      } else if (s.esDropset) {
+        // La fila de dropset no forma parte de series_actuales (es una
+        // serie extra) - el merge de arriba la saltea porque no hay indice
+        // previo con el que mezclarla, y se perdia silenciosamente si se
+        // recargaba la pagina antes de guardar la sesion.
+        base[ejId] = [...base[ejId], { peso: '', reps: '', rir: 1, esDropset: false, ...s }];
+      }
+    });
+  }
 }
 
 // Sugerencia en gris (placeholder, no un valor cargado) de cuantas reps
