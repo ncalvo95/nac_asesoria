@@ -1216,7 +1216,16 @@ function colorClase(color) {
 // estar vacio si todavia no se tipeo nada) en vez de series ya
 // registradas contra el backend. Un campo vacio no cuenta como "0" -
 // simplemente no hay nada que comparar todavia, asi que no se pinta.
-function colorVsPactadoLive(series, ej) {
+//
+// `seriesReferencia` es la cantidad de series que tenia el ejercicio
+// cuando se abrio esta pantalla (antes de cualquier "+1 serie" tocado en
+// esta misma sesion). Si la ultima serie real cae mas alla de esa
+// cantidad, es una serie nueva que nunca se entreno antes - no hay piso
+// de reps con el que compararla, asi que no se pinta (el peso si se sigue
+// comparando: peso_actual no es "el peso de la serie N", es el peso de
+// trabajo del ejercicio en general, asi que sigue siendo una referencia
+// valida aunque la serie en si sea nueva).
+function colorVsPactadoLive(series, ej, seriesReferencia) {
   const reales = series.filter((s) => !s.esDropset);
   if (reales.length === 0) return { pesoColor: null, repsColor: null };
   let pesoColor = null;
@@ -1227,7 +1236,7 @@ function colorVsPactadoLive(series, ej) {
     else if (pesoUsado < ej.peso_actual) pesoColor = 'rojo';
   }
   let repsColor = null;
-  if (pesoColor == null && ej.piso_reps != null) {
+  if (pesoColor == null && ej.piso_reps != null && reales.length <= seriesReferencia) {
     const ultimaReal = reales[reales.length - 1];
     if (ultimaReal.reps !== '' && ultimaReal.reps != null) {
       const repsUsadas = Number(ultimaReal.reps);
@@ -1294,6 +1303,17 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   const [confirmarCambioModo, setConfirmarCambioModo] = useState(null); // 'activar' | 'desactivar' | null
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [borradorGuardado, setBorradorGuardado] = useState(false);
+
+  // Cuantas series tenia cada ejercicio al abrir esta pantalla - se
+  // captura una sola vez (el inicializador de useState no vuelve a correr
+  // aunque dia.ejercicios cambie de prop despues, ej. al tocar "+1 serie",
+  // que refetchea la rutina) para poder distinguir mas adelante una serie
+  // recien agregada AHORA (sin referencia previa) de una que ya estaba.
+  const [seriesPactadasAlAbrir] = useState(() => {
+    const map = {};
+    for (const ej of dia.ejercicios) map[ej.id] = ej.series_actuales;
+    return map;
+  });
 
   useEffect(() => { guardarBorrador(borradorKey, series); }, [borradorKey, series]);
   // El aviso "borrador guardado" es solo para el instante despues de
@@ -1616,7 +1636,8 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
           const esUltimoDelMusculo = dia.ejercicios.filter(
             (e) => e.musculo_objetivo_id === ej.musculo_objetivo_id
           ).length === 1;
-          const { pesoColor, repsColor } = colorVsPactadoLive(seriesPorEjercicio[ej.id], ej);
+          const seriesReferencia = seriesPactadasAlAbrir[ej.id] ?? ej.series_actuales;
+          const { pesoColor, repsColor } = colorVsPactadoLive(seriesPorEjercicio[ej.id], ej, seriesReferencia);
           const reales = seriesPorEjercicio[ej.id].filter((s) => !s.esDropset);
           const idxUltimaReal = reales.length - 1;
           return (

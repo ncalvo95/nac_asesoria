@@ -435,6 +435,27 @@ sessions → closing a microcycle → progress → Excel export):
   through the same 2 scenarios - same weight with reps going up, weight
   going up with reps going down - confirming each input's color with
   `getComputedStyle` as the fields got filled in.
+  **A set added beyond the plan (the "+1 set" button) has no history to
+  compare against**: if an extra set gets added beyond what was planned
+  (or the exercise used to have fewer sets than it does now), that new
+  set stays uncolored - it was never trained before, so there's no rep
+  floor to compare it to. `colorVsPactadoLive` takes `seriesReferencia`,
+  the set count the exercise had when the screen was opened
+  (`seriesPactadasAlAbrir`, captured once on `RegistroDia` mount via
+  `useState(() => ...)`, never recalculated even as `dia.ejercicios`
+  changes prop afterward - e.g. from tapping "+1 set", which refetches
+  the routine), and only compares the last real set against `piso_reps`
+  if that set was already part of that original count; otherwise it
+  leaves `repsColor` as `null` (weight still gets compared as always:
+  `peso_actual` isn't "the weight of set N", it's the exercise's general
+  working weight, so it stays a valid reference even for a brand-new
+  set). This only applies to this live view, not to
+  `ResumenSemanaPasada` or the Excel export (there's no reliable way to
+  reconstruct "how many sets used to exist" after the fact there).
+  Verified with Playwright: 3 planned sets, the 3rd with reps under the
+  floor (colored red/orange); tapping "+1 set" clears that color from
+  set 3 (no longer the last one) and the newly-created 4th set stays
+  uncolored too even when filled in with even lower reps.
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual

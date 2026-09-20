@@ -633,6 +633,26 @@ cierre de microciclo → progreso → export a Excel):
   cargado) los mismos 2 escenarios -peso igual con reps que suben, peso
   que sube con reps que bajan- y confirmando con `getComputedStyle` el
   color de cada input a medida que se completaban los campos.
+  **Serie agregada de más (botón "+1 serie") sin referencia previa**: si
+  se agrega una serie extra respecto a lo pactado (o si el ejercicio ya
+  venía con menos series de las que tiene ahora), esa serie nueva no se
+  pinta - no se entrenó nunca antes, así que no hay piso de reps con el
+  que compararla. `colorVsPactadoLive` recibe `seriesReferencia`, la
+  cantidad de series que tenía el ejercicio al abrir la pantalla
+  (`seriesPactadasAlAbrir`, capturada una sola vez al montar `RegistroDia`
+  con `useState(() => ...)`, sin recalcularse aunque `dia.ejercicios`
+  cambie de prop después - ej. al tocar "+1 serie", que refetchea la
+  rutina), y solo compara la última serie real contra `piso_reps` si esa
+  serie ya existía en ese conteo original; si no, deja `repsColor` en
+  `null` (el peso sí se sigue comparando siempre: `peso_actual` no es "el
+  peso de la serie N", es el peso de trabajo del ejercicio en general, así
+  que sigue siendo una referencia válida aunque la serie sea nueva).
+  Aplica solo a esta vista en vivo, no a `ResumenSemanaPasada` ni al
+  Excel (ahí no hay forma confiable de reconstruir cuántas series eran
+  "las de antes" después del hecho). Verificado con Playwright: 3 series
+  pactadas, la 3ª con reps por debajo del piso (se pinta rojo); al tocar
+  "+1 serie" la 3ª pierde el color (ya no es la última) y la 4ª -recién
+  creada- tampoco se pinta ni completándola con reps aún más bajas.
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se
