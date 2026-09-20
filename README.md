@@ -653,6 +653,26 @@ cierre de microciclo → progreso → export a Excel):
   pactadas, la 3ª con reps por debajo del piso (se pinta rojo); al tocar
   "+1 serie" la 3ª pierde el color (ya no es la última) y la 4ª -recién
   creada- tampoco se pinta ni completándola con reps aún más bajas.
+- **Fix: el coloreado en vivo marcaba en rojo caídas de reps totalmente
+  esperables por fatiga** (`colorVsPactadoLive`, en vivo únicamente):
+  comparaba solo la ÚLTIMA serie real contra un único `piso_reps` fijo,
+  sin importar cuántas series hubiera - con 3 o más series, eso pintaba
+  en rojo una caída de reps perfectamente normal por fatiga (ej. 14-12-10
+  con `piso_reps=10` pintaba la serie 3 en rojo, cuando en realidad son
+  -2 reps por serie, justo el patrón esperado). Ahora cada serie se
+  compara contra SU PROPIA sugerencia (`calcularSugerenciaReps`: la del
+  mismo piso_reps para la serie 1, la reps real de la serie anterior
+  menos 2 para las siguientes al mismo peso - la misma cuenta que ya
+  usa el placeholder gris), no contra un piso único aplicado solo a la
+  última. Si una serie cae más de lo esperado, se pinta esa serie
+  puntual (no todas las de ahí en adelante), y la siguiente serie
+  recalcula su propia sugerencia en cadena desde ese valor real -mismo
+  criterio que ya usa el placeholder-, así que puede volver a verse en
+  verde si supera esa nueva expectativa más baja. Verificado con
+  Playwright: 4 series con el patrón exacto -2 (14-12-10-8, peso
+  constante) sin ninguna pintada; después, la serie 3 forzada más abajo
+  de lo esperado (8 en vez de 10) se pinta roja y la serie 4 se re-evalúa
+  contra ese nuevo valor real.
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se

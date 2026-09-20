@@ -1219,15 +1219,23 @@ function colorClase(color) {
 //
 // `seriesReferencia` es la cantidad de series que tenia el ejercicio
 // cuando se abrio esta pantalla (antes de cualquier "+1 serie" tocado en
-// esta misma sesion). Si la ultima serie real cae mas alla de esa
-// cantidad, es una serie nueva que nunca se entreno antes - no hay piso
-// de reps con el que compararla, asi que no se pinta (el peso si se sigue
-// comparando: peso_actual no es "el peso de la serie N", es el peso de
-// trabajo del ejercicio en general, asi que sigue siendo una referencia
-// valida aunque la serie en si sea nueva).
+// esta misma sesion). Una serie mas alla de esa cantidad es nueva, nunca
+// se entreno antes - no hay con que compararla, asi que no se pinta (el
+// peso si se sigue comparando: peso_actual no es "el peso de la serie N",
+// es el peso de trabajo del ejercicio en general, asi que sigue siendo
+// una referencia valida aunque la serie en si sea nueva).
+//
+// Las reps de cada serie se comparan contra SU PROPIA sugerencia
+// (calcularSugerenciaReps: piso_reps para la serie 1, la reps real de la
+// serie anterior menos 2 para las siguientes - la misma cuenta que ya
+// muestra el placeholder gris), no contra un piso fijo unico. Antes
+// comparaba solo la ULTIMA serie real contra piso_reps sin mas: con mas
+// de 2 series eso marcaba en rojo caidas de reps totalmente esperables
+// por fatiga (ej. 14-12-10 con piso_reps=10 pintaba la serie 3 en rojo,
+// cuando en realidad son -2 reps por serie, justo lo pactado).
 function colorVsPactadoLive(series, ej, seriesReferencia) {
   const reales = series.filter((s) => !s.esDropset);
-  if (reales.length === 0) return { pesoColor: null, repsColor: null };
+  if (reales.length === 0) return { pesoColor: null, repsColores: [] };
   let pesoColor = null;
   const primerPeso = reales[0].peso;
   if (ej.peso_actual != null && primerPeso !== '' && primerPeso != null) {
@@ -1235,16 +1243,19 @@ function colorVsPactadoLive(series, ej, seriesReferencia) {
     if (pesoUsado > ej.peso_actual) pesoColor = 'verde';
     else if (pesoUsado < ej.peso_actual) pesoColor = 'rojo';
   }
-  let repsColor = null;
-  if (pesoColor == null && ej.piso_reps != null && reales.length <= seriesReferencia) {
-    const ultimaReal = reales[reales.length - 1];
-    if (ultimaReal.reps !== '' && ultimaReal.reps != null) {
-      const repsUsadas = Number(ultimaReal.reps);
-      if (repsUsadas > ej.piso_reps) repsColor = 'verde';
-      else if (repsUsadas < ej.piso_reps) repsColor = 'rojo';
-    }
-  }
-  return { pesoColor, repsColor };
+  const repsColores = reales.map((s, idx) => {
+    if (pesoColor != null || idx >= seriesReferencia) return null;
+    if (s.reps === '' || s.reps == null) return null;
+    const sugerido = calcularSugerenciaReps(ej, reales, idx);
+    if (sugerido == null) return null;
+    const target = Number(sugerido);
+    const repsUsadas = Number(s.reps);
+    if (!Number.isFinite(target) || !Number.isFinite(repsUsadas)) return null;
+    if (repsUsadas > target) return 'verde';
+    if (repsUsadas < target) return 'rojo';
+    return null;
+  });
+  return { pesoColor, repsColores };
 }
 
 function colorClaseInput(color) {
@@ -1637,9 +1648,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
             (e) => e.musculo_objetivo_id === ej.musculo_objetivo_id
           ).length === 1;
           const seriesReferencia = seriesPactadasAlAbrir[ej.id] ?? ej.series_actuales;
-          const { pesoColor, repsColor } = colorVsPactadoLive(seriesPorEjercicio[ej.id], ej, seriesReferencia);
-          const reales = seriesPorEjercicio[ej.id].filter((s) => !s.esDropset);
-          const idxUltimaReal = reales.length - 1;
+          const { pesoColor, repsColores } = colorVsPactadoLive(seriesPorEjercicio[ej.id], ej, seriesReferencia);
           return (
             <div
               key={ej.id}
@@ -1709,7 +1718,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                       placeholder={sugerenciaReps}
                       onChange={(e) => actualizarSerie(ej.id, idx, 'reps', e.target.value)}
                       className={`w-full min-w-0 h-9 rounded-lg border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint ${
-                        !s.esDropset && idx === idxUltimaReal ? colorClaseInput(repsColor) : 'border-border'
+                        !s.esDropset ? colorClaseInput(repsColores[idx]) : 'border-border'
                       }`}
                     />
                     <input

@@ -456,6 +456,24 @@ sessions → closing a microcycle → progress → Excel export):
   floor (colored red/orange); tapping "+1 set" clears that color from
   set 3 (no longer the last one) and the newly-created 4th set stays
   uncolored too even when filled in with even lower reps.
+- **Fix: the live coloring was flagging perfectly normal fatigue-driven
+  rep drops as red** (`colorVsPactadoLive`, live view only): it compared
+  only the LAST real set against a single fixed `piso_reps`, regardless
+  of how many sets there were - with 3+ sets that colored a completely
+  normal fatigue decline red (e.g. 14-12-10 with `piso_reps=10` colored
+  set 3 red, when that's actually -2 reps per set, exactly the expected
+  pattern). Each set now gets compared against its OWN suggestion
+  (`calcularSugerenciaReps`: `piso_reps` itself for set 1, the previous
+  set's real reps minus 2 for the following ones at the same weight -
+  the same math the gray placeholder already uses), not a single floor
+  applied only to the last set. If a set drops more than expected, only
+  that specific set gets colored (not every set after it), and the next
+  set recalculates its own suggestion from that real value - same logic
+  the placeholder already follows - so it can still come back green if it
+  beats that new, lower expectation. Verified with Playwright: 4 sets
+  following the exact -2 pattern (14-12-10-8, same weight) with nothing
+  colored; then set 3 forced lower than expected (8 instead of 10) comes
+  back red and set 4 gets re-evaluated against that new real value.
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual
