@@ -406,6 +406,22 @@ sessions → closing a microcycle → progress → Excel export):
   weight with reps up/down, weight up/down) by reading back each cell's
   fill with ExcelJS to confirm all 4 exact outcomes, including the rule
   that reps stay uncolored whenever weight changed.
+- **The same coloring, inside the app too** (`colorVsPactado` in
+  `EntrenamientoPage.jsx`, used by `ResumenSemanaPasada` - the "Week 1"/
+  "Week 2" view for seeing what was trained on the other week of the
+  current microcycle, see the toggle next to the day's name): same
+  calculation as the Excel one, but against `ej.peso_actual`/
+  `ej.piso_reps` already present on `dia.ejercicios` (they mirror that
+  same microcycle's `peso_prescrito`/`piso_reps`, no extra query needed).
+  Weight is colored on EVERY real set of the exercise (they normally
+  share the same weight), reps only on the last real set - same "closest
+  to failure" criterion the progression engine already uses for
+  `techoDesde`- using the app's existing color tokens (`text-success`/
+  `text-danger`, with automatic dark-mode support - this palette's
+  "danger" is an amber/orange, not a pure red). Verified the same way as
+  the Excel export: 4 hand-seeded exercises covering all 4 cases,
+  confirmed with Playwright + `getComputedStyle` reading back each
+  cell's actual RGB color, not just a screenshot.
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual

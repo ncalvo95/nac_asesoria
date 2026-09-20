@@ -604,6 +604,22 @@ cierre de microciclo → progreso → export a Excel):
   con reps que suben/bajan, peso que sube/baja) releyendo los `fill` de
   cada celda con ExcelJS para confirmar los 4 casos exactos, incluida la
   regla de "las reps no se pintan si el peso cambió".
+- **El mismo coloreado, también dentro de la app** (`colorVsPactado` en
+  `EntrenamientoPage.jsx`, usado por `ResumenSemanaPasada` - la vista de
+  "Semana 1"/"Semana 2" para ver lo que se entrenó la otra semana del
+  microciclo en curso, ver toggle junto al nombre del día): mismo cálculo
+  que en el Excel, pero contra `ej.peso_actual`/`ej.piso_reps` que ya
+  vienen en `dia.ejercicios` (reflejan el mismo `peso_prescrito`/
+  `piso_reps` del microciclo en curso, sin pegarle una consulta aparte).
+  El peso se pinta en TODAS las series reales del ejercicio (normalmente
+  comparten el mismo peso), las reps solo en la última serie real -mismo
+  criterio "más cerca del fallo" que ya usa el motor de progresión para
+  `techoDesde`-, con los tokens de color que ya tiene la app
+  (`text-success`/`text-danger`, con soporte automático de tema oscuro -
+  el "danger" de esta paleta es un ámbar/naranja, no un rojo puro).
+  Verificado igual que el Excel: 4 ejercicios sembrados a mano cubriendo
+  los 4 casos, confirmando con Playwright + `getComputedStyle` el color
+  RGB real de cada celda (no solo capturas de pantalla).
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se
