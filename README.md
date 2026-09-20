@@ -675,6 +675,33 @@ cierre de microciclo → progreso → export a Excel):
   con Playwright: pactado 12/10/8 (piso_reps=12, 3 series), tipeando
   13/10/5 - serie 1 verde (mejoró), serie 2 blanca (igual al plan pese a
   la mejora previa), serie 3 roja (empeoró).
+- **Fix: dos bugs más del coloreado en vivo -datos viejos tras sustituir un
+  ejercicio, y celdas vacías pintadas-**:
+  - **Sustituir un ejercicio dejaba pisado el peso/reps del ejercicio
+    VIEJO**: "Cambiar ejercicio" mantiene el mismo `ejercicio_asignado_id`
+    (mismo puesto en la rutina) pero cambia `ejercicio_id` y fija un
+    peso/piso de reps nuevos vía su propia serie de referencia (un modal
+    aparte, no estos inputs) - el estado local `series` de `RegistroDia`
+    para ese id, sin embargo, seguía teniendo lo que se hubiera tipeado
+    para el ejercicio anterior. Resultado: esos números viejos quedaban
+    visibles bajo el nombre del ejercicio NUEVO, coloreados contra SU
+    peso/piso, mezclando datos de dos ejercicios distintos (ej. un peso
+    de 40kg de un ejercicio de espalda comparado contra el piso de un
+    ejercicio de pecho recién elegido). Un nuevo `useEffect` en
+    `RegistroDia` detecta el cambio de `ejercicio_id` por cada
+    `ejercicio_asignado_id` (comparando contra el valor anterior via
+    `useRef`) y resetea a blanco el estado local de ese ejercicio en
+    particular apenas se confirma la sustitución.
+  - **El peso se pintaba en celdas vacías**: `pesoColor` es un solo valor
+    por ejercicio (compara la primera serie real contra `peso_actual`) que
+    se aplicaba a las celdas de peso de TODAS las series reales por igual,
+    sin chequear si esa fila en particular ya tenía algo tipeado - una
+    serie 2/3 todavía vacía (mostrando el placeholder gris) se pintaba
+    igual que la serie 1 ya completada. Ahora solo se pinta si `s.peso`
+    tiene un valor real cargado en esa fila puntual (mismo chequeo que ya
+    tenían las reps). Verificado con Playwright: sustituir un ejercicio
+    con datos ya tipeados en la serie 1 - después de confirmar, las 3
+    filas quedan en blanco (sin colores fantasma, sin números viejos).
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se

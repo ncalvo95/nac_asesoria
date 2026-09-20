@@ -477,6 +477,33 @@ sessions → closing a microcycle → progress → Excel export):
   Verified with Playwright: planned 12/10/8 (`piso_reps=12`, 3 sets),
   typing 13/10/5 - set 1 green (improved), set 2 white (matches the plan
   despite the earlier improvement), set 3 red (regressed).
+- **Fix: two more live-coloring bugs - stale data after substituting an
+  exercise, and empty cells getting colored**:
+  - **Substituting an exercise left the OLD exercise's weight/reps
+    behind**: "Change exercise" keeps the same `ejercicio_asignado_id`
+    (same slot in the routine) but changes `ejercicio_id` and sets a new
+    weight/rep floor via its own reference set (a separate modal, not
+    these inputs) - `RegistroDia`'s local `series` state for that id,
+    though, kept whatever had been typed for the previous exercise.
+    Result: those old numbers stayed visible under the NEW exercise's
+    name, colored against ITS weight/floor, mixing data from two
+    different exercises (e.g. a 40kg weight from a back exercise compared
+    against the floor of a just-picked chest exercise). A new
+    `useEffect` in `RegistroDia` detects the `ejercicio_id` change per
+    `ejercicio_asignado_id` (comparing against the previous value via
+    `useRef`) and resets that specific exercise's local state to blank
+    the moment the substitution is confirmed.
+  - **Weight was coloring empty cells**: `pesoColor` is a single
+    per-exercise value (comparing the first real set against
+    `peso_actual`) that got applied to every real set's weight cell
+    alike, without checking whether that particular row actually had
+    anything typed - a still-empty set 2/3 (showing the gray placeholder)
+    got colored the same as an already-filled set 1. It's now only
+    colored when `s.peso` actually holds a real value in that specific
+    row (same check reps already had). Verified with Playwright:
+    substituting an exercise that already had set 1 typed in - after
+    confirming, all 3 rows come back blank (no ghost colors, no stale
+    numbers).
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual

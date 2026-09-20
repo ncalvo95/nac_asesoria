@@ -1455,6 +1455,33 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesActualesKey]);
 
+  // Sustituir un ejercicio ("Cambiar ejercicio") cambia su ejercicio_id y le
+  // fija un peso/piso de reps nuevos (via una serie de referencia que se
+  // carga en un modal aparte, no en estos inputs) - pero mantiene el MISMO
+  // ejercicio_asignado_id (mismo puesto en la rutina). Sin este reset, lo
+  // que ya estuviera tipeado en "series" para ese id -del ejercicio VIEJO,
+  // antes de sustituirlo- seguia mostrandose (y coloreandose contra el
+  // peso/piso del ejercicio NUEVO), mezclando datos de dos ejercicios
+  // distintos bajo el mismo casillero.
+  const ejercicioIdKey = dia.ejercicios.map((e) => `${e.id}:${e.ejercicio_id}`).join(',');
+  const ejercicioIdPrevioRef = useRef(ejercicioIdKey);
+  useEffect(() => {
+    const anteriores = Object.fromEntries(
+      ejercicioIdPrevioRef.current.split(',').filter(Boolean).map((par) => par.split(':'))
+    );
+    ejercicioIdPrevioRef.current = ejercicioIdKey;
+    const sustituidos = dia.ejercicios.filter(
+      (ej) => anteriores[ej.id] != null && anteriores[ej.id] !== String(ej.ejercicio_id)
+    );
+    if (sustituidos.length === 0) return;
+    setSeries((prev) => {
+      const copia = { ...prev };
+      for (const ej of sustituidos) copia[ej.id] = construirSeriesPorDefecto(ej);
+      return copia;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ejercicioIdKey]);
+
   const notasPorEjercicio = useMemo(() => {
     const map = new Map();
     for (const e of progreso?.ejercicios ?? []) map.set(e.id, e);
@@ -1712,7 +1739,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                       placeholder={s.esDropset ? undefined : (ej.peso_actual != null ? String(ej.peso_actual) : undefined)}
                       onChange={(e) => actualizarSerie(ej.id, idx, 'peso', e.target.value)}
                       className={`w-full min-w-0 h-9 rounded-lg border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint ${
-                        !s.esDropset ? colorClaseInput(pesoColor) : 'border-border'
+                        !s.esDropset && s.peso !== '' && s.peso != null ? colorClaseInput(pesoColor) : 'border-border'
                       }`}
                     />
                     <input
