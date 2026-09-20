@@ -585,6 +585,25 @@ cierre de microciclo → progreso → export a Excel):
   sesiones) y releyéndolo con ExcelJS para confirmar el orden de hojas, la
   fila exacta de cada hipervínculo y los separadores de microciclo, además
   de los 3 modos de alcance (rutina completa, un microciclo, una sesión).
+  **Colores por celda según lo pactado**: las celdas de Peso y Repes de
+  cada ejercicio se pintan solas comparando contra `peso_prescrito`/
+  `piso_reps` de `progreso_ejercicio_microciclo` -lo mismo que ya usa el
+  motor de progresión para decidir "mejoró" al cerrar un bloque, no un
+  criterio nuevo-: **verde** si se hizo más peso o más reps que lo
+  pactado, **rojo** si menos, blanco (sin pintar) si quedó igual. El peso
+  se compara contra la primera serie real del ejercicio; las reps, contra
+  la última serie real (la más cercana al fallo). Ojo con la combinación:
+  las reps **solo** se pintan cuando el peso quedó en blanco (igual al
+  pactado) - si el peso cambió (subió o bajó), las reps se dejan en
+  blanco aunque hayan variado, porque hacer menos reps con más peso (o
+  más reps con menos peso) es esperable y no dice nada por sí solo sobre
+  si mejoraste o empeoraste. Sin dato de "lo pactado" para ese ejercicio
+  en ese microciclo (ej. semana de testeo) no se pinta nada. Los
+  dropsets quedan afuera de esta comparación (mismo criterio que el resto
+  del resumen). Verificado con 4 escenarios sembrados a mano (peso igual
+  con reps que suben/bajan, peso que sube/baja) releyendo los `fill` de
+  cada celda con ExcelJS para confirmar los 4 casos exactos, incluida la
+  regla de "las reps no se pintan si el peso cambió".
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se

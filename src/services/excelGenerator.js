@@ -314,11 +314,20 @@ const COLOR_HEADER_TABLA = 'FFF3E7E6'; // tinte claro del bordo
 const COLOR_FILA_PAR = 'FFFBF7F6';
 const COLOR_BLANCO = 'FFFFFFFF';
 const COLOR_TEXTO = 'FF23221F';
+// Comparacion contra lo pactado (progreso_ejercicio_microciclo): mejoro
+// respecto al microciclo -> verde; por debajo -> rojo.
+const COLOR_MEJORA_BG = 'FFDCEFE0';
+const COLOR_MEJORA_TEXTO = 'FF1E6B3A';
+const COLOR_EMPEORA_BG = 'FFF7DEDC';
+const COLOR_EMPEORA_TEXTO = 'FF9C3B33';
 
 const COLUMNAS_HISTORIAL = ['Ejercicio', 'Series', 'Repes', 'Peso (kg)', 'Descanso (min)', 'RIR', 'RE'];
 
 const getDiaDeSesion = db.prepare('SELECT dia_semana, musculos_trabajados_json FROM dia_rutina WHERE id = ?');
 const getMicrocicloInfo = db.prepare('SELECT numero, fecha_inicio FROM microciclo WHERE id = ?');
+const getProgresoEjercicioMicrociclo = db.prepare(
+  'SELECT peso_prescrito, piso_reps FROM progreso_ejercicio_microciclo WHERE ejercicio_asignado_id = ? AND microciclo_id = ?'
+);
 const getSeriesDeSesion = db.prepare(`
   SELECT rs.*, ea.orden, ea.descanso_segundos, e.nombre AS ejercicio_nombre
   FROM registro_serie rs
@@ -332,7 +341,17 @@ const getSeriesDeSesion = db.prepare(`
 // legible (en vez de una fila por serie) - "20-18-16-14" en vez de 4 filas
 // sueltas, que es justo lo que hacia ilegible el excel viejo para seguirlo
 // de corrido. El peso/reps del dropset se aclaran aparte si hubo alguno.
-function resumirEjercicioDeSesion(series) {
+//
+// `progreso` (peso_prescrito/piso_reps de progreso_ejercicio_microciclo,
+// o null si no hay - ej. semana de testeo) es "lo pactado" para ese
+// ejercicio en ese microciclo, lo mismo que ya usa el motor de progresion
+// para decidir "mejoro" al cerrar el bloque. El peso se compara contra el
+// peso de la primera serie real; las reps, contra la ultima serie real
+// (la mas cercana al fallo, mismo criterio que `techoDesde`) - pero SOLO
+// si el peso no cambio: si subiste el peso es normal/esperable hacer
+// menos reps, y si lo bajaste es esperable hacer mas, asi que en ambos
+// casos comparar las reps contra el piso no dice nada util.
+function resumirEjercicioDeSesion(series, progreso) {
   const reales = series.filter((s) => !s.es_dropset);
   const dropsets = series.filter((s) => s.es_dropset);
   const pesos = reales.map((s) => s.peso);
@@ -340,6 +359,20 @@ function resumirEjercicioDeSesion(series) {
   const repsTexto = reales.map((s) => s.reps).join('-');
   const repsEfectivasTotal = series.reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) ?? 0), 0);
   const ultimaReal = reales[reales.length - 1];
+
+  let pesoColor = null;
+  let repsColor = null;
+  if (progreso && reales.length > 0) {
+    const pesoUsado = reales[0].peso;
+    if (pesoUsado > progreso.peso_prescrito) pesoColor = 'verde';
+    else if (pesoUsado < progreso.peso_prescrito) pesoColor = 'rojo';
+
+    if (pesoColor == null && ultimaReal) {
+      if (ultimaReal.reps > progreso.piso_reps) repsColor = 'verde';
+      else if (ultimaReal.reps < progreso.piso_reps) repsColor = 'rojo';
+    }
+  }
+
   return {
     nombre: series[0].ejercicio_nombre + (dropsets.length ? ' (+ dropset)' : ''),
     series: reales.length,
@@ -348,6 +381,8 @@ function resumirEjercicioDeSesion(series) {
     descansoMin: Math.round(((series[0].descanso_segundos || 90) / 60) * 10) / 10,
     rir: ultimaReal?.rir ?? '',
     repsEfectivas: repsEfectivasTotal,
+    pesoColor,
+    repsColor,
   };
 }
 
@@ -411,14 +446,31 @@ function agregarSesionAlSheet(worksheet, sesion) {
   }
 
   let i = 0;
-  for (const series of seriesPorEjercicio.values()) {
-    const r = resumirEjercicioDeSesion(series);
+  for (const [ejercicioAsignadoId, series] of seriesPorEjercicio.entries()) {
+    const progreso = getProgresoEjercicioMicrociclo.get(ejercicioAsignadoId, sesion.microciclo_id);
+    const r = resumirEjercicioDeSesion(series, progreso);
     const fila = worksheet.addRow([r.nombre, r.series, r.reps, r.peso, r.descansoMin, r.rir, r.repsEfectivas]);
     fila.eachCell((cell, colNumber) => {
       cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
       cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
       if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
     });
+    const celdaReps = fila.getCell(3);
+    if (r.repsColor === 'verde') {
+      celdaReps.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_MEJORA_BG } };
+      celdaReps.font = { color: { argb: COLOR_MEJORA_TEXTO }, bold: true };
+    } else if (r.repsColor === 'rojo') {
+      celdaReps.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_EMPEORA_BG } };
+      celdaReps.font = { color: { argb: COLOR_EMPEORA_TEXTO }, bold: true };
+    }
+    const celdaPeso = fila.getCell(4);
+    if (r.pesoColor === 'verde') {
+      celdaPeso.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_MEJORA_BG } };
+      celdaPeso.font = { color: { argb: COLOR_MEJORA_TEXTO }, bold: true };
+    } else if (r.pesoColor === 'rojo') {
+      celdaPeso.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_EMPEORA_BG } };
+      celdaPeso.font = { color: { argb: COLOR_EMPEORA_TEXTO }, bold: true };
+    }
     i += 1;
   }
 
@@ -472,7 +524,10 @@ export function generarWorkbookHistorial(usuarioId, { microcicloDesde = null, mi
   filaTitulo.getCell(1).font = { bold: true, size: 14, color: { argb: COLOR_BORDO } };
   filaTitulo.height = 26;
 
-  const filaLeyenda = sheet.addRow(['RIR: reps en reserva  ·  RE: reps efectivas  ·  DS: dropset (serie extra a menor peso)']);
+  const filaLeyenda = sheet.addRow([
+    'RIR: reps en reserva  ·  RE: reps efectivas  ·  DS: dropset (serie extra a menor peso)  ·  ' +
+      'Verde: mejoraste respecto a lo pactado  ·  Rojo: por debajo de lo pactado',
+  ]);
   sheet.mergeCells(filaLeyenda.number, 1, filaLeyenda.number, COLUMNAS_HISTORIAL.length);
   filaLeyenda.getCell(1).font = { italic: true, size: 10, color: { argb: 'FF837F77' } };
   sheet.addRow([]);

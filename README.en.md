@@ -387,7 +387,25 @@ sessions → closing a microcycle → progress → Excel export):
   sheet, plus a full-width dark divider row ("MICROCYCLE N · start to end
   date") inserted wherever the microcycle changes, and a short legend
   explaining RIR/RE/DS - all aimed at keeping a many-months export
-  navigable instead of one long undifferentiated scroll.
+  navigable instead of one long undifferentiated scroll. **Cell colors
+  against what was planned**: each exercise's Weight and Reps cells color
+  themselves by comparing against `peso_prescrito`/`piso_reps` from
+  `progreso_ejercicio_microciclo` - the same values the progression engine
+  already uses to decide "improved" when closing a block, not a new
+  criterion - **green** when more weight or more reps were done than
+  planned, **red** when less, white (unpainted) when it matched exactly.
+  Weight is compared against the exercise's first real set; reps against
+  the last real set (closest to failure). One catch: reps are **only**
+  colored when weight stayed white (matched the plan) - if weight changed
+  (up or down), reps are left white even if they also changed, because
+  doing fewer reps at a heavier weight (or more reps at a lighter one) is
+  expected and doesn't say anything by itself about improving or
+  regressing. With no planned value for that exercise in that microcycle
+  (e.g. a testing week) nothing gets colored. Dropsets are excluded from
+  this comparison too. Verified against 4 hand-seeded scenarios (same
+  weight with reps up/down, weight up/down) by reading back each cell's
+  fill with ExcelJS to confirm all 4 exact outcomes, including the rule
+  that reps stay uncolored whenever weight changed.
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual
