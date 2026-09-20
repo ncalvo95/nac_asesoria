@@ -659,20 +659,22 @@ cierre de microciclo → progreso → export a Excel):
   sin importar cuántas series hubiera - con 3 o más series, eso pintaba
   en rojo una caída de reps perfectamente normal por fatiga (ej. 14-12-10
   con `piso_reps=10` pintaba la serie 3 en rojo, cuando en realidad son
-  -2 reps por serie, justo el patrón esperado). Ahora cada serie se
-  compara contra SU PROPIA sugerencia (`calcularSugerenciaReps`: la del
-  mismo piso_reps para la serie 1, la reps real de la serie anterior
-  menos 2 para las siguientes al mismo peso - la misma cuenta que ya
-  usa el placeholder gris), no contra un piso único aplicado solo a la
-  última. Si una serie cae más de lo esperado, se pinta esa serie
-  puntual (no todas las de ahí en adelante), y la siguiente serie
-  recalcula su propia sugerencia en cadena desde ese valor real -mismo
-  criterio que ya usa el placeholder-, así que puede volver a verse en
-  verde si supera esa nueva expectativa más baja. Verificado con
-  Playwright: 4 series con el patrón exacto -2 (14-12-10-8, peso
-  constante) sin ninguna pintada; después, la serie 3 forzada más abajo
-  de lo esperado (8 en vez de 10) se pinta roja y la serie 4 se re-evalúa
-  contra ese nuevo valor real.
+  -2 reps por serie, justo el patrón esperado). Cada serie ahora se
+  compara contra un objetivo FIJO calculado una sola vez desde lo
+  pactado: `piso_reps - 2*índice` (serie 1 = `piso_reps`, serie 2 =
+  `piso_reps - 2`, serie 3 = `piso_reps - 4`, ...) - el mismo -2 por
+  serie que ya calcula `calcularSugerenciaReps` para el placeholder gris,
+  pero SIN recalcularse en cadena a partir de lo tipeado en la serie
+  anterior (a diferencia del placeholder, que sí lo hace, porque sirve
+  para otra cosa: sugerir un número realista dado cómo viene la sesión
+  hoy). Esa diferencia importa: con la cadena dinámica, mejorar la serie
+  1 "contagiaba" un objetivo más exigente a la serie 2 - mantenerse ahí
+  en el número que en realidad pautaba el plan original quedaba marcado
+  en rojo solo por haber mejorado la serie anterior, mezclando dos cosas
+  distintas (mejoraste una serie, te mantuviste en la otra). Verificado
+  con Playwright: pactado 12/10/8 (piso_reps=12, 3 series), tipeando
+  13/10/5 - serie 1 verde (mejoró), serie 2 blanca (igual al plan pese a
+  la mejora previa), serie 3 roja (empeoró).
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se

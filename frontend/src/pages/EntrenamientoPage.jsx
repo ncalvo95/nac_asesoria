@@ -1225,14 +1225,18 @@ function colorClase(color) {
 // es el peso de trabajo del ejercicio en general, asi que sigue siendo
 // una referencia valida aunque la serie en si sea nueva).
 //
-// Las reps de cada serie se comparan contra SU PROPIA sugerencia
-// (calcularSugerenciaReps: piso_reps para la serie 1, la reps real de la
-// serie anterior menos 2 para las siguientes - la misma cuenta que ya
-// muestra el placeholder gris), no contra un piso fijo unico. Antes
-// comparaba solo la ULTIMA serie real contra piso_reps sin mas: con mas
-// de 2 series eso marcaba en rojo caidas de reps totalmente esperables
-// por fatiga (ej. 14-12-10 con piso_reps=10 pintaba la serie 3 en rojo,
-// cuando en realidad son -2 reps por serie, justo lo pactado).
+// Las reps de cada serie se comparan contra un objetivo FIJO derivado de
+// lo pactado (piso_reps - 2*indice: serie 1 = piso_reps, serie 2 =
+// piso_reps-2, serie 3 = piso_reps-4, ...), calculado una sola vez desde
+// el plan original - NO contra lo que se tipeo en la serie anterior de
+// esta sesion (eso es lo que hace `calcularSugerenciaReps`, para el
+// placeholder gris, con otro proposito: sugerir un numero realista dado
+// como viene la sesion). Si se usara esa sugerencia dinamica para pintar,
+// mejorar la serie 1 "contagia" un objetivo mas exigente a la serie 2 -
+// mantenerse en la serie 2 (el mismo -2 que pautaba el plan original)
+// quedaba marcado en rojo solo por haber mejorado la serie 1, cuando en
+// realidad mejoraste una serie y te mantuviste en la otra, dos cosas
+// distintas que no deberian mezclarse.
 function colorVsPactadoLive(series, ej, seriesReferencia) {
   const reales = series.filter((s) => !s.esDropset);
   if (reales.length === 0) return { pesoColor: null, repsColores: [] };
@@ -1244,13 +1248,11 @@ function colorVsPactadoLive(series, ej, seriesReferencia) {
     else if (pesoUsado < ej.peso_actual) pesoColor = 'rojo';
   }
   const repsColores = reales.map((s, idx) => {
-    if (pesoColor != null || idx >= seriesReferencia) return null;
+    if (pesoColor != null || idx >= seriesReferencia || ej.piso_reps == null) return null;
     if (s.reps === '' || s.reps == null) return null;
-    const sugerido = calcularSugerenciaReps(ej, reales, idx);
-    if (sugerido == null) return null;
-    const target = Number(sugerido);
+    const target = ej.piso_reps - 2 * idx;
     const repsUsadas = Number(s.reps);
-    if (!Number.isFinite(target) || !Number.isFinite(repsUsadas)) return null;
+    if (!Number.isFinite(repsUsadas)) return null;
     if (repsUsadas > target) return 'verde';
     if (repsUsadas < target) return 'rojo';
     return null;

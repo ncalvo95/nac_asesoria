@@ -462,18 +462,21 @@ sessions → closing a microcycle → progress → Excel export):
   of how many sets there were - with 3+ sets that colored a completely
   normal fatigue decline red (e.g. 14-12-10 with `piso_reps=10` colored
   set 3 red, when that's actually -2 reps per set, exactly the expected
-  pattern). Each set now gets compared against its OWN suggestion
-  (`calcularSugerenciaReps`: `piso_reps` itself for set 1, the previous
-  set's real reps minus 2 for the following ones at the same weight -
-  the same math the gray placeholder already uses), not a single floor
-  applied only to the last set. If a set drops more than expected, only
-  that specific set gets colored (not every set after it), and the next
-  set recalculates its own suggestion from that real value - same logic
-  the placeholder already follows - so it can still come back green if it
-  beats that new, lower expectation. Verified with Playwright: 4 sets
-  following the exact -2 pattern (14-12-10-8, same weight) with nothing
-  colored; then set 3 forced lower than expected (8 instead of 10) comes
-  back red and set 4 gets re-evaluated against that new real value.
+  pattern). Each set now gets compared against a FIXED target computed
+  once from the plan: `piso_reps - 2*index` (set 1 = `piso_reps`, set 2 =
+  `piso_reps - 2`, set 3 = `piso_reps - 4`, ...) - the same -2-per-set
+  math `calcularSugerenciaReps` already uses for the gray placeholder,
+  but WITHOUT re-chaining from what got typed in the previous set (unlike
+  the placeholder, which does chain from it, because it serves a
+  different purpose: suggesting a realistic number given how today's
+  session is actually going). That difference matters: with the dynamic
+  chain, beating set 1's target "infected" set 2 with a tougher target -
+  matching the number the ORIGINAL plan actually called for in set 2 got
+  flagged red just for having beaten the previous set, conflating two
+  different things (you improved one set, held steady on the other).
+  Verified with Playwright: planned 12/10/8 (`piso_reps=12`, 3 sets),
+  typing 13/10/5 - set 1 green (improved), set 2 white (matches the plan
+  despite the earlier improvement), set 3 red (regressed).
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual
