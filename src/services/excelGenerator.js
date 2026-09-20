@@ -318,6 +318,7 @@ const COLOR_TEXTO = 'FF23221F';
 const COLUMNAS_HISTORIAL = ['Ejercicio', 'Series', 'Repes', 'Peso (kg)', 'Descanso (min)', 'RIR', 'RE'];
 
 const getDiaDeSesion = db.prepare('SELECT dia_semana, musculos_trabajados_json FROM dia_rutina WHERE id = ?');
+const getMicrocicloInfo = db.prepare('SELECT numero, fecha_inicio FROM microciclo WHERE id = ?');
 const getSeriesDeSesion = db.prepare(`
   SELECT rs.*, ea.orden, ea.descanso_segundos, e.nombre AS ejercicio_nombre
   FROM registro_serie rs
@@ -364,12 +365,31 @@ function estilarBanner(row, worksheet, color) {
   row.height = color === COLOR_AMBAR ? 30 : 22;
 }
 
+// Separador grueso entre bloques (microciclos): distinto de los banners de
+// sesion (bordo/ambar) para que se distinga de un vistazo donde termina un
+// microciclo y empieza el siguiente al scrollear una rutina larga.
+function agregarBannerMicrociclo(worksheet, numero, fechaInicio) {
+  const inicio = new Date(`${fechaInicio}T00:00:00`);
+  const fin = new Date(inicio);
+  fin.setDate(fin.getDate() + 13);
+  const rango = `${inicio.toLocaleDateString('es-AR')} al ${fin.toLocaleDateString('es-AR')}`;
+  const fila = worksheet.addRow([`MICROCICLO ${numero}  ·  ${rango}`]);
+  fila.eachCell({ includeEmpty: true }, (cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_TEXTO } };
+    cell.font = { bold: true, color: { argb: COLOR_BLANCO }, size: 13 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+  worksheet.mergeCells(fila.number, 1, fila.number, COLUMNAS_HISTORIAL.length);
+  fila.height = 24;
+}
+
 function agregarSesionAlSheet(worksheet, sesion) {
   const dia = getDiaDeSesion.get(sesion.dia_rutina_id);
   const musculos = JSON.parse(dia?.musculos_trabajados_json || '[]').map(formatearMusculo);
   const fechaFmt = new Date(`${sesion.fecha}T00:00:00`).toLocaleDateString('es-AR');
 
   const filaFecha = worksheet.addRow([`Fecha: ${fechaFmt}`]);
+  const filaInicio = filaFecha.number;
   estilarBanner(filaFecha, worksheet, COLOR_BORDO);
 
   const tituloDia = `${CAPITALIZAR(dia?.dia_semana || '')} - ${musculos.map(CAPITALIZAR).join(', ')}`;
@@ -403,6 +423,8 @@ function agregarSesionAlSheet(worksheet, sesion) {
   }
 
   worksheet.addRow([]); // separador entre sesiones
+
+  return { filaInicio, dia, musculos, cantEjercicios: seriesPorEjercicio.size };
 }
 
 // microcicloDesde/microcicloHasta (numero de microciclo, inclusive) filtran
@@ -433,6 +455,14 @@ export function generarWorkbookHistorial(usuarioId, { microcicloDesde = null, mi
   const wb = new ExcelJS.Workbook();
   wb.creator = 'nac_asesoria';
   wb.created = new Date();
+  wb.views = [{ activeTab: 0 }];
+
+  // Con mas de una sesion armamos una hoja "Indice" AL FRENTE (primera
+  // solapa, la que Excel abre por defecto), con un link por sesion que
+  // salta directo a su tabla en "Historial" - sin esto, una rutina de
+  // varios meses exportada entera es un solo scroll interminable sin forma
+  // de ubicarse (pedido: que la vista sea "mas ordenada e intuitiva").
+  const indice = sesiones.length > 1 ? wb.addWorksheet('Indice') : null;
 
   const sheet = wb.addWorksheet('Historial');
   sheet.columns = [{ width: 32 }, { width: 9 }, { width: 16 }, { width: 12 }, { width: 15 }, { width: 8 }, { width: 8 }];
@@ -441,9 +471,58 @@ export function generarWorkbookHistorial(usuarioId, { microcicloDesde = null, mi
   sheet.mergeCells(filaTitulo.number, 1, filaTitulo.number, COLUMNAS_HISTORIAL.length);
   filaTitulo.getCell(1).font = { bold: true, size: 14, color: { argb: COLOR_BORDO } };
   filaTitulo.height = 26;
+
+  const filaLeyenda = sheet.addRow(['RIR: reps en reserva  ·  RE: reps efectivas  ·  DS: dropset (serie extra a menor peso)']);
+  sheet.mergeCells(filaLeyenda.number, 1, filaLeyenda.number, COLUMNAS_HISTORIAL.length);
+  filaLeyenda.getCell(1).font = { italic: true, size: 10, color: { argb: 'FF837F77' } };
   sheet.addRow([]);
 
-  for (const sesion of sesiones) agregarSesionAlSheet(sheet, sesion);
+  if (indice) {
+    indice.columns = [{ width: 5 }, { width: 13 }, { width: 14 }, { width: 34 }, { width: 11 }, { width: 10 }];
+    const filaHeaderIndice = indice.addRow(['#', 'Fecha', 'Dia', 'Musculos', 'Ejercicios', 'Ir a']);
+    filaHeaderIndice.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_BORDO } };
+      cell.font = { bold: true, color: { argb: COLOR_BLANCO } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+    filaHeaderIndice.height = 20;
+  }
+
+  let microcicloAnterior = null;
+  let contador = 0;
+  for (const sesion of sesiones) {
+    const mc = getMicrocicloInfo.get(sesion.microciclo_id);
+    if (mc && mc.numero !== microcicloAnterior) {
+      agregarBannerMicrociclo(sheet, mc.numero, mc.fecha_inicio);
+      microcicloAnterior = mc.numero;
+    }
+    contador += 1;
+    const { filaInicio, dia, musculos, cantEjercicios } = agregarSesionAlSheet(sheet, sesion);
+    if (indice) {
+      const fechaFmt = new Date(`${sesion.fecha}T00:00:00`).toLocaleDateString('es-AR');
+      const filaIdx = indice.addRow([
+        contador,
+        fechaFmt,
+        CAPITALIZAR(dia?.dia_semana || ''),
+        musculos.map(CAPITALIZAR).join(', '),
+        cantEjercicios,
+        'Ver ▸',
+      ]);
+      const celdaLink = filaIdx.getCell(6);
+      celdaLink.value = { text: 'Ver ▸', hyperlink: `#Historial!A${filaInicio}` };
+      celdaLink.font = { color: { argb: COLOR_BORDO }, underline: true, bold: true };
+      celdaLink.alignment = { horizontal: 'center' };
+      if (contador % 2 === 0) {
+        filaIdx.eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
+        });
+      }
+      filaIdx.eachCell((cell, colNumber) => {
+        if (colNumber !== 6) cell.alignment = { horizontal: colNumber <= 3 ? 'center' : 'left', vertical: 'middle' };
+        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
+      });
+    }
+  }
 
   return { workbook: wb };
 }

@@ -370,6 +370,24 @@ sessions → closing a microcycle → progress → Excel export):
   history (already-closed microcycles) and leaves live formulas for
   what's still pending, so it also works as an offline backup/continuation.
   Both share the same generation logic (`src/services/excelGenerator.js`).
+  That formula-driven sheet (`generarWorkbookUsuario`, now reachable only
+  via `?modo=plan`) is meant to PROJECT the rest of the block, not to
+  re-read what was already trained - so the default export mode instead
+  builds a readable **history** (`generarWorkbookHistorial`, wired to the
+  "Export Excel" button/modal): one table per already-logged session
+  (Exercise/Sets/Reps/Weight/Rest/RIR/RE, all sets of an exercise summed
+  up into one row - "20-18-16-14" instead of 4 loose rows, dropsets called
+  out separately), styled with the app's own colors (date banner in
+  bordeaux, day/muscle banner in amber). The export modal lets you pick
+  the scope: the whole routine, a mesocycle (microcycle range), a single
+  microcycle, or a single session. For a routine with more than one
+  session, a front-page **"Index"** sheet is added (the first, default
+  tab) listing every session -date, day, muscles, exercise count- with a
+  link that jumps straight to that session's table on the "Historial"
+  sheet, plus a full-width dark divider row ("MICROCYCLE N · start to end
+  date") inserted wherever the microcycle changes, and a short legend
+  explaining RIR/RE/DS - all aimed at keeping a many-months export
+  navigable instead of one long undifferentiated scroll.
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual

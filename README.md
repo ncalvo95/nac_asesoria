@@ -567,6 +567,24 @@ cierre de microciclo → progreso → export a Excel):
   mostrar). Verificado con Playwright de punta a punta (login, abrir el
   modal, elegir "Una sesión", descargar) y releyendo el .xlsx resultante
   con ExcelJS para confirmar colores, resumen por ejercicio y el dropset.
+  **Más ordenado para rutinas largas** (varios meses exportados de
+  corrido): con más de una sesión, se agrega una hoja **"Indice"** al
+  frente (la primera solapa, la que Excel abre por defecto) con una fila
+  por sesión -fecha, día, músculos, cantidad de ejercicios- y un link
+  ("Ver ▸") que salta directo a esa tabla en la hoja "Historial"
+  (hipervínculo interno `#Historial!A<fila>`, calculado en
+  `agregarSesionAlSheet` que ahora devuelve la fila donde arranca cada
+  sesión). Dentro de "Historial", un separador oscuro de ancho completo
+  ("MICROCICLO N · fecha de inicio al fin", `agregarBannerMicrociclo`) se
+  inserta cada vez que cambia el microciclo, para ubicarse de un vistazo en
+  qué bloque de 2 semanas se está al scrollear una rutina larga -antes
+  todas las sesiones eran visualmente idénticas sin importar de qué
+  microciclo eran-. También se agregó una leyenda corta debajo del título
+  explicando RIR/RE/DS, que antes solo se entendían por contexto. Probado
+  generando un .xlsx real contra datos de prueba (2 microciclos, 4
+  sesiones) y releyéndolo con ExcelJS para confirmar el orden de hojas, la
+  fila exacta de cada hipervínculo y los separadores de microciclo, además
+  de los 3 modos de alcance (rutina completa, un microciclo, una sesión).
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se
