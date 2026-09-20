@@ -1210,6 +1210,40 @@ function colorClase(color) {
   return '';
 }
 
+// Version en vivo de colorVsPactado, para mientras se esta tipeando la
+// sesion de hoy (RegistroDia): mismo criterio, pero sobre el estado local
+// `series` (peso/reps como string, `esDropset` en camelCase, y puede
+// estar vacio si todavia no se tipeo nada) en vez de series ya
+// registradas contra el backend. Un campo vacio no cuenta como "0" -
+// simplemente no hay nada que comparar todavia, asi que no se pinta.
+function colorVsPactadoLive(series, ej) {
+  const reales = series.filter((s) => !s.esDropset);
+  if (reales.length === 0) return { pesoColor: null, repsColor: null };
+  let pesoColor = null;
+  const primerPeso = reales[0].peso;
+  if (ej.peso_actual != null && primerPeso !== '' && primerPeso != null) {
+    const pesoUsado = Number(primerPeso);
+    if (pesoUsado > ej.peso_actual) pesoColor = 'verde';
+    else if (pesoUsado < ej.peso_actual) pesoColor = 'rojo';
+  }
+  let repsColor = null;
+  if (pesoColor == null && ej.piso_reps != null) {
+    const ultimaReal = reales[reales.length - 1];
+    if (ultimaReal.reps !== '' && ultimaReal.reps != null) {
+      const repsUsadas = Number(ultimaReal.reps);
+      if (repsUsadas > ej.piso_reps) repsColor = 'verde';
+      else if (repsUsadas < ej.piso_reps) repsColor = 'rojo';
+    }
+  }
+  return { pesoColor, repsColor };
+}
+
+function colorClaseInput(color) {
+  if (color === 'verde') return 'border-success text-success font-semibold';
+  if (color === 'rojo') return 'border-danger text-danger font-semibold';
+  return 'border-border';
+}
+
 function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos, diasHermanos }) {
   const borradorKey = `nac_borrador_dia_${dia.id}_${microciclo.id}`;
   const [series, setSeries] = useState(() => {
@@ -1582,6 +1616,9 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
           const esUltimoDelMusculo = dia.ejercicios.filter(
             (e) => e.musculo_objetivo_id === ej.musculo_objetivo_id
           ).length === 1;
+          const { pesoColor, repsColor } = colorVsPactadoLive(seriesPorEjercicio[ej.id], ej);
+          const reales = seriesPorEjercicio[ej.id].filter((s) => !s.esDropset);
+          const idxUltimaReal = reales.length - 1;
           return (
             <div
               key={ej.id}
@@ -1642,13 +1679,17 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                       type="number" inputMode="decimal" value={s.peso}
                       placeholder={s.esDropset ? undefined : (ej.peso_actual != null ? String(ej.peso_actual) : undefined)}
                       onChange={(e) => actualizarSerie(ej.id, idx, 'peso', e.target.value)}
-                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint"
+                      className={`w-full min-w-0 h-9 rounded-lg border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint ${
+                        !s.esDropset ? colorClaseInput(pesoColor) : 'border-border'
+                      }`}
                     />
                     <input
                       type="number" inputMode="numeric" value={s.reps}
                       placeholder={sugerenciaReps}
                       onChange={(e) => actualizarSerie(ej.id, idx, 'reps', e.target.value)}
-                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint"
+                      className={`w-full min-w-0 h-9 rounded-lg border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint ${
+                        !s.esDropset && idx === idxUltimaReal ? colorClaseInput(repsColor) : 'border-border'
+                      }`}
                     />
                     <input
                       type="number" inputMode="numeric" min={0} max={4} value={s.rir}

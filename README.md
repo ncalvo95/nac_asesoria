@@ -620,6 +620,19 @@ cierre de microciclo → progreso → export a Excel):
   Verificado igual que el Excel: 4 ejercicios sembrados a mano cubriendo
   los 4 casos, confirmando con Playwright + `getComputedStyle` el color
   RGB real de cada celda (no solo capturas de pantalla).
+- **El coloreado, también en vivo mientras se carga la sesión de hoy**
+  (`colorVsPactadoLive` en `EntrenamientoPage.jsx`, usado en los inputs de
+  peso/reps de `RegistroDia`): mismo criterio otra vez, pero recalculado
+  en cada tecleo sobre el estado local `series` (que todavía puede tener
+  campos vacíos - un campo vacío no cuenta como "0", simplemente no hay
+  nada que comparar todavía, así que no se pinta hasta que se tipea algo).
+  A diferencia de `ResumenSemanaPasada` (que solo pinta el texto), acá se
+  pinta también el borde del input (`border-success`/`border-danger`)
+  para que se note más en un campo chico mientras se está escribiendo.
+  Verificado con Playwright tipeando en vivo (no pegando un valor ya
+  cargado) los mismos 2 escenarios -peso igual con reps que suben, peso
+  que sube con reps que bajan- y confirmando con `getComputedStyle` el
+  color de cada input a medida que se completaban los campos.
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se

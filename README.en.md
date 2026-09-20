@@ -422,6 +422,19 @@ sessions → closing a microcycle → progress → Excel export):
   the Excel export: 4 hand-seeded exercises covering all 4 cases,
   confirmed with Playwright + `getComputedStyle` reading back each
   cell's actual RGB color, not just a screenshot.
+- **The coloring, live too while logging today's session**
+  (`colorVsPactadoLive` in `EntrenamientoPage.jsx`, used on the weight/
+  reps inputs in `RegistroDia`): same criterion again, recalculated on
+  every keystroke against the local `series` state (which can still have
+  empty fields - an empty field doesn't count as "0", there's simply
+  nothing to compare yet, so it stays uncolored until something is
+  typed). Unlike `ResumenSemanaPasada` (which only colors the text), this
+  one also colors the input's border (`border-success`/`border-danger`)
+  so it stands out more on a small field while typing. Verified with
+  Playwright actually typing live (not pasting an already-filled value)
+  through the same 2 scenarios - same weight with reps going up, weight
+  going up with reps going down - confirming each input's color with
+  `getComputedStyle` as the fields got filled in.
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual
