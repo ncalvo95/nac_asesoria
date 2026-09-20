@@ -702,6 +702,32 @@ cierre de microciclo → progreso → export a Excel):
     tenían las reps). Verificado con Playwright: sustituir un ejercicio
     con datos ya tipeados en la serie 1 - después de confirmar, las 3
     filas quedan en blanco (sin colores fantasma, sin números viejos).
+- **La semana 2 arranca precargada con lo de la semana 1, no en blanco**
+  (`RegistroDia`, prop nueva `semanaActual` pasada desde
+  `EntrenamientoPage`): las dos semanas de un mismo microciclo entrenan al
+  MISMO peso/piso pactado -es justo lo que compara `techoDesde` al cerrar
+  el bloque (ver "Motor de cierre de microciclo" más abajo) para decidir
+  si "mejoró"-, así que la semana 2 es un intento de igualar o superar la
+  semana 1, no una rutina en blanco. Al abrir un día en semana 2 sin nada
+  propio todavía registrado, si la semana 1 de ese mismo microciclo SÍ
+  tiene una sesión real (no salteada), el formulario se precarga con
+  exactamente esos valores -peso, reps y RIR de cada serie real, más
+  cualquier dropset- en vez de arrancar vacío con solo el placeholder gris
+  de sugerencia. Quedan totalmente editables: si repetís el mismo
+  entrenamiento se guarda tal cual, si mejorás o empeorás alguna serie la
+  editás y listo. El **coloreado sigue comparando contra lo pactado**
+  (`peso_actual`/`piso_reps`, viene de Semana 0 o del cierre del
+  microciclo anterior) y no contra estos valores precargados de la semana
+  1 - por eso un número que ya viene "en verde" al abrir la pantalla no es
+  un objetivo inventado a partir de la semana 1, es la misma comparación
+  contra el plan original que ya se le aplicaba a esa serie la semana
+  pasada. Si la semana 1 ya tiene su propia sesión registrada (reabriendo
+  esa misma semana) sigue precargando esa, como antes - esto solo agrega
+  el caso de semana 2 recién abierta sin nada propio todavía. Verificado
+  con Playwright: semana 1 sembrada con 40kg × 13/10/9 (piso_reps=12) -
+  al abrir semana 2 por primera vez, el formulario ya trae esos mismos 9
+  valores (peso, reps, RIR) cargados y coloreados 100% en base al piso
+  original, sin ningún cambio en la lógica de coloreado en sí.
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se

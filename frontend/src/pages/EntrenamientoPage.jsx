@@ -1066,6 +1066,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           onRutinaCambiada={onRutinaCambiada}
           todosMusculos={todosMusculos}
           diasHermanos={diasUnicos.filter((d) => d.id !== dia.id)}
+          semanaActual={rutina.semana_actual}
         />
       ) : (
         <ResumenSemanaPasada
@@ -1266,7 +1267,7 @@ function colorClaseInput(color) {
   return 'border-border';
 }
 
-function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos, diasHermanos }) {
+function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos, diasHermanos, semanaActual }) {
   const borradorKey = `nac_borrador_dia_${dia.id}_${microciclo.id}`;
   const [series, setSeries] = useState(() => {
     const base = construirEstadoInicial(dia);
@@ -1280,9 +1281,29 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     // default (1) - el registro en si seguia intacto en la base, solo la
     // vista no lo reflejaba. dia.sesion_actual ya trae las series (ver
     // registroDeSemana en rutinaService.js).
-    if (dia.sesion_actual && !dia.sesion_actual.salteada) {
+    //
+    // Si esta semana TODAVIA no tiene nada propio y es la semana 2, se
+    // precarga en cambio con lo que se registro en la semana 1 de este
+    // mismo microciclo - las dos semanas de un microciclo entrenan al
+    // MISMO peso/piso pactado (ver techoDesde en progressionEngine.js,
+    // que compara semana 1 vs semana 2 al cerrar el bloque), asi que la
+    // semana 2 es literalmente un intento de igualar o mejorar la semana
+    // 1, no una rutina en blanco - pedir tipear ejercicio por ejercicio,
+    // serie por serie, peso, reps y RIR de nuevo desde cero no tenia
+    // sentido cuando ya se habia cargado exactamente eso 7 dias antes.
+    // El coloreado en vivo (colorVsPactadoLive) sigue comparando contra
+    // lo pactado (peso_actual/piso_reps), nunca contra estos valores
+    // precargados, asi que superarlos o igualarlos sigue siendo "mejorar"
+    // o "mantenerse" en los terminos del plan original - no un objetivo
+    // nuevo inventado a partir de la semana 1.
+    const registroBase = (dia.sesion_actual && !dia.sesion_actual.salteada)
+      ? dia.sesion_actual
+      : (semanaActual === 2 && dia.registros_semana?.[1] && !dia.registros_semana[1].salteada
+        ? dia.registros_semana[1]
+        : null);
+    if (registroBase) {
       const porEjercicio = new Map();
-      for (const s of dia.sesion_actual.series) {
+      for (const s of registroBase.series) {
         if (!porEjercicio.has(s.ejercicio_asignado_id)) porEjercicio.set(s.ejercicio_asignado_id, []);
         porEjercicio.get(s.ejercicio_asignado_id).push(s);
       }

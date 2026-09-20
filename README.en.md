@@ -504,6 +504,31 @@ sessions → closing a microcycle → progress → Excel export):
     substituting an exercise that already had set 1 typed in - after
     confirming, all 3 rows come back blank (no ghost colors, no stale
     numbers).
+- **Week 2 now opens pre-filled with week 1's numbers, not blank**
+  (`RegistroDia`, new `semanaActual` prop passed down from
+  `EntrenamientoPage`): both weeks of the same microcycle train at the
+  SAME planned weight/floor - that's exactly what `techoDesde` compares
+  when closing the block (see "Microcycle close engine" below) to decide
+  whether you "improved" - so week 2 is meant as an attempt to match or
+  beat week 1, not a blank routine. Opening a day in week 2 with nothing
+  of its own logged yet, if week 1 of that same microcycle DOES have a
+  real (non-skipped) session, now pre-fills the form with exactly those
+  values - weight, reps and RIR for every real set, plus any dropset -
+  instead of starting empty with just the gray suggestion placeholder.
+  Everything stays fully editable: repeat the same session and it saves
+  as-is, improve or drop on any set and just edit that field. **The
+  coloring still compares against the plan** (`peso_actual`/`piso_reps`,
+  set by Week 0 or the previous microcycle's close), never against these
+  pre-filled week-1 values - so a number that already shows green the
+  moment the screen opens isn't a target invented from week 1, it's the
+  exact same comparison against the original plan that set already got
+  last week. If week 1 already has its own logged session (reopening that
+  same week) it still pre-fills from that, as before - this only adds the
+  case of a freshly-opened week 2 with nothing of its own yet. Verified
+  with Playwright: week 1 seeded with 40kg × 13/10/9 (`piso_reps=12`) -
+  opening week 2 for the first time, the form already carries those same
+  9 values (weight, reps, RIR) loaded and colored entirely against the
+  original floor, with zero change to the coloring logic itself.
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual
