@@ -575,6 +575,56 @@ sessions → closing a microcycle → progress → Excel export):
   something real gets typed, and that the full flow - edit on "phone",
   save draft, reload "PC" - now correctly picks up the new value (it used
   to bring back the old one).
+- **Fix: dragging to reorder exercises produced rapid back-and-forth
+  swaps on PC** (`useArrastreOrden.js`, a new hook shared by `RegistroDia`
+  and `Semana0Form` - they used to have the same algorithm duplicated):
+  the swap target was decided by re-reading `getBoundingClientRect()` on
+  EVERY card on each `pointermove`, but by then the DOM already reflected
+  the last swap (the other cards had already shifted) - so a swap could
+  leave the pointer "landing" on a different card without the mouse having
+  moved any further, triggering another chained swap on its own. With
+  mouse events on PC (much finer-grained than touch) this felt like a
+  rapid swap between exercises the moment you touched a card's edge. The
+  swap target is now decided by comparing against each card's center,
+  captured ONCE when the drag starts (never recalculated mid-drag) plus
+  the pointer's delta from there - same approach standard sortable lists
+  use. Verified with Playwright simulating a real mouse: 150px of
+  fine-grained movement (1px per step) over 16 exercises produced a single
+  clean reorder, with no back-and-forth oscillation at all (this same
+  movement would previously have triggered several chained swaps).
+- **Toggle to turn coloring on/off** ("🎨 Colors ON/OFF", next to the
+  nutritional-phase picker in the day header): all coloring against the
+  plan -live (`RegistroDia`) and in the closed-week view
+  (`ResumenSemanaPasada`)- is now optional. The preference is saved in
+  `localStorage` per device (same pattern as `ThemeContext` - it's
+  intentionally not synced between phone and PC, since it's a per-screen
+  visual preference, not routine data). Turned off, both views stop
+  computing and applying colors entirely (not just hiding them with CSS):
+  inputs go back to a neutral border and the closed-week text loses its
+  highlight.
+- **Fix: dragging to reorder didn't work sideways on PC, and the grab
+  area was too small on mobile** (`useArrastreOrden.js` + the grab
+  `<span>`s in `RegistroDia` and `Semana0Form`): the target-picking
+  algorithm only compared the pointer's Y coordinate against vertical
+  boundaries -built for a single-column list-, but on desktop exercises
+  sit in a 2-column grid (`md:grid-cols-2`); dragging a card sideways
+  (same row, other column) barely moved the pointer in Y, so it never
+  crossed any boundary and nothing happened - confirmed with Playwright
+  before the fix (identical order before and after a 450px horizontal
+  drag). The target is now decided by "nearest neighbor in 2D": the
+  pointer's X and Y are compared against each card's center (captured
+  once when the drag starts, same approach as the fix above), so the same
+  code works for both the 2-column desktop grid and the single-column
+  mobile list (there the comparison reduces to the vertical axis on its
+  own, since every card shares the same X). While at it, the grab area
+  (the `⠿` icon + exercise name) was enlarged with matching negative
+  margin/padding (`-m-3 p-3`, without shifting the visual layout) to make
+  it easier to grab on mobile without making the card itself bigger.
+  Verified with Playwright: on desktop (1100px), dragging the first card
+  450px sideways now correctly swaps it with its neighbor; on mobile
+  (390px), the grab area went from just the height of one line of text to
+  roughly 283×68px, and dragging downward still reorders the vertical
+  list with no regressions.
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual

@@ -794,6 +794,40 @@ cierre de microciclo → progreso → export a Excel):
   movimiento fino (1px por paso) sobre 16 ejercicios produjo un solo
   cambio de orden limpio, sin ninguna oscilación de ida y vuelta (antes
   este mismo movimiento habría generado varios cambios encadenados).
+- **Botón para apagar/prender el coloreado** ("🎨 Colores ON/OFF", junto al
+  selector de fase nutricional en el encabezado del día): todo el coloreado
+  contra lo pactado -en vivo (`RegistroDia`) y en la vista de semana cerrada
+  (`ResumenSemanaPasada`)- ahora es opcional. Preferencia guardada en
+  `localStorage` por dispositivo (mismo patrón que `ThemeContext`, no se
+  sincroniza entre celular y PC a propósito - es una preferencia visual de
+  cada pantalla, no un dato de la rutina). Apagado, ambas vistas dejan de
+  calcular y aplicar colores (no solo los oculta con CSS): los inputs vuelven
+  al borde neutro y el texto de la semana cerrada pierde el resaltado.
+- **Fix: el arrastre para reordenar ejercicios no funcionaba arrastrando
+  hacia el costado en PC, y el área para agarrar era muy chica en
+  celular** (`useArrastreOrden.js` + los `<span>` de agarre en
+  `RegistroDia` y `Semana0Form`): el algoritmo de destino solo comparaba la
+  coordenada Y del puntero contra límites verticales -pensado para una
+  lista de una sola columna-, pero en escritorio los ejercicios se
+  acomodan en una grilla de 2 columnas (`md:grid-cols-2`); arrastrar una
+  tarjeta hacia el costado (misma fila, otra columna) apenas movía el
+  puntero en Y, así que nunca cruzaba ningún límite y no pasaba nada -
+  confirmado con Playwright antes del fix (orden idéntico antes y después
+  de un arrastre horizontal de 450px). Ahora el destino se decide por
+  "vecino más cercano en 2D": se comparan las coordenadas X e Y del
+  puntero contra los centros de cada tarjeta (capturados una sola vez al
+  arrancar el arrastre, mismo enfoque que el fix anterior), así que el
+  mismo código sirve para la grilla de 2 columnas de escritorio y la lista
+  de una columna de celular (ahí la comparación se reduce sola a la
+  vertical, porque todas las tarjetas comparten la misma X). De paso, el
+  área táctil del agarre (el ícono `⠿` + nombre del ejercicio) se agrandó
+  con margen negativo/padding igual (`-m-3 p-3`, sin correr el layout
+  visual) para que sea más fácil de tocar en celular sin agrandar la
+  tarjeta. Verificado con Playwright: en escritorio (1100px), arrastrar la
+  primera tarjeta 450px hacia el costado ahora sí intercambia su lugar con
+  la de al lado; en celular (390px), el área de agarre pasó a medir
+  ~283×68px (antes, solo el alto de una línea de texto) y arrastrar hacia
+  abajo sigue reordenando la lista vertical sin regresiones.
 - `microciclo.tipo` (`normal` | `testeo` | `descarga`) distingue microciclos
   especiales de los bloques de progresión regulares - antes esto vivía
   implícito en `numero === 0`, que ya no alcanza porque una semana de

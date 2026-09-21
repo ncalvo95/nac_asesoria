@@ -1,22 +1,32 @@
 import { useRef, useState } from 'react';
 
-// Reordenar una lista arrastrando (mantener presionado y mover arriba/
-// abajo) con Pointer Events en vez de drag-and-drop nativo de HTML5, que no
-// anda bien con touch en varios navegadores de celular (esta app es
-// mobile-first).
+// Reordenar una lista arrastrando (mantener presionado y mover) con Pointer
+// Events en vez de drag-and-drop nativo de HTML5, que no anda bien con
+// touch en varios navegadores de celular (esta app es mobile-first).
 //
-// Clave del algoritmo: el swap se decide comparando el puntero contra los
-// centros de cada tarjeta CAPTURADOS UNA SOLA VEZ al arrancar el arrastre,
-// nunca recalculados en el medio. La version anterior volvia a leer
-// getBoundingClientRect() de todas las tarjetas en cada pointermove, pero
-// para ese momento el DOM ya reflejaba el ultimo swap (las demas tarjetas
-// ya se habian corrido) - asi que un swap podia dejar el puntero
-// "cayendo" sobre otra tarjeta sin que el mouse se hubiera movido mas,
-// disparando otro swap encadenado de una. En PC, con eventos de mouse
-// mucho mas finos que el touch, esto se sentia como un intercambio rapido
-// entre ejercicios apenas se tocaba el borde de una tarjeta. Con centros
-// fijos, cruzar un limite cuenta una sola vez por movimiento real del
-// puntero, sin importar cuanto se haya reordenado la lista mientras tanto.
+// Clave del algoritmo: el destino se decide comparando la posicion del
+// puntero contra los centros de cada tarjeta CAPTURADOS UNA SOLA VEZ al
+// arrancar el arrastre, nunca recalculados en el medio. La version anterior
+// volvia a leer getBoundingClientRect() de todas las tarjetas en cada
+// pointermove, pero para ese momento el DOM ya reflejaba el ultimo swap
+// (las demas tarjetas ya se habian corrido) - asi que un swap podia dejar
+// el puntero "cayendo" sobre otra tarjeta sin que el mouse se hubiera
+// movido mas, disparando otro swap encadenado de una. Con centros fijos,
+// un movimiento real del puntero cuenta una sola vez, sin importar cuanto
+// se haya reordenado la lista mientras tanto.
+//
+// A DIFERENCIA de la version anterior (que solo miraba la coordenada Y,
+// pensada para una lista de una sola columna), esta compara la posicion
+// del puntero contra el centro ORIGINAL de CADA tarjeta en X e Y, y elige
+// la mas cercana - necesario porque en PC (`md:grid-cols-2`, ver
+// EntrenamientoPage.jsx) las tarjetas se acomodan en 2 columnas, no en una
+// lista vertical: con la comparacion solo-Y, arrastrar una tarjeta hacia
+// el costado (misma fila, otra columna) no hacia NADA -el delta vertical
+// quedaba en ~0 asi que nunca cruzaba ningun limite-, que era justo lo que
+// hacia sentir el reordenar "tosco" en PC. Con "vecino mas cercano" en 2D,
+// el mismo codigo sirve para la grilla de escritorio y la lista de una
+// columna de celular (ahi la distancia se reduce sola a la vertical, ya
+// que todas las tarjetas comparten la misma X).
 //
 // idsActuales: array de ids en el orden actual (se recalcula cada render,
 // normal). onReordenado(idsFinal): se llama al soltar, con el array final -
@@ -33,9 +43,9 @@ export function useArrastreOrden(idsActuales, onReordenado) {
     const orden = [...idsActuales];
     const centros = orden.map((itemId) => {
       const rect = cardRefs.current[itemId]?.getBoundingClientRect();
-      return rect ? rect.top + rect.height / 2 : 0;
+      return rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : { x: 0, y: 0 };
     });
-    estadoRef.current = { id, ordenOriginal: orden, centrosOriginales: centros, startY: e.clientY };
+    estadoRef.current = { id, ordenOriginal: orden, centrosOriginales: centros, startX: e.clientX, startY: e.clientY };
     setOrdenArrastre(orden);
     setArrastrandoId(id);
     window.addEventListener('pointermove', onPointerMove);
@@ -46,22 +56,20 @@ export function useArrastreOrden(idsActuales, onReordenado) {
   function onPointerMove(e) {
     const st = estadoRef.current;
     if (!st) return;
-    const deltaY = e.clientY - st.startY;
     const idxOriginal = st.ordenOriginal.indexOf(st.id);
-    const centroActual = st.centrosOriginales[idxOriginal] + deltaY;
+    const centroOriginal = st.centrosOriginales[idxOriginal];
+    const actualX = centroOriginal.x + (e.clientX - st.startX);
+    const actualY = centroOriginal.y + (e.clientY - st.startY);
 
     let nuevoIndex = idxOriginal;
-    if (deltaY > 0) {
-      for (let i = idxOriginal + 1; i < st.ordenOriginal.length; i++) {
-        if (centroActual > st.centrosOriginales[i]) nuevoIndex = i;
-        else break;
+    let mejorDistancia = Infinity;
+    st.centrosOriginales.forEach((c, i) => {
+      const distancia = (c.x - actualX) ** 2 + (c.y - actualY) ** 2;
+      if (distancia < mejorDistancia) {
+        mejorDistancia = distancia;
+        nuevoIndex = i;
       }
-    } else if (deltaY < 0) {
-      for (let i = idxOriginal - 1; i >= 0; i--) {
-        if (centroActual < st.centrosOriginales[i]) nuevoIndex = i;
-        else break;
-      }
-    }
+    });
 
     setOrdenArrastre((prev) => {
       if (!prev) return prev;

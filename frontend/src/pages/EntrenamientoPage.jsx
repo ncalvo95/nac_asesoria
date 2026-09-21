@@ -461,11 +461,12 @@ function Semana0Form({ rutina, usuario, microciclo, onListo, todosMusculos }) {
               <div className="flex items-center justify-between">
                 <span
                   onPointerDown={(e) => iniciarArrastreSemana0(e, ej.id)}
-                  className="text-[14px] font-semibold cursor-grab active:cursor-grabbing select-none"
+                  className="flex items-center gap-1.5 -m-3 p-3 cursor-grab active:cursor-grabbing select-none"
                   style={{ touchAction: 'none' }}
                   title="Mantené presionado para reordenar"
                 >
-                  ⠿ {ej.ejercicio_nombre}
+                  <span aria-hidden="true" className="text-[19px] leading-none text-text-faint">⠿</span>
+                  <span className="text-[14px] font-semibold">{ej.ejercicio_nombre}</span>
                 </span>
                 <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
                   {formatearMusculo(ej.musculo_nombre)}
@@ -933,6 +934,20 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
   // - no cambia nada de lo que esta entrenando hoy.
   const [semanaVista, setSemanaVista] = useState(rutina.semana_actual ?? 1);
   const esSemanaActual = semanaVista === rutina.semana_actual;
+
+  // Coloreado verde/rojo de peso y reps contra lo pactado (en vivo y en
+  // semanas ya cerradas) - preferencia de este dispositivo, no del
+  // usuario en el backend (mismo criterio que el tema claro/oscuro en
+  // ThemeContext.jsx), asi que cada quien lo prende/apaga en su propia
+  // PC/celular sin afectar al otro.
+  const [coloreadoActivo, setColoreadoActivo] = useState(() => leerBorrador('nac_coloreado_activo') ?? true);
+  function alternarColoreado() {
+    setColoreadoActivo((prev) => {
+      const nuevo = !prev;
+      guardarBorrador('nac_coloreado_activo', nuevo);
+      return nuevo;
+    });
+  }
   const fechaDia = rutina.semana_actual
     ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), dia.dia_semana)
     : null;
@@ -952,6 +967,16 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
               ~{duracionEstimadaDia(dia)} min
             </span>
             <FaseNutricional rutinaId={rutina.id} faseActual={microciclo.fase_nutricional} onCambiada={onRutinaCambiada} />
+            <button
+              type="button"
+              onClick={alternarColoreado}
+              title={coloreadoActivo ? 'Apagar el coloreado de peso/reps contra lo pactado' : 'Prender el coloreado de peso/reps contra lo pactado'}
+              className={`h-6 rounded-full border px-2.5 text-[11px] font-semibold ${
+                coloreadoActivo ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+              }`}
+            >
+              🎨 Colores {coloreadoActivo ? 'ON' : 'OFF'}
+            </button>
           </div>
           <ExportarExcel rutinaId={rutina.id} usuarioId={usuario.id} microciclos={rutina.microciclos} />
         </div>
@@ -1067,6 +1092,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           todosMusculos={todosMusculos}
           diasHermanos={diasUnicos.filter((d) => d.id !== dia.id)}
           semanaActual={rutina.semana_actual}
+          coloreadoActivo={coloreadoActivo}
         />
       ) : (
         <ResumenSemanaPasada
@@ -1074,6 +1100,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           dia={dia}
           numeroSemana={semanaVista}
           registro={dia.registros_semana?.[semanaVista] ?? null}
+          coloreadoActivo={coloreadoActivo}
         />
       )}
 
@@ -1127,7 +1154,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
 // que lo que se esta entrenando/editando hoy es la semana actual, que sigue
 // siendo RegistroDia de siempre. No permite cargar ni editar nada: eso solo
 // se hace en la semana actual, como siempre paso.
-function ResumenSemanaPasada({ dia, numeroSemana, registro }) {
+function ResumenSemanaPasada({ dia, numeroSemana, registro, coloreadoActivo }) {
   if (!registro) {
     return (
       <div className="bg-surface border border-border rounded-[14px] p-4 text-[13px] text-text-muted">
@@ -1154,7 +1181,7 @@ function ResumenSemanaPasada({ dia, numeroSemana, registro }) {
       {dia.ejercicios.map((ej) => {
         const series = seriesPorEjercicio.get(ej.id) ?? [];
         if (series.length === 0) return null;
-        const { pesoColor, repsColores } = colorVsPactado(series, ej);
+        const { pesoColor, repsColores } = coloreadoActivo ? colorVsPactado(series, ej) : { pesoColor: null, repsColores: [] };
         let contadorReal = 0;
         const filas = series.map((s) => ({ s, realIdx: s.es_dropset ? -1 : contadorReal++ }));
         return (
@@ -1275,7 +1302,7 @@ function colorClaseInput(color) {
   return 'border-border';
 }
 
-function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos, diasHermanos, semanaActual }) {
+function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos, diasHermanos, semanaActual, coloreadoActivo }) {
   const borradorKey = `nac_borrador_dia_${dia.id}_${microciclo.id}`;
   const [series, setSeries] = useState(() => {
     const base = construirEstadoInicial(dia);
@@ -1732,7 +1759,9 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
             (e) => e.musculo_objetivo_id === ej.musculo_objetivo_id
           ).length === 1;
           const seriesReferencia = seriesPactadasAlAbrir[ej.id] ?? ej.series_actuales;
-          const { pesoColor, repsColores } = colorVsPactadoLive(seriesPorEjercicio[ej.id], ej, seriesReferencia);
+          const { pesoColor, repsColores } = coloreadoActivo
+            ? colorVsPactadoLive(seriesPorEjercicio[ej.id], ej, seriesReferencia)
+            : { pesoColor: null, repsColores: [] };
           return (
             <div
               key={ej.id}
@@ -1745,11 +1774,18 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                 <div className="flex flex-col gap-1">
                   <span
                     onPointerDown={(e) => iniciarArrastre(e, ej.id)}
-                    className="text-[14.5px] font-semibold cursor-grab active:cursor-grabbing select-none"
+                    // -m-3 p-3 agranda el area de agarre real (toque/click)
+                    // bastante mas alla del texto sin correr el layout
+                    // visual -el padding infla la caja, el margen negativo
+                    // la vuelve a acomodar en el mismo lugar-: antes el
+                    // target era solo la altura de una linea de texto
+                    // (~20px), muy chico para agarrar comodo con el dedo.
+                    className="flex items-center gap-1.5 -m-3 p-3 cursor-grab active:cursor-grabbing select-none"
                     style={{ touchAction: 'none' }}
                     title="Mantené presionado para reordenar"
                   >
-                    ⠿ {ej.ejercicio_nombre}
+                    <span aria-hidden="true" className="text-[19px] leading-none text-text-faint">⠿</span>
+                    <span className="text-[14.5px] font-semibold">{ej.ejercicio_nombre}</span>
                   </span>
                   <span className="text-[12px] text-text-faint whitespace-nowrap">
                     {ej.rango_reps_min}–{ej.rango_reps_max} reps · Descanso {ej.descanso_segundos}s
