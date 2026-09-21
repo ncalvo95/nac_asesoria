@@ -592,7 +592,7 @@ sessions → closing a microcycle → progress → Excel export):
   fine-grained movement (1px per step) over 16 exercises produced a single
   clean reorder, with no back-and-forth oscillation at all (this same
   movement would previously have triggered several chained swaps).
-- **Toggle to turn coloring on/off** ("🎨 Colors ON/OFF", next to the
+- **Toggle to turn coloring on/off** ("Colors ON/OFF", next to the
   nutritional-phase picker in the day header): all coloring against the
   plan -live (`RegistroDia`) and in the closed-week view
   (`ResumenSemanaPasada`)- is now optional. The preference is saved in

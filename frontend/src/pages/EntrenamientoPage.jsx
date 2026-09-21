@@ -975,7 +975,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
                 coloreadoActivo ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
               }`}
             >
-              🎨 Colores {coloreadoActivo ? 'ON' : 'OFF'}
+              Colores {coloreadoActivo ? 'ON' : 'OFF'}
             </button>
           </div>
           <ExportarExcel rutinaId={rutina.id} usuarioId={usuario.id} microciclos={rutina.microciclos} />

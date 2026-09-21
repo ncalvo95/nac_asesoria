@@ -794,7 +794,7 @@ cierre de microciclo → progreso → export a Excel):
   movimiento fino (1px por paso) sobre 16 ejercicios produjo un solo
   cambio de orden limpio, sin ninguna oscilación de ida y vuelta (antes
   este mismo movimiento habría generado varios cambios encadenados).
-- **Botón para apagar/prender el coloreado** ("🎨 Colores ON/OFF", junto al
+- **Botón para apagar/prender el coloreado** ("Colores ON/OFF", junto al
   selector de fase nutricional en el encabezado del día): todo el coloreado
   contra lo pactado -en vivo (`RegistroDia`) y en la vista de semana cerrada
   (`ResumenSemanaPasada`)- ahora es opcional. Preferencia guardada en
