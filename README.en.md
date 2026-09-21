@@ -546,6 +546,35 @@ sessions → closing a microcycle → progress → Excel export):
   with Playwright: week 1 seeded with the exact -2 pattern (14-12-10-8,
   `piso_reps=14`) and moved on to week 2 - opening the "Week 1" toggle,
   none of the 4 sets come back colored.
+- **Critical fix: the week-2 pre-fill broke cross-device draft sync**
+  (`RegistroDia`): adding the week-2 pre-fill (see above) means every
+  field now starts with real data from mount, even before the user has
+  touched anything - and the `useEffect` that saves `series` to
+  `localStorage` on every change (so nothing gets lost if the tab closes)
+  also runs on mount, so that untouched pre-fill got saved to THAT
+  device's `localStorage` as if it were "real local typing." Consequence:
+  edit something on the phone and tap "Save draft", then open the PC
+  (which had never typed anything, only had the pre-fill) - the draft
+  merge applied the remote one first -with the phone's change- but THEN
+  the PC's local one, which thanks to this same effect already had its
+  own untouched pre-fill saved - and that local copy, having "real" (non-
+  empty) data (the same check that already protected this merge against
+  a genuinely empty local draft), ended up overwriting the change just
+  pulled from the phone. Root cause of exactly the user's report ("the
+  changes I make on my phone don't show up on the PC"). Fixed by
+  comparing `series` by REFERENCE against the value captured on the first
+  render (`useRef(series)` read during render, not inside an effect)
+  instead of "skip only the first time the effect runs": in development,
+  StrictMode invokes mount effects twice, so a "first time" flag/counter
+  gets used up on that phantom invocation and the local save still slips
+  through on the second one - comparing by reference is immune to this
+  because `series` only changes identity when a `setSeries` call actually
+  carries different data. Verified with Playwright using two separate
+  `BrowserContext`s (simulating PC/phone): confirmed `localStorage` stays
+  empty on mount with nothing touched, that it DOES save as soon as
+  something real gets typed, and that the full flow - edit on "phone",
+  save draft, reload "PC" - now correctly picks up the new value (it used
+  to bring back the old one).
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual

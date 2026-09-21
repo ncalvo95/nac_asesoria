@@ -1357,7 +1357,33 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     return map;
   });
 
-  useEffect(() => { guardarBorrador(borradorKey, series); }, [borradorKey, series]);
+  // No persistir el valor de "series" tal cual queda al MONTAR: en ese
+  // momento ya puede traer datos reales sin que el usuario haya tocado
+  // nada -precarga de semana 1 en semana 2 (ver arriba), sesion ya
+  // registrada, borrador remoto recien mezclado- y guardarlos de nuevo en
+  // localStorage los disfraza de "tipeo local de este dispositivo". Bug
+  // real que esto arregla: si el celular editaba algo y tocaba "Guardar
+  // borrador", al abrir la PC (que nunca habia tipeado nada, solo tenia
+  // la precarga de semana 1) el merge de borradores aplicaba primero el
+  // remoto -con el cambio del celular- pero DESPUES el local de la PC,
+  // que ya habia guardado en su propio localStorage la precarga sin
+  // editar apenas montó - y esa carga local, al tener datos "reales" (no
+  // vacios), pisaba el cambio recien traido del celular.
+  //
+  // Comparar por REFERENCIA contra el valor capturado al renderizar por
+  // primera vez (en vez de "saltear solo la primera vez que corre el
+  // efecto") es a proposito: en desarrollo, StrictMode invoca los efectos
+  // de montaje dos veces, así que un contador/flag de "primera vez" ya se
+  // gasta en esa primera invocación fantasma y el efecto persiste igual
+  // en la segunda. `series` solo cambia de referencia cuando de verdad
+  // hay un `setSeries` con datos distintos (los efectos de reconciliacion
+  // de abajo devuelven la misma referencia si no hubo cambio real), asi
+  // que esta comparacion es inmune a cuantas veces se invoque el efecto.
+  const seriesInicialRef = useRef(series);
+  useEffect(() => {
+    if (series === seriesInicialRef.current) return;
+    guardarBorrador(borradorKey, series);
+  }, [borradorKey, series]);
   // El aviso "borrador guardado" es solo para el instante despues de
   // tocar el boton - si se sigue tipeando despues, deja de ser cierto.
   useEffect(() => { setBorradorGuardado(false); }, [series]);

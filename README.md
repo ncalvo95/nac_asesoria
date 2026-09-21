@@ -746,6 +746,37 @@ cierre de microciclo → progreso → export a Excel):
   proteger-. Verificado con Playwright: semana 1 sembrada con el patrón
   -2 exacto (14-12-10-8, `piso_reps=14`) y avanzada a semana 2 - al abrir
   el toggle "Semana 1", ninguna de las 4 series queda pintada.
+- **Fix crítico: la precarga de semana 2 rompió la sincronización de
+  borrador entre dispositivos** (`RegistroDia`): al agregar la precarga
+  de semana 2 con los valores de semana 1 (ver más arriba), cada campo
+  arranca con datos reales desde el montaje aunque el usuario no haya
+  tocado nada todavía - y el `useEffect` que guarda "series" en
+  `localStorage` en cada cambio (para no perder lo tipeado si se cierra
+  la pestaña) también corre en el montaje, así que esa precarga sin
+  editar quedaba guardada en el `localStorage` de ESE dispositivo como si
+  fuera "tipeo local real". Consecuencia: si se editaba algo en el
+  celular y se tocaba "Guardar borrador", al abrir la PC (que nunca había
+  tipeado nada, solo tenía la precarga) el merge de borradores aplicaba
+  primero el remoto -con el cambio del celular- pero DESPUÉS el local de
+  la PC, que por este mismo efecto ya tenía guardada su propia precarga
+  sin editar - y esa carga local, al tener datos "reales" (no vacíos, el
+  mismo chequeo que ya protegía este merge contra un borrador local
+  genuinamente vacío), terminaba pisando el cambio recién traído del
+  celular. Root cause de exactamente el reporte del usuario ("los cambios
+  que hago en el celular no se ven en la PC"). Arreglado comparando
+  `series` por REFERENCIA contra el valor capturado en el primer render
+  (`useRef(series)` leído durante el render, no en un efecto) en vez de
+  "saltear solo la primera vez que corre el efecto": en desarrollo,
+  StrictMode invoca los efectos de montaje dos veces, así que un
+  flag/contador de "primera vez" se gasta en esa invocación fantasma y
+  el guardado local se cuela igual en la segunda - la comparación por
+  referencia es inmune a esto porque `series` solo cambia de identidad
+  cuando hay un `setSeries` con datos de verdad distintos. Verificado con
+  Playwright con dos `BrowserContext` separados (simulando PC/celular):
+  confirmado que el `localStorage` queda vacío en el montaje sin tocar
+  nada, que SÍ se guarda apenas se tipea algo real, y que el flujo
+  completo -editar en "celular", guardar borrador, recargar "PC"- ahora
+  sí trae el valor nuevo (antes traía el viejo).
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se
