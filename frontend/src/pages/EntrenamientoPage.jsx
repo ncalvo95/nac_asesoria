@@ -1154,20 +1154,20 @@ function ResumenSemanaPasada({ dia, numeroSemana, registro }) {
       {dia.ejercicios.map((ej) => {
         const series = seriesPorEjercicio.get(ej.id) ?? [];
         if (series.length === 0) return null;
-        const { pesoColor, repsColor } = colorVsPactado(series, ej);
-        const reales = series.filter((s) => !s.es_dropset);
-        const idUltimaReal = reales[reales.length - 1]?.id;
+        const { pesoColor, repsColores } = colorVsPactado(series, ej);
+        let contadorReal = 0;
+        const filas = series.map((s) => ({ s, realIdx: s.es_dropset ? -1 : contadorReal++ }));
         return (
           <div key={ej.id} className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-2 min-w-0">
             <span className="text-[14.5px] font-semibold">{ej.ejercicio_nombre}</span>
             <div className="flex flex-col gap-1">
-              {series.map((s) => (
+              {filas.map(({ s, realIdx }) => (
                 <div key={s.id} className="flex items-center gap-3 text-[13px] tabular">
                   <span className="text-text-faint w-14">{s.es_dropset ? 'Dropset' : `Serie ${s.numero_serie}`}</span>
                   <span>
                     <span className={s.es_dropset ? '' : colorClase(pesoColor)}>{s.peso} kg</span>
                     {' × '}
-                    <span className={!s.es_dropset && s.id === idUltimaReal ? colorClase(repsColor) : ''}>{s.reps} reps</span>
+                    <span className={!s.es_dropset ? colorClase(repsColores[realIdx]) : ''}>{s.reps} reps</span>
                   </span>
                   {s.rir != null && <span className="text-text-faint">RIR {s.rir}</span>}
                 </div>
@@ -1180,29 +1180,37 @@ function ResumenSemanaPasada({ dia, numeroSemana, registro }) {
   );
 }
 
-// Mismo criterio que el Excel de historial (agregarSesionAlSheet en
-// excelGenerator.js): compara contra lo pactado del microciclo en curso
-// (ej.peso_actual/ej.piso_reps, que reflejan progreso_ejercicio_microciclo -
-// ver ejerciciosStmt en rutinaService.js) - verde si se hizo mas, rojo si
+// Compara contra lo pactado del microciclo en curso (ej.peso_actual/
+// ej.piso_reps, que reflejan progreso_ejercicio_microciclo - ver
+// ejerciciosStmt en rutinaService.js) - verde si se hizo mas, rojo si
 // menos. Las reps solo se colorean si el peso no cambio: si subiste o
 // bajaste el peso, hacer menos o mas reps es esperable y no dice nada por
 // si solo.
+//
+// Cada serie real se compara contra un objetivo FIJO calculado una sola
+// vez desde piso_reps (piso_reps - 2*indice: serie 1 = piso_reps, serie 2
+// = piso_reps-2, ...) - mismo criterio que colorVsPactadoLive (el modo en
+// vivo). Antes esta funcion comparaba solo la ULTIMA serie real contra
+// piso_reps sin decrementar, lo que en una semana YA CERRADA (vista
+// "Semana 1"/"Semana 2" tras haber avanzado a la semana siguiente)
+// marcaba en rojo una caida de reps perfectamente esperable por fatiga.
 function colorVsPactado(series, ej) {
-  const reales = series.filter((s) => !s.es_dropset);
-  if (reales.length === 0) return { pesoColor: null, repsColor: null };
+  const reales = series.filter((s) => !s.es_dropset).sort((a, b) => a.numero_serie - b.numero_serie);
+  if (reales.length === 0) return { pesoColor: null, repsColores: [] };
   let pesoColor = null;
   if (ej.peso_actual != null) {
     const pesoUsado = reales[0].peso;
     if (pesoUsado > ej.peso_actual) pesoColor = 'verde';
     else if (pesoUsado < ej.peso_actual) pesoColor = 'rojo';
   }
-  let repsColor = null;
-  if (pesoColor == null && ej.piso_reps != null) {
-    const ultimaReal = reales[reales.length - 1];
-    if (ultimaReal.reps > ej.piso_reps) repsColor = 'verde';
-    else if (ultimaReal.reps < ej.piso_reps) repsColor = 'rojo';
-  }
-  return { pesoColor, repsColor };
+  const repsColores = reales.map((s, idx) => {
+    if (pesoColor != null || ej.piso_reps == null) return null;
+    const target = ej.piso_reps - 2 * idx;
+    if (s.reps > target) return 'verde';
+    if (s.reps < target) return 'rojo';
+    return null;
+  });
+  return { pesoColor, repsColores };
 }
 
 function colorClase(color) {

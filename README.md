@@ -728,6 +728,24 @@ cierre de microciclo → progreso → export a Excel):
   al abrir semana 2 por primera vez, el formulario ya trae esos mismos 9
   valores (peso, reps, RIR) cargados y coloreados 100% en base al piso
   original, sin ningún cambio en la lógica de coloreado en sí.
+- **Fix: el mismo bug del "objetivo único sin decrementar" seguía vivo en
+  la vista de semana ya cerrada** (`colorVsPactado`, usada por
+  `ResumenSemanaPasada` - el toggle "Semana 1"/"Semana 2" una vez que ya
+  se avanzó a la semana siguiente): el fix del modo en vivo había
+  quedado sin aplicar acá - esta función seguía comparando solo la
+  ÚLTIMA serie real contra `piso_reps` tal cual, sin decrementar por
+  índice, así que una rutina de 3+ series con una caída de reps
+  perfectamente esperable por fatiga (ej. 14-12-10-8 con `piso_reps=14`)
+  aparecía con la última serie en rojo apenas se pasaba de semana -
+  justo el reporte del usuario ("si hoy empiezo semana 2, la semana 1...
+  está mal coloreada"). Ahora usa el mismo objetivo fijo por serie que ya
+  tiene `colorVsPactadoLive` (`piso_reps - 2*índice`), aplicado a CADA
+  serie real (no solo a la última). No lleva el guard de "serie nueva sin
+  referencia" del modo en vivo -acá todas las series mostradas ya se
+  registraron de verdad en su momento, no hay tipeo a medio terminar que
+  proteger-. Verificado con Playwright: semana 1 sembrada con el patrón
+  -2 exacto (14-12-10-8, `piso_reps=14`) y avanzada a semana 2 - al abrir
+  el toggle "Semana 1", ninguna de las 4 series queda pintada.
 - **Fix: arrastrar para reordenar ejercicios generaba intercambios rápidos
   en PC** (`useArrastreOrden.js`, hook nuevo compartido por `RegistroDia` y
   `Semana0Form` - antes tenían el mismo algoritmo duplicado): el swap se

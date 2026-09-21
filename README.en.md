@@ -529,6 +529,23 @@ sessions → closing a microcycle → progress → Excel export):
   opening week 2 for the first time, the form already carries those same
   9 values (weight, reps, RIR) loaded and colored entirely against the
   original floor, with zero change to the coloring logic itself.
+- **Fix: the same "single un-decremented target" bug was still alive in
+  the already-closed-week view** (`colorVsPactado`, used by
+  `ResumenSemanaPasada` - the "Week 1"/"Week 2" toggle once you've already
+  moved on to the next week): the live-mode fix had never been ported
+  here - this function still compared only the LAST real set against
+  `piso_reps` as-is, with no per-index decrement, so a 3+ set routine
+  with a perfectly normal fatigue-driven rep drop (e.g. 14-12-10-8 with
+  `piso_reps=14`) showed its last set red the moment you moved past that
+  week - exactly the user's report ("if I'm starting week 2 today, week
+  1... is colored wrong"). It now uses the same fixed per-set target as
+  `colorVsPactadoLive` (`piso_reps - 2*index`), applied to EVERY real
+  set (not just the last). It skips the live view's "new set with no
+  history" guard - every set shown here was actually logged for real at
+  the time, there's no half-typed input to protect against. Verified
+  with Playwright: week 1 seeded with the exact -2 pattern (14-12-10-8,
+  `piso_reps=14`) and moved on to week 2 - opening the "Week 1" toggle,
+  none of the 4 sets come back colored.
 
 - Frontend (`frontend/`): login (with "remember me"), onboarding (with a
   choice of automatic generation, a custom split, or a fully manual
