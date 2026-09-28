@@ -774,6 +774,23 @@ sessions → closing a microcycle → progress → Excel export):
   toggle off - closing the microcycle, the one left off kept exactly the
   same weight and rep floor it already had, while the other one went up in
   weight and rep floor with the usual rule.
+- **"Last draft saved" indicator** (`dia.borrador_actualizado_en` from
+  `obtenerRutinaActiva`, text next to the "Save draft" button in
+  `RegistroDia`): prompted by a report that the draft seemed to disappear
+  "with every update" (every time a code update gets deployed) - dug into
+  it thoroughly without being able to reproduce it from the app itself
+  (reloading without saving, "Save draft" + reload, and other actions in
+  between like toggling DropSet, all tested with Playwright, and in all
+  three cases the draft survived intact, both the local one and the one
+  synced to the backend; nor did the persistent Docker volume or `DB_PATH`
+  ever change across the repo's history) - so instead of a blind fix, this
+  gets added: opening a day that already had a draft saved on the backend
+  now shows the exact date and time of that save; and tapping "Save draft"
+  updates it right away, without waiting on a refetch. That way, next time
+  it happens, a glance at the screen is enough to tell whether the remote
+  save actually landed or not -instead of finding out only once it's time
+  to train-, which will say for sure whether the problem is in the app or
+  somewhere else (e.g. the deploy process on the Pi).
 
 Known limitations / accepted simplifications:
 

@@ -1033,6 +1033,24 @@ cierre de microciclo → progreso → export a Excel):
   toggle apagado - al cerrar el microciclo, el que quedó apagado mantuvo
   exactamente el mismo peso y piso de reps que traía, mientras el otro
   subió de peso y piso de reps con el criterio de siempre.
+- **Indicador de "Último borrador guardado"** (`dia.borrador_actualizado_en`
+  desde `obtenerRutinaActiva`, texto junto al botón "Guardar borrador" en
+  `RegistroDia`): a raíz de un reporte de que el borrador parecía
+  desaparecer "con cada update" (cada vez que se sube una actualización de
+  código) - investigado a fondo sin lograr reproducirlo desde la app en sí
+  (recarga sin guardar, "Guardar borrador" + recarga, y otras acciones en
+  el medio como togglear DropSet, todo probado con Playwright y en los tres
+  casos el borrador sobrevivió intacto, tanto el local como el sincronizado
+  al backend; tampoco encontramos que el volumen Docker persistente o el
+  `DB_PATH` hayan cambiado nunca en el historial del repo) - así que en vez
+  de un fix a ciegas, se agrega esto: apenas se abre un día que ya tenía un
+  borrador guardado en el backend, se ve la fecha y hora exactas de ese
+  guardado; y al tocar "Guardar borrador" se actualiza al toque, sin
+  esperar a un refetch. Así, la próxima vez que pase, alcanza con mirar la
+  pantalla para saber si el guardado remoto realmente llegó o no -en vez de
+  descubrirlo recién a la hora de entrenar-, lo que va a decir con certeza
+  si el problema está en la app o en otro lado (ej. el proceso de deploy en
+  la Pi).
 
 Pendiente / simplificaciones conocidas:
 

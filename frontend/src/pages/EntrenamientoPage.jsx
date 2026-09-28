@@ -192,6 +192,16 @@ function formatearFechaCorta(fecha) {
   return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
 }
 
+// borrador_dia.actualizado_en viene de SQLite como "YYYY-MM-DD HH:MM:SS" en
+// UTC (datetime('now')), sin "T" ni zona - Safari/iOS no lo parsea con
+// Date() a secas, así que se arma explícito como UTC antes de convertir a
+// la hora local (un ISO ya completo, como el que arma new Date().toISOString()
+// justo despues de guardar, se deja pasar tal cual).
+function formatearFechaHora(fecha) {
+  const iso = fecha.includes('T') ? fecha : `${fecha.replace(' ', 'T')}Z`;
+  return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
 function sumarDiasFecha(fechaIso, dias) {
   const fecha = new Date(`${fechaIso}T00:00:00`);
   fecha.setDate(fecha.getDate() + dias);
@@ -1512,6 +1522,15 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   // dispositivo/navegador, asi que un DropSet tildado (o cualquier peso/
   // reps ya tipeado) no se veia del otro lado hasta recien registrar la
   // sesion entera.
+  // Se muestra junto al boton "Guardar borrador" (ver mas abajo) para que
+  // quede claro, con solo mirar la pantalla, si lo tipeado en OTRO
+  // dispositivo (o antes de actualizar la app) llego de verdad al backend -
+  // en vez de tener que confiar a ciegas en que el guardado "funciono".
+  // Arranca con lo que ya traia el dia (dia.borrador_actualizado_en, del
+  // ultimo guardado de cualquier dispositivo) y se actualiza local apenas
+  // este mismo guardado tiene éxito, sin esperar el proximo refetch.
+  const [ultimoBorradorGuardado, setUltimoBorradorGuardado] = useState(dia.borrador_actualizado_en);
+
   async function guardarBorradorRemoto() {
     setError('');
     setGuardandoBorrador(true);
@@ -1519,6 +1538,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     try {
       await api.put(`/dias/${dia.id}/borrador`, { microciclo_id: microciclo.id, valores: series });
       setBorradorGuardado(true);
+      setUltimoBorradorGuardado(new Date().toISOString());
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1992,6 +2012,11 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
 
       {error && <p className="text-[13px] text-danger">{error}</p>}
 
+      {ultimoBorradorGuardado && (
+        <p className="text-[11.5px] text-text-faint -mb-1">
+          Último borrador guardado: {formatearFechaHora(ultimoBorradorGuardado)}
+        </p>
+      )}
       <div className="flex gap-2">
         <button
           type="button"
