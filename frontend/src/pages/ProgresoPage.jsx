@@ -291,6 +291,13 @@ export default function ProgresoPage() {
                   <span className="text-[13px] font-semibold">{e.ejercicio_nombre}</span>
                   <span className="text-[12px] text-text-muted leading-relaxed">{e.nota}</span>
                   <span className="tabular text-[11px] text-text-faint">{e.reps_efectivas} reps efectivas</span>
+                  <span className="tabular text-[11px] text-text-faint">
+                    Pactado ese microciclo: {e.peso_prescrito} kg × {e.piso_reps} reps (piso)
+                    {(e.sem1_reps != null || e.sem2_reps != null) && (
+                      <> · Semana 1: {e.sem1_reps ?? '—'} reps · Semana 2: {e.sem2_reps ?? '—'} reps</>
+                    )}
+                    {e.techo_reps != null && <> · Techo: {e.techo_reps}</>}
+                  </span>
                 </div>
               </div>
             ))}

@@ -2057,6 +2057,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [mostrarSustituir, setMostrarSustituir] = useState(false);
   const [mostrarPeso, setMostrarPeso] = useState(false);
+  const [mostrarPiso, setMostrarPiso] = useState(false);
   const [mostrarDescanso, setMostrarDescanso] = useState(false);
   const [mostrarMoverCopiar, setMostrarMoverCopiar] = useState(false);
   const [mostrarEditarNombre, setMostrarEditarNombre] = useState(false);
@@ -2165,6 +2166,16 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
               >
                 Peso base
               </button>
+              {ejercicio.piso_reps != null && (
+                <button
+                  type="button"
+                  onClick={() => abrir(setMostrarPiso)}
+                  title="El objetivo sugerido en gris para la 1ra serie - ver Progreso para consultar el de microciclos anteriores"
+                  className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
+                >
+                  Piso de reps
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => abrir(setMostrarDescanso)}
@@ -2227,6 +2238,15 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
             ejercicioId={ejercicio.id}
             pesoActual={ejercicio.peso_actual}
             onAjustado={() => { setMostrarPeso(false); onCambiado(); }}
+          />
+        </div>
+      )}
+      {mostrarPiso && (
+        <div className="flex justify-end">
+          <AjustePisoReps
+            ejercicioId={ejercicio.id}
+            pisoActual={ejercicio.piso_reps}
+            onAjustado={() => { setMostrarPiso(false); onCambiado(); }}
           />
         </div>
       )}
@@ -2395,6 +2415,56 @@ function AjustePeso({ ejercicioId, pesoActual, onAjustado }) {
       <input
         type="number" inputMode="decimal" value={peso}
         onChange={(e) => setPeso(e.target.value)}
+        className="w-20 h-8 rounded-md border border-border bg-bg px-2 tabular text-[13px] outline-none focus:border-accent"
+      />
+      <button
+        type="button"
+        onClick={confirmar}
+        disabled={enviando}
+        className="h-8 px-3 rounded-md bg-accent text-accent-fg text-[12px] font-semibold disabled:opacity-60"
+      >
+        {enviando ? 'Guardando…' : 'Guardar'}
+      </button>
+      {error && <span className="text-[11px] text-danger">{error}</span>}
+    </div>
+  );
+}
+
+// Ajuste manual del piso de reps (el objetivo sugerido en gris para la 1ra
+// serie) del microciclo EN CURSO, sin esperar al proximo cierre - mismo
+// patron que AjustePeso, pero para piso_reps. Hasta ahora la unica forma
+// de corregirlo era "Editar Semana 0", que solo funciona en el primer
+// microciclo despues de un testeo - esto cubre cualquier microciclo mas
+// adelante (ej. volver a lo que se tenia antes de un ajuste automatico no
+// deseado - ver Progreso para consultar el piso pactado del ultimo cierre).
+function AjustePisoReps({ ejercicioId, pisoActual, onAjustado }) {
+  const [piso, setPiso] = useState(pisoActual ?? '');
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  async function confirmar() {
+    const valor = Number(piso);
+    if (!piso || !Number.isInteger(valor) || valor <= 0) {
+      setError('Ingresá un número entero mayor a 0.');
+      return;
+    }
+    setEnviando(true);
+    setError('');
+    try {
+      await api.patch(`/ejercicios/${ejercicioId}/piso-reps`, { piso_reps: valor });
+      onAjustado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="number" inputMode="numeric" value={piso}
+        onChange={(e) => setPiso(e.target.value)}
         className="w-20 h-8 rounded-md border border-border bg-bg px-2 tabular text-[13px] outline-none focus:border-accent"
       />
       <button

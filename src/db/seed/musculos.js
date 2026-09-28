@@ -39,4 +39,11 @@ export const musculos = [
   // muerto, y el volumen directo se mantiene bajo a proposito por riesgo de
   // lesion/fatiga sistemica si se pasa de rosca.
   { nombre: 'lumbares', region: 'torso', mev: 0, mav: 6, mrv: 12 },
+  // Antes solo existia como musculo secundario informal dentro de "espalda"
+  // (ver el comentario viejo "Espalda (alta / trapecio / romboides)" en
+  // ejercicios.js) - pasa a tener volumen propio, igual que se hizo con el
+  // deltoides por cabeza, para no mezclar el trabajo directo de encogimientos
+  // con el resto de la espalda alta (remo, jalones). Ya recibe bastante
+  // estimulo indirecto de remos y peso muerto, por eso el MEV es bajo.
+  { nombre: 'trapecio', region: 'torso', mev: 4, mav: 12, mrv: 18 },
 ];

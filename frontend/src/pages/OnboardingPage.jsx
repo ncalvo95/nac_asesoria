@@ -26,6 +26,7 @@ const MUSCULOS = [
   { id: 'deltoides_posterior', label: 'Deltoides posterior' },
   { id: 'biceps', label: 'Bíceps' },
   { id: 'triceps', label: 'Tríceps' },
+  { id: 'trapecio', label: 'Trapecio' },
   { id: 'abdominales', label: 'Abdominales' },
   { id: 'cuadriceps', label: 'Cuádriceps' },
   { id: 'isquiotibiales', label: 'Isquiotibiales' },

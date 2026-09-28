@@ -791,6 +791,44 @@ sessions → closing a microcycle → progress → Excel export):
   save actually landed or not -instead of finding out only once it's time
   to train-, which will say for sure whether the problem is in the app or
   somewhere else (e.g. the deploy process on the Pi).
+- **New muscle: trapezius** (`src/db/seed/musculos.js` + `ejercicios.js`,
+  retroactive for already-seeded databases via `migrarTrapecio()` in
+  `migrate.js`): it used to live implicitly inside the generic "espalda"
+  (back) muscle (the catalog's original comment literally said "Back
+  (upper / trapezius / rhomboids)"), mixing its volume with rows/pulldowns
+  - now it has its own weekly volume (MEV/MAV/MRV) and shows up separately
+  in Progreso, the same way it was done for deltoids by head. "Barbell
+  shrugs" (the only exercise that already existed for this) got
+  reclassified from "espalda" to "trapecio" - both in the catalog and in
+  any `ejercicio_asignado` on an active routine that already had it
+  assigned (same pattern as the deltoid migration, retroactive and
+  idempotent) -, and "Dumbbell shrugs" was added as a second option. It
+  enters the Upper and Pull auto-build splits (it trains better alongside
+  pulling than pushing, same rule as the posterior deltoid). Verified by
+  migrating a database seeded with the old catalog (no trapezius, with a
+  user who already had "Barbell shrugs" assigned in their active routine):
+  after migrating, both the catalog and the user's `ejercicio_asignado`
+  ended up pointing at "trapecio", with no duplicate rows from running the
+  migration a second time.
+- **See what was prescribed (weight/rep floor) in the previous microcycle,
+  and be able to manually correct the current microcycle's rep floor**
+  (Progreso now shows "Set for that microcycle: X kg × Y reps (floor) ·
+  Week 1: ... reps · Week 2: ... reps · Ceiling: ..." on each "AT
+  MICROCYCLE CLOSE" card, with data the backend already computed and
+  stored but never displayed anywhere; a new "Rep floor" button in each
+  exercise's "⋯" menu on Entrenamiento, `PATCH /ejercicios/:id/piso-reps`):
+  prompted by an automatic adjustment (before the toggle to disable it
+  existed) having changed an exercise's weight and reps with no visible
+  trace left of what the values were before the change. The base weight
+  could already be corrected by hand ("Peso base"), but the current
+  microcycle's rep floor had no way to be edited outside of "Editar Semana
+  0" -which only works on the first microcycle right after a test week,
+  never a later one-, so there was no way back to what it was before an
+  unwanted adjustment. Verified with an exercise that had a closed
+  microcycle (week 1: 13 reps, week 2: 13 reps, ceiling 13, floor set at
+  15): Progreso showed those 4 numbers correctly, and changing the current
+  microcycle's rep floor to 20 through the new button updated exactly that
+  row in the database (the closed microcycle's row stayed untouched).
 
 Known limitations / accepted simplifications:
 
@@ -816,6 +854,16 @@ Known limitations / accepted simplifications:
   the coach approves or rejects them (`src/services/solicitudCambio.js`,
   coach panel). If the coach edits their client directly it skips this
   entirely (the coach is already who'd be approving it). Off by default.
+- The guest Excel's `modo=plan` (live formulas, `excelGenerator.js`) has
+  its own hardcoded `TODOS_MUSCULOS` list that's out of date - missing
+  deltoids by head (still on the old unified "deltoides"),
+  abductores/aductores/lumbares, and now trapezius too. An exercise from
+  any of those muscles in a guest's routine leaves that row's
+  "MusculosResumen" formula with a broken reference (`ENaN`). Not new from
+  this change -it's been this way since deltoids got split-, and
+  `modo=historial` (the default, no formulas) doesn't have this problem
+  since it reads muscles from the database live. Left to do: sync that
+  list with the database, or better, drop it and compute it dynamically.
 
 ## Setup
 

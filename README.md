@@ -1051,6 +1051,45 @@ cierre de microciclo → progreso → export a Excel):
   descubrirlo recién a la hora de entrenar-, lo que va a decir con certeza
   si el problema está en la app o en otro lado (ej. el proceso de deploy en
   la Pi).
+- **Nuevo músculo: trapecio** (`src/db/seed/musculos.js` + `ejercicios.js`,
+  retroactivo para bases ya seedeadas vía `migrarTrapecio()` en
+  `migrate.js`): antes vivía implícito dentro del músculo genérico
+  "espalda" (el comentario original del catálogo decía literalmente
+  "Espalda (alta / trapecio / romboides)"), mezclando su volumen con el de
+  remos/jalones - ahora tiene su propio volumen semanal (MEV/MAV/MRV) y
+  aparece separado en Progreso, igual que ya se hizo con el deltoides por
+  cabeza. "Encogimientos con barra" (el único ejercicio que ya existía para
+  esto) se reclasificó de "espalda" a "trapecio" - tanto en el catálogo
+  como en cualquier `ejercicio_asignado` de una rutina activa que ya lo
+  tuviera puesto (mismo patrón que la migración de deltoides, retroactivo e
+  idempotente) -, y se sumó "Encogimientos con mancuernas" como segunda
+  opción. Entra en los splits Upper y Pull del armado automático (se
+  entrena mejor acompañando tracción que empuje, mismo criterio que el
+  deltoides posterior). Verificado migrando una base sembrada con el
+  catálogo viejo (sin trapecio, con un usuario que ya tenía "Encogimientos
+  con barra" asignado en su rutina activa): tras migrar, el catálogo y el
+  `ejercicio_asignado` del usuario quedaron apuntando a "trapecio", sin
+  duplicar filas al correr la migración una segunda vez.
+- **Ver lo pactado (peso/piso de reps) del microciclo anterior, y poder
+  corregir el piso de reps del microciclo en curso a mano** (Progreso
+  muestra "Pactado ese microciclo: X kg × Y reps (piso) · Semana 1: ...
+  reps · Semana 2: ... reps · Techo: ..." en cada tarjeta de "AL CIERRE DEL
+  MICROCICLO", con datos que el backend ya calculaba y guardaba pero no se
+  mostraban en ningún lado; nuevo botón "Piso de reps" en el menú "⋯" de
+  cada ejercicio en Entrenamiento, PATCH `/ejercicios/:id/piso-reps`): a
+  raíz de que un ajuste automático (antes de que existiera el toggle para
+  desactivarlo) había cambiado peso y reps de un ejercicio sin que quedara
+  ningún rastro visible de cuáles eran los valores antes del cambio. El
+  peso base YA se podía corregir a mano ("Peso base"), pero el piso de
+  reps del microciclo en curso no tenía ninguna forma de editarse fuera de
+  "Editar Semana 0" -que solo funciona en el primer microciclo después de
+  un testeo, nunca en uno más adelante-, así que no había forma de volver
+  a lo que se tenía antes de un ajuste no deseado. Verificado con un
+  ejercicio con un microciclo ya cerrado (semana 1: 13 reps, semana 2: 13
+  reps, techo 13, piso pactado 15): Progreso mostró esos 4 números
+  correctamente, y cambiar el piso de reps del microciclo en curso a 20
+  vía el nuevo botón actualizó exactamente esa fila en la base (la del
+  microciclo cerrado quedó intacta).
 
 Pendiente / simplificaciones conocidas:
 
@@ -1078,6 +1117,16 @@ Pendiente / simplificaciones conocidas:
   (`src/services/solicitudCambio.js`, panel de coach). Si el coach edita
   directo a su cliente no pasa por esto (el coach ya es quien aprobaría).
   Apagado por default.
+- El Excel de invitado en `modo=plan` (formulas vivas, `excelGenerator.js`)
+  tiene su propia lista `TODOS_MUSCULOS` hardcodeada y desactualizada -le
+  faltan deltoides por cabeza (sigue con el "deltoides" viejo unificado),
+  abductores/aductores/lumbares y ahora trapecio también. Un ejercicio de
+  cualquiera de esos músculos en la rutina de un invitado deja la fórmula
+  de "MusculosResumen" de esa fila con una referencia rota (`ENaN`). No es
+  nuevo de este cambio -ya pasaba desde que se separó el deltoides-, y
+  `modo=historial` (el default, sin fórmulas) no lo sufre porque lee los
+  músculos de la base en vivo. Pendiente sincronizar esa lista con la base
+  o, mejor, sacarla del todo y calcularla dinámicamente.
 
 ## Setup
 

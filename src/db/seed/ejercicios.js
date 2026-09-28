@@ -15,12 +15,15 @@ export const ejercicios = [
   { nombre: 'Flexiones de brazos', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides_anterior'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['peso_corporal'] },
   { nombre: 'Press banca con banda', musculo_primario: 'pecho', musculos_secundarios: ['triceps', 'deltoides_anterior'], tipo: 'compuesto', patron_movimiento: 'empuje_horizontal', equipamiento_requerido: ['banda'] },
 
-  // --- Espalda (alta / trapecio / romboides) ---
+  // --- Espalda (alta / romboides) ---
   { nombre: 'Remo con barra', musculo_primario: 'espalda', musculos_secundarios: ['dorsales', 'biceps'], tipo: 'compuesto', patron_movimiento: 'traccion_horizontal', equipamiento_requerido: ['barra'] },
   { nombre: 'Remo con mancuerna a un brazo', musculo_primario: 'espalda', musculos_secundarios: ['dorsales', 'biceps'], tipo: 'compuesto', patron_movimiento: 'traccion_horizontal', equipamiento_requerido: ['mancuernas', 'banco'], es_unilateral: true },
   { nombre: 'Face pull en polea', musculo_primario: 'espalda', musculos_secundarios: ['deltoides_posterior'], tipo: 'aislado', patron_movimiento: 'traccion_horizontal', equipamiento_requerido: ['polea'] },
-  { nombre: 'Encogimientos con barra', musculo_primario: 'espalda', musculos_secundarios: [], tipo: 'aislado', patron_movimiento: 'elevacion', equipamiento_requerido: ['barra'] },
   { nombre: 'Remo con banda', musculo_primario: 'espalda', musculos_secundarios: ['dorsales', 'biceps'], tipo: 'compuesto', patron_movimiento: 'traccion_horizontal', equipamiento_requerido: ['banda'] },
+
+  // --- Trapecio ---
+  { nombre: 'Encogimientos con barra', musculo_primario: 'trapecio', musculos_secundarios: ['espalda'], tipo: 'aislado', patron_movimiento: 'elevacion', equipamiento_requerido: ['barra'] },
+  { nombre: 'Encogimientos con mancuernas', musculo_primario: 'trapecio', musculos_secundarios: ['espalda'], tipo: 'aislado', patron_movimiento: 'elevacion', equipamiento_requerido: ['mancuernas'] },
 
   // --- Dorsales ---
   { nombre: 'Jalon al pecho en polea', musculo_primario: 'dorsales', musculos_secundarios: ['biceps', 'espalda'], tipo: 'compuesto', patron_movimiento: 'traccion_vertical', equipamiento_requerido: ['polea'] },

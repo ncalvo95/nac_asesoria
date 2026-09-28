@@ -435,6 +435,32 @@ router.patch('/ejercicios/:ejercicioAsignadoId/peso', (req, res) => {
   res.json({ id: ea.id, peso_actual: peso });
 });
 
+// Ajuste manual del piso de reps (el objetivo de la 1ra serie, sugerido en
+// gris) del microciclo EN CURSO de este ejercicio, sin esperar al proximo
+// cierre - mismo espiritu que "Peso base", pero para el piso de reps, que
+// hasta ahora solo se podia corregir via "Editar Semana 0" (y eso solo
+// alcanza al primer microciclo despues de un testeo, nunca a uno mas
+// adelante). Sirve, por ejemplo, para volver a lo que se tenia antes de un
+// ajuste automatico que no se queria (ver progreso_automatico arriba) -
+// Progreso muestra el peso/piso pactado del ultimo microciclo cerrado para
+// poder consultarlo.
+router.patch('/ejercicios/:ejercicioAsignadoId/piso-reps', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { piso_reps } = req.body || {};
+  if (!Number.isInteger(piso_reps) || piso_reps <= 0) {
+    return res.status(400).json({ error: 'piso_reps debe ser un entero mayor a 0.' });
+  }
+  const microcicloActual = db.prepare("SELECT id FROM microciclo WHERE rutina_id = ? AND estado = 'en_curso'").get(ea.rutina_id);
+  if (!microcicloActual) return res.status(400).json({ error: 'No hay un microciclo en curso.' });
+  const { changes } = db.prepare('UPDATE progreso_ejercicio_microciclo SET piso_reps = ? WHERE ejercicio_asignado_id = ? AND microciclo_id = ?')
+    .run(piso_reps, ea.id, microcicloActual.id);
+  if (changes === 0) {
+    return res.status(400).json({ error: 'Este ejercicio todavía no tiene un piso de reps definido para este microciclo.' });
+  }
+  res.json({ id: ea.id, piso_reps });
+});
+
 // Prender/apagar el ajuste automatico de peso/piso de reps/series de ESTE
 // ejercicio al cerrar el microciclo (ver progreso_automatico en
 // cerrarMicrociclo, progressionEngine.js) - pensado para ejercicios que se

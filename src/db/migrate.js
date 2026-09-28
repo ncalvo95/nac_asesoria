@@ -135,7 +135,7 @@ function agregarMusculosNuevos() {
     'INSERT INTO referencia_volumen_muscular (musculo_id, mev, mav, mrv) VALUES (?, ?, ?, ?) ON CONFLICT(musculo_id) DO NOTHING'
   );
 
-  const nombresNuevos = ['abductores', 'aductores', 'lumbares'];
+  const nombresNuevos = ['abductores', 'aductores', 'lumbares', 'trapecio'];
   const idPorMusculo = {};
   for (const nombre of nombresNuevos) {
     const m = musculos.find((x) => x.nombre === nombre);
@@ -161,6 +161,28 @@ function agregarMusculosNuevos() {
   }
 }
 agregarMusculosNuevos();
+
+// "Encogimientos con barra" vivia bajo el musculo generico "espalda" (no
+// habia trapecio propio todavia - ver el comentario viejo "Espalda (alta /
+// trapecio / romboides)" en seed/ejercicios.js) - agregarMusculosNuevos ya
+// inserta el musculo "trapecio" y el ejercicio nuevo "Encogimientos con
+// mancuernas", pero no reclasifica este que YA EXISTIA con otro
+// musculo_primario_id (el chequeo "ya existe" de esa funcion es por nombre,
+// no le importa a que musculo apuntaba antes). Retroactivo e idempotente,
+// mismo patron que migrarDeltoides: reclasifica el catalogo y cualquier
+// ejercicio_asignado de una rutina activa que ya lo tuviera puesto.
+function migrarTrapecio() {
+  const espalda = db.prepare('SELECT id FROM musculo WHERE nombre = ?').get('espalda');
+  const trapecio = db.prepare('SELECT id FROM musculo WHERE nombre = ?').get('trapecio');
+  const ejercicio = db.prepare('SELECT id, musculo_primario_id FROM ejercicio WHERE nombre = ?').get('Encogimientos con barra');
+  if (!espalda || !trapecio || !ejercicio || ejercicio.musculo_primario_id !== espalda.id) return;
+
+  db.prepare("UPDATE ejercicio SET musculo_primario_id = ?, musculos_secundarios_json = '[\"espalda\"]' WHERE id = ?")
+    .run(trapecio.id, ejercicio.id);
+  db.prepare('UPDATE ejercicio_asignado SET musculo_objetivo_id = ? WHERE ejercicio_id = ? AND musculo_objetivo_id = ?')
+    .run(trapecio.id, ejercicio.id, espalda.id);
+}
+migrarTrapecio();
 
 // El microciclo 0 siempre fue "la semana de testeo", pero recien ahora eso
 // quedo explicito en una columna (tipo) en vez de estar implicito en
