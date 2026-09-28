@@ -864,6 +864,28 @@ sessions → closing a microcycle → progress → Excel export):
   sets already come loaded with that same weight/reps/RIR=0, while a
   normal exercise (auto-progression on) on the same day starts blank, as
   always.
+- **Renamed "rep ceiling" (was "rep floor") across the UI, and redesigned
+  the previous-microcycle comparison as a table grouped by day** (Progreso:
+  new table inside a collapsible "Microciclo N (last closed) - detail by
+  day"; Entrenamiento: the "⋯" menu button and its tooltips): requested,
+  because the number being shown/edited is actually a ceiling -the target
+  for set 1, which later sets subtract from (`piso_reps - 2*index`)-, not a
+  floor, and because the comparison with the previous microcycle was one
+  long sentence per exercise, not grouped by day, hard to read. The
+  database column's internal name (`piso_reps`) and the endpoint (`PATCH
+  /ejercicios/:id/piso-reps`) were left untouched -renaming them would have
+  been a much bigger change for no real benefit, since from the "what gets
+  prescribed for the next block" angle the name still holds, it's just
+  confusing as a UI label-. The comparison itself didn't change: the
+  ceiling shown was always the max or average of both weeks (`techoDesde`
+  in `progressionEngine.js`), it just wasn't displayed clearly; now
+  Progreso builds a real table (like the routine's) with columns
+  Exercise/Weight/Week 1/Week 2/Ceiling/Result, grouped by day of the week,
+  inside a collapsible `<details>` so it doesn't take up space when not
+  needed. Verified with Playwright: the table shows the "Lunes"/"Martes"
+  headers and the "Techo" (Ceiling) column, the old text ("Pactado ese
+  microciclo") is gone, and the Entrenamiento menu button reads "Techo de
+  reps" (no longer "Piso de reps").
 
 Known limitations / accepted simplifications:
 

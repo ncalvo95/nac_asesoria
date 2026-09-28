@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api, API_BASE } from '../api/client.js';
 import { formatearMusculo } from '../utils/musculo.js';
 
+const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
 const TIPO_LABEL = {
   objetivo: 'Objetivo',
   disponibilidad: 'Disponibilidad',
@@ -274,36 +276,7 @@ export default function ProgresoPage() {
         </section>
       )}
 
-      {progreso?.ejercicios?.some((e) => e.nota) && (
-        <section className="flex flex-col gap-3">
-          <span className="text-[13px] font-semibold text-text-muted tracking-wide">AL CIERRE DEL MICROCICLO</span>
-          <div className="flex flex-col gap-2.5">
-            {progreso.ejercicios.filter((e) => e.nota).map((e) => (
-              <div
-                key={e.id}
-                className={`rounded-xl p-3.5 flex gap-2.5 ${e.mejoro ? 'bg-success-bg' : e.serie_agregada ? 'bg-warning-bg' : 'bg-surface border border-border'}`}
-              >
-                <div
-                  className="w-2 h-2 rounded-full mt-1.5 flex-none"
-                  style={{ background: e.mejoro ? 'var(--color-success)' : e.serie_agregada ? 'var(--color-warning)' : 'var(--color-text-faint)' }}
-                />
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[13px] font-semibold">{e.ejercicio_nombre}</span>
-                  <span className="text-[12px] text-text-muted leading-relaxed">{e.nota}</span>
-                  <span className="tabular text-[11px] text-text-faint">{e.reps_efectivas} reps efectivas</span>
-                  <span className="tabular text-[11px] text-text-faint">
-                    Pactado ese microciclo: {e.peso_prescrito} kg × {e.piso_reps} reps (piso)
-                    {(e.sem1_reps != null || e.sem2_reps != null) && (
-                      <> · Semana 1: {e.sem1_reps ?? '—'} reps · Semana 2: {e.sem2_reps ?? '—'} reps</>
-                    )}
-                    {e.techo_reps != null && <> · Techo: {e.techo_reps}</>}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {progreso?.ejercicios?.length > 0 && <MicrocicloAnteriorDetalle progreso={progreso} />}
 
       {!progreso?.microciclo && (
         <p className="text-[13px] text-text-muted">
@@ -311,6 +284,72 @@ export default function ProgresoPage() {
         </p>
       )}
     </div>
+  );
+}
+
+// Detalle del ultimo microciclo cerrado, en formato tabla (como la propia
+// rutina) y agrupado por dia - antes era una lista de tarjetas con una
+// oracion larga por ejercicio, dificil de escanear de un vistazo y sin
+// separar por dia. El numero de referencia para comparar contra la sesion
+// de hoy es el TECHO (techo_reps: el maximo o el promedio de semana 1 y
+// semana 2, segun cuanto variaron - ver techoDesde en progressionEngine.js),
+// no el piso: "piso" es el nombre interno de la columna en la base (el
+// piso de reps que se le prescribe al PROXIMO microciclo), pero lo que de
+// verdad sirve de referencia para mirar hacia atras es el techo alcanzado
+// en el bloque que se acaba de cerrar. Envuelto en un <details> (una sola
+// "pestana desplegable", no una por dia) para no ocupar toda la pantalla
+// de entrada.
+function MicrocicloAnteriorDetalle({ progreso }) {
+  const porDia = new Map();
+  for (const e of progreso.ejercicios) {
+    if (!porDia.has(e.dia_semana)) porDia.set(e.dia_semana, []);
+    porDia.get(e.dia_semana).push(e);
+  }
+
+  return (
+    <details className="bg-surface border border-border rounded-xl">
+      <summary className="cursor-pointer select-none px-3.5 py-3 text-[13px] font-semibold text-text-muted">
+        Microciclo {progreso.microciclo.numero} (último cerrado) - detalle por día
+      </summary>
+      <div className="px-3.5 pb-3.5 flex flex-col gap-4">
+        {[...porDia.entries()].map(([diaSemana, ejercicios]) => (
+          <div key={diaSemana} className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-semibold text-text-faint uppercase tracking-wide">{CAPITALIZAR(diaSemana)}</span>
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full text-[12px] tabular border-collapse">
+                <thead>
+                  <tr className="text-left text-[10px] text-text-faint uppercase tracking-wide border-b border-border">
+                    <th className="py-1.5 px-1 font-semibold">Ejercicio</th>
+                    <th className="py-1.5 px-1 font-semibold text-right">Peso</th>
+                    <th className="py-1.5 px-1 font-semibold text-right">Sem 1</th>
+                    <th className="py-1.5 px-1 font-semibold text-right">Sem 2</th>
+                    <th className="py-1.5 px-1 font-semibold text-right" title="Máximo o promedio de semana 1 y 2 - la referencia contra la que comparar de acá en más">Techo</th>
+                    <th className="py-1.5 px-1 font-semibold">Resultado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ejercicios.map((e) => (
+                    <tr key={e.id} className="border-b border-border last:border-0">
+                      <td className="py-1.5 px-1 max-w-[140px] truncate" title={e.ejercicio_nombre}>{e.ejercicio_nombre}</td>
+                      <td className="py-1.5 px-1 text-right whitespace-nowrap">{e.peso_prescrito} kg</td>
+                      <td className="py-1.5 px-1 text-right">{e.sem1_reps ?? '—'}</td>
+                      <td className="py-1.5 px-1 text-right">{e.sem2_reps ?? '—'}</td>
+                      <td className="py-1.5 px-1 text-right font-bold">{e.techo_reps ?? '—'}</td>
+                      <td
+                        className={`py-1.5 px-1 whitespace-nowrap ${e.mejoro ? 'text-success font-semibold' : e.serie_agregada ? 'text-warning font-semibold' : 'text-text-faint'}`}
+                        title={e.nota}
+                      >
+                        {e.mejoro ? 'Mejoró' : e.serie_agregada ? '+1 serie' : e.nota === 'En progreso.' ? '—' : 'Sin cambios'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 

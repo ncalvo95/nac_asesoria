@@ -988,13 +988,15 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
 
   const ejercicios = db.prepare(`
     SELECT ea.id, e.nombre AS ejercicio_nombre, m.nombre AS musculo_nombre, ea.es_top_de_musculo,
+           dr.dia_semana, dr.numero_dia,
            pem.sem1_reps, pem.sem2_reps, pem.piso_reps, pem.techo_reps, pem.mejoro, pem.serie_agregada, pem.nota, pem.peso_prescrito
     FROM progreso_ejercicio_microciclo pem
     JOIN ejercicio_asignado ea ON ea.id = pem.ejercicio_asignado_id
+    JOIN dia_rutina dr ON dr.id = ea.dia_rutina_id
     JOIN ejercicio e ON e.id = ea.ejercicio_id
     JOIN musculo m ON m.id = ea.musculo_objetivo_id
     WHERE pem.microciclo_id = ?
-    ORDER BY ea.orden
+    ORDER BY dr.numero_dia, ea.orden
   `).all(ultimoCerrado.id);
 
   // Reps efectivas (ver repsEfectivas en progressionEngine.js) del bloque:

@@ -1921,7 +1921,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                   </span>
                   {!ej.progreso_automatico && (
                     <span
-                      title="El peso, piso de reps y series de este ejercicio no se ajustan solos al cerrar el microciclo"
+                      title="El peso, el techo de reps y las series de este ejercicio no se ajustan solos al cerrar el microciclo"
                       className="text-[10.5px] font-semibold text-text-faint bg-bg border border-border rounded-md px-2 py-0.5 whitespace-nowrap"
                     >
                       Progreso auto. OFF
@@ -2176,7 +2176,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
                   title="El objetivo sugerido en gris para la 1ra serie - ver Progreso para consultar el de microciclos anteriores"
                   className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
                 >
-                  Piso de reps
+                  Techo de reps
                 </button>
               )}
               <button
@@ -2197,7 +2197,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
                 type="button"
                 onClick={alternarProgresoAutomatico}
                 disabled={cambiandoProgresoAuto}
-                title="Al cerrar el microciclo, el peso/piso de reps/series de este ejercicio se ajustan solos, salvo que lo apagues acá"
+                title="Al cerrar el microciclo, el peso/techo de reps/series de este ejercicio se ajustan solos, salvo que lo apagues acá"
                 className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg disabled:opacity-60"
               >
                 {ejercicio.progreso_automatico ? 'Apagar progreso automático' : 'Prender progreso automático'}

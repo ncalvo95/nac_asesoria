@@ -1125,6 +1125,30 @@ cierre de microciclo → progreso → export a Excel):
   al abrir el microciclo siguiente, sus 2 series ya vienen con el mismo
   peso/reps/RIR=0 cargado, mientras que un ejercicio normal (progreso
   automático prendido) en el mismo día arranca en blanco, como siempre.
+- **Renombrado "techo de reps" (antes "piso de reps") en toda la UI, y
+  comparación del microciclo anterior rediseñada como tabla por día**
+  (Progreso: nueva tabla dentro de un desplegable "Microciclo N (último
+  cerrado) - detalle por día"; Entrenamiento: botón del menú "⋯" y sus
+  tooltips): a pedido, porque el número que se mostraba/editaba es en
+  realidad el techo -el valor de la serie 1, del que las series
+  siguientes van restando (`piso_reps - 2*índice`)-, no un piso, y porque
+  la comparación con el microciclo anterior estaba en una sola oración
+  larga por ejercicio, sin agrupar por día, difícil de leer. El nombre
+  interno de la columna en la base (`piso_reps`) y el endpoint (`PATCH
+  /ejercicios/:id/piso-reps`) se dejaron sin tocar -renombrarlos hubiese
+  sido un cambio mucho más grande sin beneficio real, ya que desde el
+  punto de vista de "qué se prescribe para el próximo bloque" el nombre
+  sigue siendo válido, es solo confuso como etiqueta en la UI-. La
+  comparación en sí no cambió: el techo que se muestra siempre fue el
+  máximo o promedio de ambas semanas (`techoDesde` en
+  `progressionEngine.js`), solo que no se veía así de claro; ahora
+  Progreso arma una tabla real (como la de la rutina) con columnas
+  Ejercicio/Peso/Sem 1/Sem 2/Techo/Resultado, agrupada por día de la
+  semana, adentro de un `<details>` colapsable para no ocupar espacio
+  cuando no hace falta consultarla. Verificado con Playwright: la tabla
+  muestra los encabezados "Lunes"/"Martes" y la columna "Techo", ya no
+  aparece el texto viejo ("Pactado ese microciclo"), y el botón del menú
+  en Entrenamiento dice "Techo de reps" (ya no "Piso de reps").
 
 Pendiente / simplificaciones conocidas:
 
