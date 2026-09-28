@@ -977,6 +977,40 @@ cierre de microciclo → progreso → export a Excel):
   (mismos tokens que la [vista previa visual](https://claude.ai/code/artifact/e2941d16-a51b-4dad-ad83-4921bfcfecfe)
   que se acordó antes de construirlo), tema oscuro automático por
   `prefers-color-scheme`.
+- **Resumen de series directas y reps efectivas por músculo, por sesión**
+  (`ResumenMuscularSesion` en `EntrenamientoPage.jsx`, bloque nuevo al pie
+  de cada día, en `RegistroDia` y en `ResumenSemanaPasada`): sin esperar al
+  cierre del microciclo (eso ya existía a nivel de bloque completo de 2
+  semanas en Progreso), esto suma en vivo, por músculo, cuántas series
+  reales (no dropset, ya tipeadas de verdad - una fila vacía todavía no
+  cuenta) se hicieron hoy y cuántas de esas reps caen dentro de la ventana
+  de "reps efectivas" (`repsEfectivas`, mismo criterio que ya usaba cada
+  tarjeta de ejercicio) - agrupado por el músculo objetivo de cada
+  ejercicio (`ej.musculo_nombre`), sumando entre ejercicios distintos que
+  entrenan el mismo músculo (ej. 2 variantes de press banca, ambas
+  "pecho"). Es "directas" a propósito: no suma músculos secundarios/
+  indirectos (esa otra noción, a nivel de bloque completo, sigue viviendo
+  aparte en Progreso) para no mezclar dos cosas distintas en el mismo
+  número. Al lado de cada total se muestra la comparación contra la MISMA
+  semana del microciclo anterior (semana 1 del bloque actual contra semana
+  1 del bloque pasado, semana 2 contra semana 2 - nunca contra el
+  acumulado de todo un bloque de 2 semanas, para que sea una comparación
+  pareja: mismos músculos, misma cantidad de sesiones) - calculada en el
+  backend (`comparacion_microciclo_anterior` en `obtenerRutinaActiva`,
+  `rutinaService.js`) a partir de la sesión real que ese mismo día tuvo en
+  el microciclo anterior, con el mismo criterio de rango de fechas por
+  semana que ya usa `registroDeSemana`. Solo se calcula si el microciclo
+  anterior es un bloque de progresión real (`numero >= 1`) - si fue la
+  semana de testeo no hay con qué comparar de forma pareja, así que queda
+  sin comparación en ese caso. El número actual se pinta en verde/ámbar
+  si mejoró/empeoró respecto al anterior (`DeltaMusculo`), en blanco si
+  se mantuvo igual. Verificado con datos sembrados a mano en 2 microciclos
+  (2 ejercicios de pecho, 2 series cada uno): el cálculo directo contra la
+  base de datos dio 4 series directas y 8 reps efectivas para el
+  microciclo cerrado, y tipeando en vivo la sesión del microciclo
+  siguiente el bloque mostró exactamente "4 (antes 4)" / "8 (antes 8)"
+  -incluyendo el caso de una fila recién agregada ("+1 serie") todavía sin
+  tocar, que correctamente no suma hasta que se tipea algo real en ella.
 
 Pendiente / simplificaciones conocidas:
 

@@ -719,6 +719,39 @@ sessions → closing a microcycle → progress → Excel export):
   preview](https://claude.ai/code/artifact/e2941d16-a51b-4dad-ad83-4921bfcfecfe)
   that was agreed on before building it), automatic dark theme via
   `prefers-color-scheme`.
+- **Direct sets and effective reps per muscle, per session** (`ResumenMuscularSesion`
+  in `EntrenamientoPage.jsx`, a new block at the foot of each day, in
+  `RegistroDia` and `ResumenSemanaPasada`): without waiting for the
+  microcycle to close (that already existed at the full 2-week-block level
+  in Progreso), this adds up live, per muscle, how many real sets (not
+  dropsets, actually typed already - an untouched row doesn't count yet)
+  were done today and how many of those reps fall inside the "effective
+  reps" window (`repsEfectivas`, same rule each exercise card already
+  used) - grouped by each exercise's target muscle (`ej.musculo_nombre`),
+  summing across different exercises that train the same muscle (e.g. 2
+  bench press variants, both "chest"). It's "direct" on purpose: it
+  doesn't add secondary/indirect muscles (that other notion, at the full
+  block level, still lives separately in Progreso) so as not to mix two
+  different numbers together. Next to each total is a comparison against
+  the SAME week of the previous microcycle (week 1 of the current block
+  against week 1 of the last one, week 2 against week 2 - never against a
+  whole 2-week block's total, so the comparison stays apples-to-apples:
+  same muscles, same number of sessions) - computed on the backend
+  (`comparacion_microciclo_anterior` in `obtenerRutinaActiva`,
+  `rutinaService.js`) from the real session that same day had in the
+  previous microcycle, using the same per-week date-range rule
+  `registroDeSemana` already uses. It's only computed when the previous
+  microcycle is a real progression block (`numero >= 1`) - if it was the
+  testing week there's nothing to compare evenly against, so it's left
+  without a comparison in that case. The current number is colored
+  green/amber if it improved/dropped versus the previous one
+  (`DeltaMusculo`), plain if it stayed the same. Verified with hand-seeded
+  data across 2 microcycles (2 chest exercises, 2 sets each): computing
+  directly against the database gave 4 direct sets and 8 effective reps
+  for the closed microcycle, and typing the next microcycle's session live
+  in the browser, the block showed exactly "4 (before 4)" / "8 (before
+  8)" - including a freshly added row ("+1 set") still untouched, which
+  correctly doesn't count until something real gets typed into it.
 
 Known limitations / accepted simplifications:
 

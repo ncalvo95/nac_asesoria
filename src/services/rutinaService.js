@@ -4,6 +4,7 @@ import {
   rangoRepsPara, tagsDisponibles, topeSeriesPara, SERIES_MINIMO,
 } from './routineBuilder.js';
 import { aplicarDisponibilidad } from './perfilService.js';
+import { repsEfectivas } from './progressionEngine.js';
 
 const getObjetivo = db.prepare('SELECT * FROM objetivo WHERE usuario_id = ?');
 const getDisponibilidad = db.prepare('SELECT * FROM disponibilidad WHERE usuario_id = ?');
@@ -275,6 +276,59 @@ function registroDeSemana(diaRutinaId, microcicloId, rango) {
   return { ...sesion, series: seriesDeSesionStmt.all(sesion.id) };
 }
 
+const seriesConMusculoDeSesionStmt = db.prepare(`
+  SELECT rs.reps, rs.rir, rs.es_dropset, m.nombre AS musculo_nombre
+  FROM registro_serie rs
+  JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
+  JOIN musculo m ON m.id = ea.musculo_objetivo_id
+  WHERE rs.registro_sesion_id = ?
+`);
+
+// Series directas (reales, no dropset) y reps efectivas por musculo de UNA
+// sesion puntual - "directas" porque solo cuenta el musculo objetivo de
+// cada ejercicio (ea.musculo_objetivo_id), sin sumar musculos secundarios/
+// indirectos (esa otra nocion, a nivel de bloque de 2 semanas completo, ya
+// vive en GET /rutinas/:id/progreso). Se usa solo para la comparacion
+// contra el microciclo anterior (ver comparacionMicrocicloAnterior abajo) -
+// el resumen de la sesion de HOY se calcula en vivo en el propio frontend
+// desde lo que se esta tipeando, sin pasar por aca.
+function resumenMuscularDeSesion(registroSesionId) {
+  const porMusculo = new Map();
+  for (const s of seriesConMusculoDeSesionStmt.all(registroSesionId)) {
+    if (s.es_dropset) continue;
+    const actual = porMusculo.get(s.musculo_nombre) || { musculo: s.musculo_nombre, series_directas: 0, reps_efectivas: 0 };
+    actual.series_directas += 1;
+    const efectivas = repsEfectivas(s.reps, s.rir);
+    if (efectivas != null) actual.reps_efectivas += efectivas;
+    porMusculo.set(s.musculo_nombre, actual);
+  }
+  return [...porMusculo.values()];
+}
+
+// Mismo resumen que arriba, pero de la sesion (si la hay) que este dia tuvo
+// en el microciclo anterior - "mismo dia, microciclo pasado", semana por
+// semana (la semana 1 de este microciclo se compara contra la semana 1 del
+// anterior, la 2 contra la 2), para que comparar sea manzanas con manzanas
+// (mismos musculos trabajados, misma cantidad de sesiones esa semana) en
+// vez de una sesion sola contra el acumulado de todo un bloque de 2
+// semanas. Solo se calcula si el microciclo anterior es un bloque de
+// progresion real (numero >= 1) - si el anterior fue la semana de testeo
+// (numero 0, una sola semana, sin "semana 2") no hay con que comparar de
+// forma pareja, asi que se deja sin comparacion en ese caso.
+function comparacionMicrocicloAnterior(diaRutinaId, microcicloAnterior) {
+  if (!microcicloAnterior || microcicloAnterior.numero < 1) return null;
+  const rangos = {
+    1: [microcicloAnterior.fecha_inicio, sumarDiasIso(microcicloAnterior.fecha_inicio, 6)],
+    2: [sumarDiasIso(microcicloAnterior.fecha_inicio, 7), sumarDiasIso(microcicloAnterior.fecha_inicio, 13)],
+  };
+  const resumenDeSemana = (rango) => {
+    const sesion = sesionSemanaStmt.get(diaRutinaId, microcicloAnterior.id, rango[0], rango[1]);
+    if (!sesion || sesion.salteada) return null;
+    return resumenMuscularDeSesion(sesion.id);
+  };
+  return { numero: microcicloAnterior.numero, semana1: resumenDeSemana(rangos[1]), semana2: resumenDeSemana(rangos[2]) };
+}
+
 export function obtenerRutinaActiva(usuarioId) {
   const rutina = db.prepare("SELECT * FROM rutina WHERE usuario_id = ? AND estado = 'activa'").get(usuarioId);
   if (!rutina) return null;
@@ -322,6 +376,12 @@ export function obtenerRutinaActiva(usuarioId) {
   // "actual" nunca puede ser un numero mayor a 2 en un microciclo de 2 semanas.
   const semanaActualNumero = rangosSemana ? (hoyIso <= rangosSemana[1][1] ? 1 : 2) : null;
 
+  // El microciclo inmediatamente anterior al actual, solo si es un bloque
+  // de progresion real (numero >= 1) - ver comparacionMicrocicloAnterior.
+  const microcicloAnterior = microcicloActual && microcicloActual.numero >= 2
+    ? microciclos.find((m) => m.numero === microcicloActual.numero - 1)
+    : null;
+
   return {
     ...rutina,
     semana_actual: semanaActualNumero,
@@ -336,6 +396,7 @@ export function obtenerRutinaActiva(usuarioId) {
         sesion_actual: registrosSemana ? registrosSemana[semanaActualNumero] : null,
         registros_semana: registrosSemana,
         borrador_registro: borrador ? JSON.parse(borrador.valores_json) : null,
+        comparacion_microciclo_anterior: microcicloAnterior ? comparacionMicrocicloAnterior(d.id, microcicloAnterior) : null,
       };
     }),
     microciclos,

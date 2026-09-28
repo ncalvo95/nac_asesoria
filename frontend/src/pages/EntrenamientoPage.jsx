@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
@@ -1154,6 +1154,82 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
 // que lo que se esta entrenando/editando hoy es la semana actual, que sigue
 // siendo RegistroDia de siempre. No permite cargar ni editar nada: eso solo
 // se hace en la semana actual, como siempre paso.
+// Series directas (reales, no dropset) y reps efectivas por musculo de una
+// sesion - "directas" porque solo suma el musculo objetivo de cada
+// ejercicio (ej.musculo_nombre), sin musculos secundarios/indirectos (esa
+// otra nocion, a nivel de bloque de 2 semanas completo, ya vive en la
+// pantalla de Progreso). `obtenerFilas(ej)` devuelve las filas de esa
+// sesion para un ejercicio, ya normalizadas a {peso, reps, rir, esDropset}
+// - permite reusar la misma funcion tanto para el estado local en vivo de
+// RegistroDia (`series`, con esDropset en camelCase) como para las series
+// ya guardadas que lee ResumenSemanaPasada (`es_dropset`, adaptadas por su
+// caller). Una fila sin reps tipeadas todavia no cuenta como serie hecha.
+function resumenMuscularPorMusculo(dia, obtenerFilas) {
+  const porMusculo = new Map();
+  for (const ej of dia.ejercicios) {
+    for (const s of obtenerFilas(ej)) {
+      if (s.esDropset || s.reps === '' || s.reps == null) continue;
+      const actual = porMusculo.get(ej.musculo_nombre) || { musculo: ej.musculo_nombre, series_directas: 0, reps_efectivas: 0 };
+      actual.series_directas += 1;
+      const efectivas = repsEfectivas(s.reps, s.rir);
+      if (efectivas != null) actual.reps_efectivas += efectivas;
+      porMusculo.set(ej.musculo_nombre, actual);
+    }
+  }
+  return [...porMusculo.values()].sort((a, b) => a.musculo.localeCompare(b.musculo));
+}
+
+// Un numero con su comparacion contra el mismo dia del microciclo anterior
+// (ver comparacion_microciclo_anterior en rutinaService.js) - verde si
+// mejoro, rojo (mismo tono ambar/naranja del resto de la app) si bajo, sin
+// referencia si esta semana el musculo no se entreno antes.
+function DeltaMusculo({ actual, anterior }) {
+  if (anterior == null) return <span className="tabular">{actual}</span>;
+  const clase = actual > anterior ? 'text-success font-semibold' : actual < anterior ? 'text-danger font-semibold' : '';
+  return (
+    <span className="tabular">
+      <span className={clase}>{actual}</span>
+      <span className="text-text-faint text-[11px]"> (antes {anterior})</span>
+    </span>
+  );
+}
+
+// Bloque al pie de la sesion con el total de series directas y reps
+// efectivas por musculo, comparado contra el mismo dia (misma semana del
+// bloque) del microciclo anterior - ver el pedido original: "poder ver la
+// cantidad total de series directas y repeticiones efectivas por musculo"
+// mas "la misma info del microciclo anterior, para poder comparar".
+function ResumenMuscularSesion({ resumen, comparacion, microcicloAnteriorNumero }) {
+  if (resumen.length === 0) return null;
+  const compPorMusculo = new Map((comparacion ?? []).map((c) => [c.musculo, c]));
+  return (
+    <div className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-[13px] font-semibold">Series directas y reps efectivas por músculo</span>
+        {comparacion && <span className="text-[11px] text-text-faint whitespace-nowrap">vs. Microciclo {microcicloAnteriorNumero}</span>}
+      </div>
+      <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-1.5 items-center text-[12.5px]">
+        <span className="text-[10px] font-semibold text-text-faint tracking-wide">MÚSCULO</span>
+        <span className="text-[10px] font-semibold text-text-faint tracking-wide text-right">SERIES</span>
+        <span className="text-[10px] font-semibold text-text-faint tracking-wide text-right">REPS EF.</span>
+        {resumen.map((m) => {
+          const prev = compPorMusculo.get(m.musculo);
+          return (
+            <Fragment key={m.musculo}>
+              <span className="text-text-muted">{formatearMusculo(m.musculo)}</span>
+              <span className="text-right"><DeltaMusculo actual={m.series_directas} anterior={prev?.series_directas} /></span>
+              <span className="text-right"><DeltaMusculo actual={m.reps_efectivas} anterior={prev?.reps_efectivas} /></span>
+            </Fragment>
+          );
+        })}
+      </div>
+      {!comparacion && (
+        <span className="text-[11px] text-text-faint">Sin datos del microciclo anterior para comparar todavía.</span>
+      )}
+    </div>
+  );
+}
+
 function ResumenSemanaPasada({ dia, numeroSemana, registro, coloreadoActivo }) {
   if (!registro) {
     return (
@@ -1176,33 +1252,47 @@ function ResumenSemanaPasada({ dia, numeroSemana, registro, coloreadoActivo }) {
     seriesPorEjercicio.get(s.ejercicio_asignado_id).push(s);
   }
 
+  const semanaKey = numeroSemana === 2 ? 'semana2' : 'semana1';
+  const comparacion = dia.comparacion_microciclo_anterior?.[semanaKey] ?? null;
+  const resumenMuscular = resumenMuscularPorMusculo(
+    dia,
+    (ej) => (seriesPorEjercicio.get(ej.id) ?? []).map((s) => ({ esDropset: Boolean(s.es_dropset), reps: s.reps, rir: s.rir }))
+  );
+
   return (
-    <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
-      {dia.ejercicios.map((ej) => {
-        const series = seriesPorEjercicio.get(ej.id) ?? [];
-        if (series.length === 0) return null;
-        const { pesoColor, repsColores } = coloreadoActivo ? colorVsPactado(series, ej) : { pesoColor: null, repsColores: [] };
-        let contadorReal = 0;
-        const filas = series.map((s) => ({ s, realIdx: s.es_dropset ? -1 : contadorReal++ }));
-        return (
-          <div key={ej.id} className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-2 min-w-0">
-            <span className="text-[14.5px] font-semibold">{ej.ejercicio_nombre}</span>
-            <div className="flex flex-col gap-1">
-              {filas.map(({ s, realIdx }) => (
-                <div key={s.id} className="flex items-center gap-3 text-[13px] tabular">
-                  <span className="text-text-faint w-14">{s.es_dropset ? 'Dropset' : `Serie ${s.numero_serie}`}</span>
-                  <span>
-                    <span className={s.es_dropset ? '' : colorClase(pesoColor)}>{s.peso} kg</span>
-                    {' × '}
-                    <span className={!s.es_dropset ? colorClase(repsColores[realIdx]) : ''}>{s.reps} reps</span>
-                  </span>
-                  {s.rir != null && <span className="text-text-faint">RIR {s.rir}</span>}
-                </div>
-              ))}
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 md:grid md:grid-cols-2 md:items-start md:gap-4">
+        {dia.ejercicios.map((ej) => {
+          const series = seriesPorEjercicio.get(ej.id) ?? [];
+          if (series.length === 0) return null;
+          const { pesoColor, repsColores } = coloreadoActivo ? colorVsPactado(series, ej) : { pesoColor: null, repsColores: [] };
+          let contadorReal = 0;
+          const filas = series.map((s) => ({ s, realIdx: s.es_dropset ? -1 : contadorReal++ }));
+          return (
+            <div key={ej.id} className="bg-surface border border-border rounded-[14px] p-4 flex flex-col gap-2 min-w-0">
+              <span className="text-[14.5px] font-semibold">{ej.ejercicio_nombre}</span>
+              <div className="flex flex-col gap-1">
+                {filas.map(({ s, realIdx }) => (
+                  <div key={s.id} className="flex items-center gap-3 text-[13px] tabular">
+                    <span className="text-text-faint w-14">{s.es_dropset ? 'Dropset' : `Serie ${s.numero_serie}`}</span>
+                    <span>
+                      <span className={s.es_dropset ? '' : colorClase(pesoColor)}>{s.peso} kg</span>
+                      {' × '}
+                      <span className={!s.es_dropset ? colorClase(repsColores[realIdx]) : ''}>{s.reps} reps</span>
+                    </span>
+                    {s.rir != null && <span className="text-text-faint">RIR {s.rir}</span>}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+      <ResumenMuscularSesion
+        resumen={resumenMuscular}
+        comparacion={comparacion}
+        microcicloAnteriorNumero={dia.comparacion_microciclo_anterior?.numero}
+      />
     </div>
   );
 }
@@ -1507,6 +1597,17 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
     for (const ej of dia.ejercicios) map[ej.id] = series[ej.id] ?? construirSeriesPorDefecto(ej);
     return map;
   }, [series, dia.ejercicios]);
+
+  // Resumen en vivo (se recalcula con cada tecleo, igual que el coloreado)
+  // de series directas y reps efectivas por musculo - comparado contra la
+  // MISMA semana del microciclo anterior (ver comparacion_microciclo_anterior
+  // en rutinaService.js), no contra el acumulado del bloque completo.
+  const resumenMuscular = useMemo(
+    () => resumenMuscularPorMusculo(dia, (ej) => seriesPorEjercicio[ej.id] ?? []),
+    [dia, seriesPorEjercicio]
+  );
+  const semanaComparacionKey = semanaActual === 2 ? 'semana2' : 'semana1';
+  const comparacionMicrocicloAnterior = dia.comparacion_microciclo_anterior?.[semanaComparacionKey] ?? null;
 
   // AjusteSeries (el +/- de "Series") cambia series_actuales en el backend y
   // refetchea la rutina, pero "series" ya tenia una entrada para ese
@@ -1874,6 +1975,12 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
 
         <AgregarEjercicioDia diaRutinaId={dia.id} musculos={todosMusculos} onAgregado={onRutinaCambiada} />
       </div>
+
+      <ResumenMuscularSesion
+        resumen={resumenMuscular}
+        comparacion={comparacionMicrocicloAnterior}
+        microcicloAnteriorNumero={dia.comparacion_microciclo_anterior?.numero}
+      />
 
       {error && <p className="text-[13px] text-danger">{error}</p>}
 
