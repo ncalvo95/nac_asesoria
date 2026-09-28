@@ -1436,20 +1436,23 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
       : (semanaActual === 2 && dia.registros_semana?.[1] && !dia.registros_semana[1].salteada
         ? dia.registros_semana[1]
         : null);
-    if (registroBase) {
-      const porEjercicio = new Map();
-      for (const s of registroBase.series) {
-        if (!porEjercicio.has(s.ejercicio_asignado_id)) porEjercicio.set(s.ejercicio_asignado_id, []);
-        porEjercicio.get(s.ejercicio_asignado_id).push(s);
-      }
-      for (const [ejId, sets] of porEjercicio) {
-        if (!base[ejId]) continue;
-        const reales = sets.filter((s) => !s.es_dropset).sort((a, b) => a.numero_serie - b.numero_serie);
-        const dropsets = sets.filter((s) => s.es_dropset);
-        const nuevasReales = base[ejId].map((row, idx) => (reales[idx]
-          ? { peso: String(reales[idx].peso), reps: String(reales[idx].reps), rir: reales[idx].rir ?? 1, esDropset: false }
-          : row));
-        base[ejId] = [...nuevasReales, ...dropsets.map((d) => ({ peso: String(d.peso), reps: String(d.reps), rir: d.rir ?? 1, esDropset: true }))];
+    if (registroBase) mezclarSesionEnBase(base, registroBase);
+
+    // Ejercicios con el progreso automático apagado (ver toggle "Progreso
+    // automático" en el menú "⋯") al abrir un microciclo NUEVO sin nada
+    // propio tipeado todavía (registroBase es null - ni sesión de esta
+    // semana ni precarga de semana 1): a diferencia del resto, que arranca
+    // en blanco con solo el piso/peso como sugerencia gris, uno "congelado"
+    // no tiene ningún cambio de plan real que justifique volver a tipear
+    // todo de cero - sigue literalmente donde había quedado la última vez
+    // (peso, reps y RIR incluidos), mismo criterio que ya usa la precarga
+    // de semana 2 dentro del mismo microciclo, pero cruzando el límite de
+    // microciclo. dia.ultima_sesion_microciclo_anterior ya viene filtrada a
+    // la última semana real (no salteada) del bloque anterior.
+    if (!registroBase && dia.ultima_sesion_microciclo_anterior) {
+      const ejerciciosCongelados = new Set(dia.ejercicios.filter((ej) => !ej.progreso_automatico).map((ej) => ej.id));
+      if (ejerciciosCongelados.size > 0) {
+        mezclarSesionEnBase(base, dia.ultima_sesion_microciclo_anterior, ejerciciosCongelados);
       }
     }
 
@@ -1551,7 +1554,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   // express (bug real: antes esto pisaba el progreso ya cargado sin
   // preguntar nada, incluso si ya se habian tipeado series reales de hoy).
   function hayDatosTipeados() {
-    return dia.ejercicios.some((ej) => (series[ej.id] || []).some((s) => s.peso !== '' || s.reps !== ''));
+    return dia.ejercicios.some((ej) => (series[ej.id] || []).some((s) => s.peso !== '' || s.reps !== '' || s.rir !== 1));
   }
 
   // Rutina Express: para cuando hay tiempo de ir al gimnasio pero no de
@@ -2936,6 +2939,33 @@ function construirEstadoInicial(dia) {
   return Object.fromEntries(dia.ejercicios.map((ej) => [ej.id, construirSeriesPorDefecto(ej)]));
 }
 
+// Precarga `base` (mutandola in-place) con las series REALES de una sesion
+// ya registrada (shape del backend: {series: [{ejercicio_asignado_id,
+// numero_serie, peso, reps, rir, es_dropset}, ...]}) - usado tanto para
+// "esta semana ya tiene sesion"/"semana 2 con lo de semana 1" como para
+// "ejercicio con progreso automatico apagado, con lo del microciclo
+// anterior" (ver el useState de `series` en RegistroDia). `filtroEjId`
+// (opcional, un Set de ejercicio_asignado_id) limita el mezclado a esos
+// ejercicios puntuales - sin filtro, se aplica a todos los que aparezcan
+// en `sesion.series`.
+function mezclarSesionEnBase(base, sesion, filtroEjId) {
+  const porEjercicio = new Map();
+  for (const s of sesion.series) {
+    if (filtroEjId && !filtroEjId.has(s.ejercicio_asignado_id)) continue;
+    if (!porEjercicio.has(s.ejercicio_asignado_id)) porEjercicio.set(s.ejercicio_asignado_id, []);
+    porEjercicio.get(s.ejercicio_asignado_id).push(s);
+  }
+  for (const [ejId, sets] of porEjercicio) {
+    if (!base[ejId]) continue;
+    const reales = sets.filter((s) => !s.es_dropset).sort((a, b) => a.numero_serie - b.numero_serie);
+    const dropsets = sets.filter((s) => s.es_dropset);
+    const nuevasReales = base[ejId].map((row, idx) => (reales[idx]
+      ? { peso: String(reales[idx].peso), reps: String(reales[idx].reps), rir: reales[idx].rir ?? 1, esDropset: false }
+      : row));
+    base[ejId] = [...nuevasReales, ...dropsets.map((d) => ({ peso: String(d.peso), reps: String(d.reps), rir: d.rir ?? 1, esDropset: true }))];
+  }
+}
+
 // Mezcla un borrador (del backend o de localStorage, misma forma: {
 // [ejercicioAsignadoId]: [{peso,reps,rir,esDropset}, ...] }) encima de
 // `base` (mutandola in-place) - usado dos veces en cascada al armar el
@@ -2956,7 +2986,19 @@ function aplicarBorradorEnBase(base, borrador) {
   for (const [ejId, sets] of Object.entries(borrador)) {
     if (!base[ejId]) continue;
     sets.forEach((s, idx) => {
-      const tieneAlgoTipeado = (s.peso !== '' && s.peso != null) || (s.reps !== '' && s.reps != null);
+      // El RIR por si solo tambien cuenta como "tipeado" - antes solo
+      // miraba peso/reps, asi que cambiar UNICAMENTE el RIR (dejando peso y
+      // reps en blanco, ej. apuntandolo apenas terminada la serie, antes de
+      // cargar el resto) quedaba afuera del guardado: al recargar la
+      // pagina, esa fila no tenia "nada tipeado" segun este chequeo y el
+      // merge la saltaba entera, perdiendo el RIR en silencio. `!== 1`
+      // porque el default de una fila nunca tocada es siempre el numero 1
+      // (ver construirSeriesPorDefecto) - una vez que el usuario edita el
+      // campo pasa a ser un string (via el input), asi que la comparacion
+      // estricta distingue "nunca tocado" de "tocado, aunque haya quedado
+      // en 1 de nuevo" sin reintroducir el bug viejo de pisar un borrador
+      // remoto con una fila local genuinamente vacia.
+      const tieneAlgoTipeado = (s.peso !== '' && s.peso != null) || (s.reps !== '' && s.reps != null) || (s.rir != null && s.rir !== 1);
       if (!tieneAlgoTipeado) return;
       if (base[ejId][idx]) {
         base[ejId][idx] = { ...base[ejId][idx], ...s };

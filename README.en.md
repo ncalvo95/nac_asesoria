@@ -829,6 +829,41 @@ sessions → closing a microcycle → progress → Excel export):
   15): Progreso showed those 4 numbers correctly, and changing the current
   microcycle's rep floor to 20 through the new button updated exactly that
   row in the database (the closed microcycle's row stayed untouched).
+- **Fix: changing only the RIR (without touching weight or reps) didn't
+  survive a draft save** (`aplicarBorradorEnBase` in
+  `EntrenamientoPage.jsx`, used for both the remote draft and the
+  `localStorage` one): the "does this row have something typed, worth
+  applying" check only looked at weight and reps - if only the RIR got
+  touched (e.g. jotting it down right after finishing the set, before
+  loading the weight/reps), that row counted as "nothing typed" for this
+  check and the merge skipped it entirely. The RIR did save correctly in
+  the moment (persisting to `localStorage` doesn't have this filter), but
+  it silently got lost the next time the draft got re-read -e.g. on a page
+  reload-, which is likely part of what got reported as "the draft gets
+  wiped." Now an RIR different from the default (`!== 1`, the value any
+  never-touched row starts at) also counts as "typed." The same check got
+  fixed in Modo Express's "overwrite what's already typed?" guard
+  (`hayDatosTipeados`). Verified with Playwright: typing only a set's RIR
+  (weight and reps left empty) and reloading the page - the RIR is still
+  there, with the rest of the row untouched.
+- **A frozen exercise's RIR now also carries over from the previous
+  microcycle when a new one starts** (same mechanism that already existed
+  for "week 2 pre-filled from week 1" -see above-, extended to cross the
+  microcycle boundary: new `ultima_sesion_microciclo_anterior` field in
+  `obtenerRutinaActiva`, `rutinaService.js`): even though weight and rep
+  floor already stayed frozen with the auto-progression toggle off, RIR
+  still reset to the default (1) instead of keeping whatever was used last
+  time (e.g. 0) - for an exercise that "doesn't change anything," typing it
+  in again from scratch didn't make sense. Now, if the new microcycle
+  doesn't have anything of its own typed yet, every exercise with the
+  toggle off gets pre-filled -weight, reps and RIR, all 3, same as already
+  happens between week 1 and 2- with whatever was last logged in the
+  previous microcycle (week 2 if it exists, otherwise week 1). Verified
+  with Playwright: an exercise with RIR=0 in both weeks of the closed
+  microcycle and auto-progression off - opening the next microcycle, its 2
+  sets already come loaded with that same weight/reps/RIR=0, while a
+  normal exercise (auto-progression on) on the same day starts blank, as
+  always.
 
 Known limitations / accepted simplifications:
 

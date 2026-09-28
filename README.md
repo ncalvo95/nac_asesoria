@@ -1090,6 +1090,41 @@ cierre de microciclo → progreso → export a Excel):
   correctamente, y cambiar el piso de reps del microciclo en curso a 20
   vía el nuevo botón actualizó exactamente esa fila en la base (la del
   microciclo cerrado quedó intacta).
+- **Fix: cambiar solo el RIR (sin tocar peso ni reps) no sobrevivía un
+  guardado de borrador** (`aplicarBorradorEnBase` en `EntrenamientoPage.jsx`,
+  usada tanto para el borrador remoto como para el de `localStorage`): el
+  chequeo de "esta fila tiene algo tipeado, vale la pena aplicarla" solo
+  miraba peso y reps - si se tocaba únicamente el RIR (ej. anotarlo apenas
+  terminada la serie, antes de cargar el peso/las reps), esa fila quedaba
+  "sin nada tipeado" para este chequeo y el merge la salteaba entera. El
+  RIR se guardaba bien en el momento (la persistencia a `localStorage` no
+  tiene este filtro), pero se perdía en silencio la próxima vez que se
+  releía el borrador -por ejemplo al recargar la página-, que es
+  probablemente parte de lo que se reportó como "el borrador se borra".
+  Ahora un RIR distinto del default (`!== 1`, el valor con el que arranca
+  cualquier fila nunca tocada) también cuenta como "tipeado". Se corrigió
+  el mismo chequeo en el aviso de "¿pisar lo ya tipeado?" del modo express
+  (`hayDatosTipeados`). Verificado con Playwright: tipear únicamente el RIR
+  de una serie (peso y reps vacíos) y recargar la página - el RIR sigue
+  ahí, sin afectar el resto de la fila.
+- **El RIR de un ejercicio con progreso automático apagado también se
+  precarga desde el microciclo anterior al abrir uno nuevo** (mismo
+  mecanismo que ya existía para "semana 2 con lo de semana 1" -ver más
+  arriba-, extendido para cruzar el límite de microciclo: nuevo campo
+  `ultima_sesion_microciclo_anterior` en `obtenerRutinaActiva`,
+  `rutinaService.js`): a raíz de que, aunque peso y piso de reps ya
+  quedaban congelados con el toggle de progreso automático, el RIR seguía
+  reseteando al default (1) en vez de mantener el que se había usado la
+  última vez (ej. 0) - para un ejercicio que "no cambia nada", tiparlo de
+  nuevo desde cero no tenía sentido. Ahora, si el microciclo nuevo todavía
+  no tiene nada propio tipeado, cada ejercicio con el toggle apagado se
+  precarga -peso, reps y RIR, los 3, igual que ya pasaba entre semana 1 y
+  2- con lo último que se cargó en el microciclo anterior (semana 2 si
+  existe, si no semana 1). Verificado con Playwright: ejercicio con RIR=0
+  en ambas semanas del microciclo cerrado y progreso automático apagado -
+  al abrir el microciclo siguiente, sus 2 series ya vienen con el mismo
+  peso/reps/RIR=0 cargado, mientras que un ejercicio normal (progreso
+  automático prendido) en el mismo día arranca en blanco, como siempre.
 
 Pendiente / simplificaciones conocidas:
 

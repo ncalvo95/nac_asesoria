@@ -329,6 +329,29 @@ function comparacionMicrocicloAnterior(diaRutinaId, microcicloAnterior) {
   return { numero: microcicloAnterior.numero, semana1: resumenDeSemana(rangos[1]), semana2: resumenDeSemana(rangos[2]) };
 }
 
+// La ULTIMA sesion real (no salteada) que este dia tuvo en el microciclo
+// anterior -semana 2 si existe, si no semana 1-, con las series tal cual
+// (mismo shape que registroDeSemana: {...sesion, series}). Se usa para
+// precargar el formulario de un ejercicio con progreso_automatico
+// desactivado al abrir un microciclo nuevo sin nada tipeado todavia (ver
+// RegistroDia en EntrenamientoPage.jsx) - a diferencia del resto de los
+// ejercicios (que arrancan en blanco, solo con el piso/peso como
+// sugerencia gris), uno "congelado" no tiene ningun cambio de plan que
+// justifique pedir que se vuelva a tipear todo desde cero: sigue
+// literalmente donde habia quedado, peso/reps/RIR incluidos.
+function ultimaSesionMicrocicloAnterior(diaRutinaId, microcicloAnterior) {
+  if (!microcicloAnterior || microcicloAnterior.numero < 1) return null;
+  const rangos = {
+    1: [microcicloAnterior.fecha_inicio, sumarDiasIso(microcicloAnterior.fecha_inicio, 6)],
+    2: [sumarDiasIso(microcicloAnterior.fecha_inicio, 7), sumarDiasIso(microcicloAnterior.fecha_inicio, 13)],
+  };
+  const semana2 = registroDeSemana(diaRutinaId, microcicloAnterior.id, rangos[2]);
+  if (semana2 && !semana2.salteada) return semana2;
+  const semana1 = registroDeSemana(diaRutinaId, microcicloAnterior.id, rangos[1]);
+  if (semana1 && !semana1.salteada) return semana1;
+  return null;
+}
+
 export function obtenerRutinaActiva(usuarioId) {
   const rutina = db.prepare("SELECT * FROM rutina WHERE usuario_id = ? AND estado = 'activa'").get(usuarioId);
   if (!rutina) return null;
@@ -398,6 +421,7 @@ export function obtenerRutinaActiva(usuarioId) {
         borrador_registro: borrador ? JSON.parse(borrador.valores_json) : null,
         borrador_actualizado_en: borrador ? borrador.actualizado_en : null,
         comparacion_microciclo_anterior: microcicloAnterior ? comparacionMicrocicloAnterior(d.id, microcicloAnterior) : null,
+        ultima_sesion_microciclo_anterior: microcicloAnterior ? ultimaSesionMicrocicloAnterior(d.id, microcicloAnterior) : null,
       };
     }),
     microciclos,
