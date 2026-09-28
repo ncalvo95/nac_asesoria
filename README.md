@@ -1011,6 +1011,28 @@ cierre de microciclo → progreso → export a Excel):
   siguiente el bloque mostró exactamente "4 (antes 4)" / "8 (antes 8)"
   -incluyendo el caso de una fila recién agregada ("+1 serie") todavía sin
   tocar, que correctamente no suma hasta que se tipea algo real en ella.
+- **Progreso automático desactivable por ejercicio** (`progreso_automatico`
+  en `ejercicio_asignado`, toggle "Apagar/Prender progreso automático" en el
+  menú "⋯" de cada ejercicio): al cerrar un microciclo, el motor de
+  progresión (`cerrarMicrociclo`) ajusta solo el peso, el piso de reps y la
+  cantidad de series de cada ejercicio según el techo alcanzado - pensado
+  para la mayoría de los casos, pero no siempre lo que se quiere: un
+  ejercicio de pierna entrenado a propósito con reps altas, por ejemplo,
+  puede superar seguido el techo del rango (`rango_reps_max`), lo que sube
+  el peso solo - y subir el peso, a su vez, baja las reps esperadas el
+  próximo bloque, justo lo contrario de lo que se buscaba. Con el toggle
+  apagado para ese ejercicio puntual, el peso, el piso de reps y las series
+  quedan exactamente iguales al bloque anterior pase lo que pase con el
+  techo - una tarjeta con `Progreso auto. OFF` junto al músculo lo deja
+  claro a simple vista. El techo/mejora de ese ejercicio se sigue
+  calculando y guardando igual (informativo para Progreso/Reportes, y sigue
+  alimentando el estancamiento del músculo para el resto de sus
+  ejercicios) - lo único que no se aplica es el ajuste automático de ESE
+  ejercicio. Verificado con datos sembrados a mano: 2 ejercicios del mismo
+  músculo (piernas), ambos con reps muy por encima de su rango, uno con el
+  toggle apagado - al cerrar el microciclo, el que quedó apagado mantuvo
+  exactamente el mismo peso y piso de reps que traía, mientras el otro
+  subió de peso y piso de reps con el criterio de siempre.
 
 Pendiente / simplificaciones conocidas:
 

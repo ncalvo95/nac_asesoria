@@ -752,6 +752,28 @@ sessions → closing a microcycle → progress → Excel export):
   in the browser, the block showed exactly "4 (before 4)" / "8 (before
   8)" - including a freshly added row ("+1 set") still untouched, which
   correctly doesn't count until something real gets typed into it.
+- **Auto progression can be turned off per exercise** (`progreso_automatico`
+  on `ejercicio_asignado`, "Turn off/on automatic progression" toggle in
+  each exercise's "⋯" menu): when a microcycle closes, the progression
+  engine (`cerrarMicrociclo`) auto-adjusts each exercise's weight, rep
+  floor and set count based on the ceiling it reached - a sensible default
+  most of the time, but not always what's wanted: a leg exercise trained
+  on purpose with high reps, for example, can regularly exceed the rep
+  range's ceiling (`rango_reps_max`), which bumps the weight up on its own
+  - and bumping the weight, in turn, lowers the expected reps next block,
+  the exact opposite of what was intended. With the toggle off for that
+  specific exercise, its weight, rep floor and set count stay exactly the
+  same as the previous block no matter what the ceiling was - a "Progreso
+  auto. OFF" ("Auto progress OFF") tag next to the muscle pill makes it
+  obvious at a glance. That exercise's ceiling/improvement is still
+  computed and recorded as usual (informational, for Progreso/Reportes,
+  and it still feeds into that muscle's stagnation detection for its other
+  exercises) - the only thing skipped is applying the automatic adjustment
+  to THAT exercise. Verified with hand-seeded data: 2 exercises of the
+  same muscle (legs), both with reps well above their range, one with the
+  toggle off - closing the microcycle, the one left off kept exactly the
+  same weight and rep floor it already had, while the other one went up in
+  weight and rep floor with the usual rule.
 
 Known limitations / accepted simplifications:
 

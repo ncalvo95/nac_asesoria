@@ -435,6 +435,20 @@ router.patch('/ejercicios/:ejercicioAsignadoId/peso', (req, res) => {
   res.json({ id: ea.id, peso_actual: peso });
 });
 
+// Prender/apagar el ajuste automatico de peso/piso de reps/series de ESTE
+// ejercicio al cerrar el microciclo (ver progreso_automatico en
+// cerrarMicrociclo, progressionEngine.js) - pensado para ejercicios que se
+// entrenan a proposito con un objetivo de reps que el motor normal bajaria
+// solo (ej. piernas a repeticiones altas).
+router.patch('/ejercicios/:ejercicioAsignadoId/progreso-automatico', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { activo } = req.body || {};
+  if (typeof activo !== 'boolean') return res.status(400).json({ error: 'activo debe ser true o false.' });
+  db.prepare('UPDATE ejercicio_asignado SET progreso_automatico = ? WHERE id = ?').run(activo ? 1 : 0, ea.id);
+  res.json({ id: ea.id, progreso_automatico: activo });
+});
+
 // Descanso entre series (segundos), solo informativo/editable a mano -no lo
 // toca el motor de progresion- para que el usuario sepa cuanto descansar
 // entre series de cada ejercicio.

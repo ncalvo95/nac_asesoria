@@ -1896,6 +1896,14 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
                   <span className="text-[11px] font-semibold text-text-muted bg-bg border border-border rounded-md px-2 py-0.5 uppercase">
                     {formatearMusculo(ej.musculo_nombre)}
                   </span>
+                  {!ej.progreso_automatico && (
+                    <span
+                      title="El peso, piso de reps y series de este ejercicio no se ajustan solos al cerrar el microciclo"
+                      className="text-[10.5px] font-semibold text-text-faint bg-bg border border-border rounded-md px-2 py-0.5 whitespace-nowrap"
+                    >
+                      Progreso auto. OFF
+                    </span>
+                  )}
                   {nota && (
                     <span
                       className={`text-[11px] font-semibold rounded-full px-2.5 py-1 whitespace-nowrap ${
@@ -2058,6 +2066,23 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
     setter(true);
   }
 
+  // Toggle inmediato (sin panel aparte, a diferencia de Peso base/Descanso):
+  // es un solo booleano, no hace falta pedir ningun valor.
+  const [cambiandoProgresoAuto, setCambiandoProgresoAuto] = useState(false);
+  async function alternarProgresoAutomatico() {
+    setMenuAbierto(false);
+    setCambiandoProgresoAuto(true);
+    setError('');
+    try {
+      await api.patch(`/ejercicios/${ejercicio.id}/progreso-automatico`, { activo: !ejercicio.progreso_automatico });
+      onCambiado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCambiandoProgresoAuto(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2 pt-1 border-t border-border -mx-4 px-4">
       <div className="flex items-center justify-between gap-2 pt-2">
@@ -2128,6 +2153,15 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
                 className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
               >
                 Músculos secundarios
+              </button>
+              <button
+                type="button"
+                onClick={alternarProgresoAutomatico}
+                disabled={cambiandoProgresoAuto}
+                title="Al cerrar el microciclo, el peso/piso de reps/series de este ejercicio se ajustan solos, salvo que lo apagues acá"
+                className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg disabled:opacity-60"
+              >
+                {ejercicio.progreso_automatico ? 'Apagar progreso automático' : 'Prender progreso automático'}
               </button>
               {diasHermanos?.length > 0 && (
                 <button

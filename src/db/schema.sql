@@ -239,7 +239,15 @@ CREATE TABLE IF NOT EXISTS ejercicio_asignado (
   -- ver musculosSecundariosDe en routineBuilder.js), para cuando el
   -- catalogo no capta bien lo que un ejercicio en particular le pega a un
   -- musculo (o para un ejercicio "particular" sin dato de catalogo).
-  musculos_secundarios_json TEXT NOT NULL DEFAULT '[]'
+  musculos_secundarios_json TEXT NOT NULL DEFAULT '[]',
+  -- 0 = el motor de progresion (cerrarMicrociclo) no toca peso_prescrito/
+  -- piso_reps/series_prescritas de ESTE ejercicio al cerrar el microciclo -
+  -- quedan iguales al bloque anterior, pase lo que pase. Pensado para
+  -- ejercicios que se entrenan a proposito con un objetivo de reps que el
+  -- motor normal bajaria solo (ej. piernas a repeticiones altas: superar
+  -- rango_reps_max sube el peso, lo que de por si baja las reps esperadas
+  -- el proximo bloque). 1 (default) = comportamiento de siempre.
+  progreso_automatico INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX IF NOT EXISTS idx_ejercicio_asignado_dia ON ejercicio_asignado(dia_rutina_id, orden);

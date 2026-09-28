@@ -446,7 +446,18 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
     let serieAgregada = 0;
     let nota = 'En progreso.';
 
-    if (techo == null) {
+    // Con progreso_automatico apagado para este ejercicio puntual, el techo/
+    // mejoro de arriba se sigue calculando y guardando igual (informativo -
+    // sigue alimentando el estancamiento/volumen a nivel musculo para el
+    // resto de los ejercicios de ese musculo, y las tablas de Progreso), pero
+    // NINGUNA nota ni ajuste de peso/piso/series se aplica: quedan iguales
+    // al bloque anterior, pase lo que pase con el techo. Pensado para
+    // ejercicios como piernas a repeticiones altas, donde superar
+    // rango_reps_max subiria el peso solo -lo que de por si baja las reps
+    // esperadas el proximo bloque, justo lo que este flag evita.
+    if (!ej.progreso_automatico) {
+      nota = 'Progreso automático desactivado para este ejercicio: peso, piso de reps y series se mantienen igual que en este microciclo.';
+    } else if (techo == null) {
       nota = 'Sin datos suficientes de la semana 1 y/o 2: no se pudo cerrar este ejercicio.';
     } else if (techo > ej.rango_reps_max) {
       nota = 'Superaste el techo del rango de reps: se sube el peso minimo el proximo microciclo.';
@@ -466,7 +477,7 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
     }
 
     let pesoSugerido = progreso.peso_prescrito;
-    if (techo != null) {
+    if (ej.progreso_automatico && techo != null) {
       if (techo > ej.rango_reps_max) pesoSugerido = progreso.peso_prescrito + INCREMENTO_KG_DEFAULT;
       else if (techo < ej.rango_reps_min) pesoSugerido = progreso.peso_prescrito - INCREMENTO_KG_DEFAULT;
     }
@@ -475,9 +486,10 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
       id: progreso.id, sem1_reps: sem1, sem2_reps: sem2, techo_reps: techo, mejoro, serie_agregada: serieAgregada, nota,
     });
 
-    if (techo != null) {
+    if (!ej.progreso_automatico || techo != null) {
+      const pisoSiguiente = ej.progreso_automatico ? techo : progreso.piso_reps;
       upsertProgresoEjercicio.run({
-        ejercicio_asignado_id: ej.id, microciclo_id: siguiente.id, peso_prescrito: pesoSugerido, piso_reps: techo, series_prescritas: seriesSugeridas,
+        ejercicio_asignado_id: ej.id, microciclo_id: siguiente.id, peso_prescrito: pesoSugerido, piso_reps: pisoSiguiente, series_prescritas: seriesSugeridas,
       });
       updateEjercicioAsignadoEstado.run(pesoSugerido, seriesSugeridas, ej.id);
     }
