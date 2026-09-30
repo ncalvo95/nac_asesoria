@@ -886,6 +886,21 @@ sessions → closing a microcycle → progress → Excel export):
   headers and the "Techo" (Ceiling) column, the old text ("Pactado ese
   microciclo") is gone, and the Entrenamiento menu button reads "Techo de
   reps" (no longer "Piso de reps").
+- **Fix: an exercise's "⋯" menu could open off-screen when its card was
+  near the bottom of the page** (`EjercicioAcciones` in
+  `EntrenamientoPage.jsx`): the panel always opened downward from the
+  button (`top-full`), so with the button near the bottom edge of the
+  screen the menu (up to 9 items) overflowed and the last options became
+  invisible, with no scroll and no way to reach them. Now, when the menu
+  opens, it's measured once whether it fits below (`getBoundingClientRect`
+  against `window.innerHeight`) and if it doesn't, it opens upward
+  (`bottom-full`) instead; it also has its own `max-height` with scroll as
+  a safety net for very small screens. Verified with Playwright in two
+  scenarios: a short viewport (700px) with an exercise pinned to the
+  bottom -the menu opened upward, fully visible inside the viewport,
+  including "Quitar ejercicio"- and a tall viewport (1400px) with the same
+  exercise -the menu still opened downward as always, no change to the
+  normal case.
 
 Known limitations / accepted simplifications:
 

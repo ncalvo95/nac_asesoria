@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
@@ -2058,6 +2058,8 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
     ? `Este es el ejercicio ${ejercicio.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ejercicio.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
     : null;
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [menuHaciaArriba, setMenuHaciaArriba] = useState(false);
+  const panelRef = useRef(null);
   const [mostrarSustituir, setMostrarSustituir] = useState(false);
   const [mostrarPeso, setMostrarPeso] = useState(false);
   const [mostrarPiso, setMostrarPiso] = useState(false);
@@ -2088,6 +2090,16 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
       window.removeEventListener('mousedown', onClickFuera);
       window.removeEventListener('scroll', onScroll, { capture: true });
     };
+  }, [menuAbierto]);
+
+  // Si el ejercicio está muy abajo en la pantalla, el menú (que siempre
+  // arrancaba hacia abajo) se desbordaba fuera del viewport y quedaba
+  // parcial o totalmente invisible. Se mide una vez, recién abierto,
+  // y si no entra hacia abajo se lo abre hacia arriba en su lugar.
+  useLayoutEffect(() => {
+    if (!menuAbierto || !panelRef.current) return;
+    const rect = panelRef.current.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight) setMenuHaciaArriba(true);
   }, [menuAbierto]);
 
   function abrir(setter) {
@@ -2140,14 +2152,20 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
         <div className="relative" ref={menuRef}>
           <button
             type="button"
-            onClick={() => setMenuAbierto((v) => !v)}
+            onClick={() => {
+              setMenuHaciaArriba(false);
+              setMenuAbierto((v) => !v);
+            }}
             className="w-7 h-7 rounded-md border border-border bg-surface text-text-muted text-[15px] leading-none flex items-center justify-center"
             title="Más acciones"
           >
             ⋯
           </button>
           {menuAbierto && (
-            <div className="absolute right-0 top-full mt-1 z-20 w-48 bg-surface border border-border rounded-lg shadow-lg py-1 flex flex-col">
+            <div
+              ref={panelRef}
+              className={`absolute right-0 z-20 w-48 max-h-[70vh] overflow-y-auto bg-surface border border-border rounded-lg shadow-lg py-1 flex flex-col ${menuHaciaArriba ? 'bottom-full mb-1' : 'top-full mt-1'}`}
+            >
               <ComentarioBoton
                 endpoint={`/ejercicios/${ejercicio.id}/comentario`}
                 comentarioActual={ejercicio.comentario}

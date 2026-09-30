@@ -1149,6 +1149,21 @@ cierre de microciclo → progreso → export a Excel):
   muestra los encabezados "Lunes"/"Martes" y la columna "Techo", ya no
   aparece el texto viejo ("Pactado ese microciclo"), y el botón del menú
   en Entrenamiento dice "Techo de reps" (ya no "Piso de reps").
+- **Fix: el menú "⋯" de un ejercicio quedaba fuera de pantalla si la
+  tarjeta estaba muy abajo** (`EjercicioAcciones` en
+  `EntrenamientoPage.jsx`): el panel siempre se abría hacia abajo del
+  botón (`top-full`), así que con el botón cerca del borde inferior de la
+  pantalla el menú (hasta 9 opciones) se desbordaba y las últimas
+  quedaban invisibles, sin scroll, sin forma de tocarlas. Ahora, al abrir
+  el menú, se mide una sola vez si entra hacia abajo (`getBoundingClientRect`
+  contra `window.innerHeight`) y si no entra se lo abre hacia arriba
+  (`bottom-full`) en su lugar; además tiene un `max-height` con scroll
+  propio como resguardo para pantallas muy chicas. Verificado con
+  Playwright en dos escenarios: viewport bajo (700px) con un ejercicio
+  pegado al fondo -el menú se abrió hacia arriba, completo y dentro del
+  viewport, incluida "Quitar ejercicio"- y viewport alto (1400px) con el
+  mismo ejercicio -el menú siguió abriéndose hacia abajo como siempre,
+  sin cambios en el caso normal.
 
 Pendiente / simplificaciones conocidas:
 
