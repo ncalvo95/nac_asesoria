@@ -31,6 +31,12 @@ const columnasNuevas = [
   { tabla: 'microciclo', columna: 'fase_nutricional', definicion: "TEXT CHECK (fase_nutricional IN ('volumen', 'definicion', 'mantenimiento'))" },
   { tabla: 'ejercicio_asignado', columna: 'musculos_secundarios_json', definicion: "TEXT NOT NULL DEFAULT '[]'" },
   { tabla: 'ejercicio_asignado', columna: 'progreso_automatico', definicion: 'INTEGER NOT NULL DEFAULT 1' },
+  // Sin REFERENCES a proposito: ejercicio_variante se crea recien mas abajo
+  // en este mismo archivo (via schema.sql), y el orden de ALTER TABLE acá
+  // no está garantizado contra eso - la consistencia (nunca apunta a una
+  // variante borrada) la mantiene la app (ver borrarVariante en
+  // rutinaService.js), no una FK.
+  { tabla: 'ejercicio_asignado', columna: 'variante_activa_id', definicion: 'INTEGER' },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

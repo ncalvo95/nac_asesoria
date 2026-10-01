@@ -252,6 +252,25 @@ CREATE TABLE IF NOT EXISTS ejercicio_asignado (
 
 CREATE INDEX IF NOT EXISTS idx_ejercicio_asignado_dia ON ejercicio_asignado(dia_rutina_id, orden);
 
+-- Ejercicios alternativos equivalentes para un slot (ej. "la maquina esta
+-- rota/ocupada, hoy hago otro que trabaje lo mismo"). Cada variante tiene su
+-- propio peso/techo de referencia, cargado y editado a mano (no los toca el
+-- motor de progresion) - asi no se mezcla con el peso del ejercicio titular,
+-- que puede no ser comparable (ej. mancuernas vs barra). ejercicio_asignado.
+-- variante_activa_id (ver columnasNuevas en migrate.js) apunta a cual de
+-- estas, si alguna, se usa en la PROXIMA sesion de este slot - se limpia
+-- solo al registrar esa sesion (ver registrarSesion en progressionEngine.js),
+-- asi que elegir una variante es "solo por esta vez", nunca permanente (para
+-- eso ya esta "Cambiar ejercicio"/sustituirEjercicio).
+CREATE TABLE IF NOT EXISTS ejercicio_variante (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ejercicio_asignado_id INTEGER NOT NULL REFERENCES ejercicio_asignado(id) ON DELETE CASCADE,
+  ejercicio_id INTEGER NOT NULL REFERENCES ejercicio(id),
+  peso_actual REAL,
+  piso_reps INTEGER,
+  UNIQUE (ejercicio_asignado_id, ejercicio_id)
+);
+
 -- ---------------------------------------------------------------------------
 -- Microciclos y progreso (nucleo del motor)
 -- ---------------------------------------------------------------------------

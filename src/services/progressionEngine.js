@@ -305,8 +305,16 @@ export function registrarSesion({ usuarioId, diaRutinaId, microcicloId, fecha, s
     }
   }
   deleteBorradorDia.run(diaRutinaId, microcicloId);
+  // Elegir una variante es "solo por esta vez" (ver ejercicio_variante en
+  // schema.sql): al cerrar esta sesion -se haya registrado o salteado- el
+  // slot vuelve solo al ejercicio titular para la proxima vez.
+  resetVarianteActivaDia.run(diaRutinaId);
   return sesionId;
 }
+
+const resetVarianteActivaDia = db.prepare(
+  'UPDATE ejercicio_asignado SET variante_activa_id = NULL WHERE dia_rutina_id = ? AND variante_activa_id IS NOT NULL'
+);
 
 const upsertBorradorDia = db.prepare(`
   INSERT INTO borrador_dia (dia_rutina_id, microciclo_id, valores_json, actualizado_en)

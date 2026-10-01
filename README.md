@@ -1164,6 +1164,37 @@ cierre de microciclo → progreso → export a Excel):
   viewport, incluida "Quitar ejercicio"- y viewport alto (1400px) con el
   mismo ejercicio -el menú siguió abriéndose hacia abajo como siempre,
   sin cambios en el caso normal.
+- **Variantes equivalentes por ejercicio** ("Agregar/elegir variante" en el
+  menú "⋯" de Entrenamiento; tabla nueva `ejercicio_variante`, columna
+  `ejercicio_asignado.variante_activa_id`; endpoints `POST
+  /ejercicios/:id/variantes`, `PATCH /ejercicios/:id/variante-activa`,
+  `PATCH` y `DELETE /variantes/:id`): para cuando la máquina/el ejercicio
+  de siempre no está disponible, sin perder el peso de referencia de
+  ninguno de los dos. A diferencia de "Cambiar ejercicio" (que reemplaza
+  el titular para siempre y pisa su peso/piso), una variante se agrega
+  *además* del titular -mismo músculo, mismo filtro de equipamiento,
+  mismo selector de candidatos- con su propio peso/techo de referencia,
+  guardado aparte en `ejercicio_variante` (uno por ejercicio del catálogo,
+  pueden coexistir varias). Elegirla activa redirige, solo para la
+  PRÓXIMA sesión de ese casillero, el nombre/peso/techo que se
+  muestra/edita (tarjeta, placeholders grises, "Peso base", "Techo de
+  reps", autocompletar, colores vs. lo pactado) a los de la variante, con
+  un badge "Variante" en la tarjeta - al registrar o saltear esa sesión,
+  vuelve sola al titular (no hay que acordarse de desmarcarla). El titular
+  y su `progreso_ejercicio_microciclo` (series/reps efectivas por
+  músculo, el ajuste automático de peso cada 2 semanas) quedan
+  completamente intactos pase lo que pase con las variantes: las reps que
+  se logran usando una SÍ se siguen contando para el cómputo de series
+  del músculo y para el techo del próximo cierre (por eso "el cálculo de
+  series por músculo sigue siendo igual"), pero el peso de la variante en
+  sí es un valor manual -vos lo cargás y editás, como "Peso base"-, nunca
+  tocado por el motor automático, ya que no sería comparable entre
+  ejercicios distintos (ej. mancuernas vs. barra). Verificado con
+  Playwright y llamadas directas a la API: agregar una variante la deja
+  activa de una (nombre/placeholders de la tarjeta cambian al toque),
+  volver al titular desde el panel restaura sus propios valores, y
+  registrar una sesión real con la variante activa la resetea sola -la
+  próxima carga de la rutina vuelve a mostrar el titular, sin badge.
 
 Pendiente / simplificaciones conocidas:
 

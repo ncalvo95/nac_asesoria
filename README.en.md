@@ -901,6 +901,37 @@ sessions → closing a microcycle → progress → Excel export):
   including "Quitar ejercicio"- and a tall viewport (1400px) with the same
   exercise -the menu still opened downward as always, no change to the
   normal case.
+- **Equivalent variants per exercise** ("Agregar/elegir variante" in
+  Entrenamiento's "⋯" menu; new `ejercicio_variante` table,
+  `ejercicio_asignado.variante_activa_id` column; endpoints `POST
+  /ejercicios/:id/variantes`, `PATCH /ejercicios/:id/variante-activa`,
+  `PATCH` and `DELETE /variantes/:id`): for when the usual machine/
+  exercise isn't available, without losing either one's reference weight.
+  Unlike "Cambiar ejercicio" (which permanently replaces the titular and
+  overwrites its weight/floor), a variant is added *alongside* the
+  titular -same muscle, same equipment filter, same candidate picker-
+  with its own weight/ceiling reference, stored separately in
+  `ejercicio_variante` (one row per catalog exercise, several can
+  coexist). Activating one redirects, only for the NEXT session of that
+  slot, the name/weight/ceiling shown and edited (card, gray
+  placeholders, "Peso base", "Techo de reps", autocomplete, colors vs.
+  the agreed target) to the variant's own, with a "Variante" badge on the
+  card - logging or skipping that session reverts it to the titular on
+  its own (no need to remember to switch back). The titular and its
+  `progreso_ejercicio_microciclo` (per-muscle set/effective-rep counting,
+  the automatic weight adjustment every 2 weeks) stay completely
+  untouched no matter what happens with variants: reps logged with one
+  still count toward the muscle's set total and toward the next close's
+  ceiling (so "per-muscle set counting stays the same" holds), but a
+  variant's own weight is a manual value -you load and edit it, like
+  "Peso base"-, never touched by the automatic engine, since it wouldn't
+  be comparable between different exercises (e.g. dumbbells vs. barbell).
+  Verified with Playwright and direct API calls: adding a variant
+  activates it right away (the card's name/placeholders change
+  immediately), switching back to the titular from the panel restores its
+  own values, and logging a real session with the variant active resets
+  it on its own - the next time the routine loads, the titular is back,
+  no badge.
 
 Known limitations / accepted simplifications:
 

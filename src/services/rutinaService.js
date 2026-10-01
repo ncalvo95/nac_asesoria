@@ -352,6 +352,37 @@ function ultimaSesionMicrocicloAnterior(diaRutinaId, microcicloAnterior) {
   return null;
 }
 
+// Variantes equivalentes agregadas a un slot (ver "Agregar/elegir variante"
+// en EjercicioAcciones, EntrenamientoPage.jsx).
+const variantesStmt = db.prepare(`
+  SELECT ev.id, ev.ejercicio_id, e.nombre AS ejercicio_nombre, ev.peso_actual, ev.piso_reps
+  FROM ejercicio_variante ev JOIN ejercicio e ON e.id = ev.ejercicio_id
+  WHERE ev.ejercicio_asignado_id = ?
+  ORDER BY ev.id
+`);
+
+// Adjunta la lista de variantes de un ejercicio y, si hay una activa (ver
+// ejercicio_asignado.variante_activa_id), pisa ejercicio_nombre/peso_actual/
+// piso_reps con los de esa variante - asi el resto de la UI (titulo de la
+// tarjeta, placeholders grises, autocompletar, colores vs. lo pactado) sigue
+// funcionando sin cambios, "como si" la variante fuera el titular por esta
+// sesion. Los valores reales del titular quedan aparte, en titular_*, para
+// poder mostrarlos como opcion de "volver" en el panel de variantes.
+function aplicarVarianteActiva(ej) {
+  const variantes = variantesStmt.all(ej.id);
+  const activa = ej.variante_activa_id ? variantes.find((v) => v.id === ej.variante_activa_id) : null;
+  return {
+    ...ej,
+    ejercicio_nombre: activa ? activa.ejercicio_nombre : ej.ejercicio_nombre,
+    peso_actual: activa ? activa.peso_actual : ej.peso_actual,
+    piso_reps: activa ? activa.piso_reps : ej.piso_reps,
+    titular_ejercicio_nombre: ej.ejercicio_nombre,
+    titular_peso_actual: ej.peso_actual,
+    titular_piso_reps: ej.piso_reps,
+    variantes,
+  };
+}
+
 export function obtenerRutinaActiva(usuarioId) {
   const rutina = db.prepare("SELECT * FROM rutina WHERE usuario_id = ? AND estado = 'activa'").get(usuarioId);
   if (!rutina) return null;
@@ -415,7 +446,7 @@ export function obtenerRutinaActiva(usuarioId) {
       const borrador = microcicloActual ? getBorradorDia.get(d.id, microcicloActual.id) : null;
       return {
         ...d,
-        ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id),
+        ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id).map(aplicarVarianteActiva),
         sesion_actual: registrosSemana ? registrosSemana[semanaActualNumero] : null,
         registros_semana: registrosSemana,
         borrador_registro: borrador ? JSON.parse(borrador.valores_json) : null,
@@ -671,6 +702,70 @@ export const sustituirEjercicioPreTesteo = db.transaction(({ ejercicioAsignadoId
     .run(destinoId, rango.min, rango.max, ejercicioAsignadoId);
 
   return { ejercicio_asignado_id: ejercicioAsignadoId, nuevo_ejercicio_id: destinoId, nuevo_ejercicio_nombre: nuevo.nombre, rango_reps_min: rango.min, rango_reps_max: rango.max };
+});
+
+// Agrega una variante equivalente a un slot (del catalogo o particular,
+// mismo musculo/equipamiento que sustituirEjercicio via resolverEjercicioDestino)
+// con su propio peso/techo de referencia, y la deja activa de una -no tendria
+// sentido agregarla y no usarla de entrada. A diferencia de sustituirEjercicio,
+// NO toca ejercicio_asignado.ejercicio_id ni progreso_ejercicio_microciclo: el
+// titular y su progresion automatica quedan intactos, la variante vive aparte
+// en ejercicio_variante (ver aplicarVarianteActiva).
+export const agregarVariante = db.transaction(({ ejercicioAsignadoId, usuarioId, nuevoEjercicioId, nombrePersonalizado, peso, reps }) => {
+  const ea = db.prepare('SELECT * FROM ejercicio_asignado WHERE id = ?').get(ejercicioAsignadoId);
+  const { nuevo, nuevoEjercicioId: destinoId } = resolverEjercicioDestino({ ea, usuarioId, nuevoEjercicioId, nombrePersonalizado });
+
+  if (destinoId === ea.ejercicio_id) {
+    throw new Error('Ese ya es el ejercicio titular de este musculo - elegi uno distinto para agregarlo como variante.');
+  }
+  const yaEsVariante = db.prepare(
+    'SELECT 1 FROM ejercicio_variante WHERE ejercicio_asignado_id = ? AND ejercicio_id = ?'
+  ).get(ejercicioAsignadoId, destinoId);
+  if (yaEsVariante) throw new Error('Ese ejercicio ya esta agregado como variante de este musculo.');
+
+  const { lastInsertRowid: varianteId } = db.prepare(`
+    INSERT INTO ejercicio_variante (ejercicio_asignado_id, ejercicio_id, peso_actual, piso_reps) VALUES (?, ?, ?, ?)
+  `).run(ejercicioAsignadoId, destinoId, peso, reps);
+  db.prepare('UPDATE ejercicio_asignado SET variante_activa_id = ? WHERE id = ?').run(varianteId, ejercicioAsignadoId);
+
+  return { id: varianteId, ejercicio_id: destinoId, ejercicio_nombre: nuevo.nombre, peso_actual: peso, piso_reps: reps };
+});
+
+// Cambia cual variante (o null = volver al titular) se va a usar en la
+// PROXIMA sesion de este slot - ver variante_activa_id en
+// ejercicio_asignado y aplicarVarianteActiva.
+export function activarVariante(ejercicioAsignadoId, varianteId) {
+  if (varianteId != null) {
+    const v = db.prepare('SELECT 1 FROM ejercicio_variante WHERE id = ? AND ejercicio_asignado_id = ?').get(varianteId, ejercicioAsignadoId);
+    if (!v) throw new Error('Variante no encontrada para este ejercicio.');
+  }
+  db.prepare('UPDATE ejercicio_asignado SET variante_activa_id = ? WHERE id = ?').run(varianteId, ejercicioAsignadoId);
+}
+
+// Edita a mano el peso y/o el techo de reps guardados de una variante -
+// mismo espiritu que "Peso base"/"Techo de reps" del titular (PATCH
+// /ejercicios/:id/peso y /piso-reps en rutina.js), pero estos nunca los
+// toca el motor de progresion automatica.
+export function editarVariante(varianteId, { peso_actual, piso_reps }) {
+  const campos = [];
+  const valores = [];
+  if (peso_actual != null) { campos.push('peso_actual = ?'); valores.push(peso_actual); }
+  if (piso_reps != null) { campos.push('piso_reps = ?'); valores.push(piso_reps); }
+  if (campos.length === 0) throw new Error('Nada para editar.');
+  valores.push(varianteId);
+  const { changes } = db.prepare(`UPDATE ejercicio_variante SET ${campos.join(', ')} WHERE id = ?`).run(...valores);
+  if (changes === 0) throw new Error('Variante no encontrada.');
+}
+
+// Borra una variante guardada. Si era la activa, el slot vuelve a su
+// titular de una (no puede quedar variante_activa_id apuntando a una fila
+// borrada).
+export const borrarVariante = db.transaction((varianteId) => {
+  const v = db.prepare('SELECT ejercicio_asignado_id FROM ejercicio_variante WHERE id = ?').get(varianteId);
+  if (!v) throw new Error('Variante no encontrada.');
+  db.prepare('UPDATE ejercicio_asignado SET variante_activa_id = NULL WHERE id = ? AND variante_activa_id = ?')
+    .run(v.ejercicio_asignado_id, varianteId);
+  db.prepare('DELETE FROM ejercicio_variante WHERE id = ?').run(varianteId);
 });
 
 const getMaxOrdenDia = db.prepare('SELECT COALESCE(MAX(orden), 0) AS maxOrden FROM ejercicio_asignado WHERE dia_rutina_id = ?');

@@ -2,9 +2,10 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
-  agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, ajustarSeriesManual, cambiarDiaSemana, copiarDia, copiarEjercicioADia, crearRutina,
-  crearRutinaConSplit, crearRutinaManual, eliminarRutina, intercambiarDias, listarRutinas, moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva,
-  quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular, renombrarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
+  agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, agregarVariante, activarVariante, ajustarSeriesManual, borrarVariante, cambiarDiaSemana,
+  copiarDia, copiarEjercicioADia, crearRutina, crearRutinaConSplit, crearRutinaManual, editarVariante, eliminarRutina, intercambiarDias, listarRutinas,
+  moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva, quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular,
+  renombrarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import {
   cerrarMicrociclo, editarResultadosSemana0, guardarBorradorDia, guardarBorradorSemana0, marcarFaseNutricional, marcarNuevoTesteo, marcarSemanaDescarga, obtenerSemana0Editable, obtenerTesteos,
@@ -431,7 +432,15 @@ router.patch('/ejercicios/:ejercicioAsignadoId/peso', (req, res) => {
   if (typeof peso !== 'number' || !Number.isFinite(peso) || peso <= 0) {
     return res.status(400).json({ error: 'peso debe ser un numero mayor a 0.' });
   }
-  db.prepare('UPDATE ejercicio_asignado SET peso_actual = ? WHERE id = ?').run(peso, ea.id);
+  // Con una variante activa (ver variante_activa_id), "Peso base" edita el
+  // peso guardado de ESA variante, no el del titular - es lo que se esta
+  // mostrando/usando ahora mismo (ver aplicarVarianteActiva en
+  // rutinaService.js).
+  if (ea.variante_activa_id) {
+    editarVariante(ea.variante_activa_id, { peso_actual: peso });
+  } else {
+    db.prepare('UPDATE ejercicio_asignado SET peso_actual = ? WHERE id = ?').run(peso, ea.id);
+  }
   res.json({ id: ea.id, peso_actual: peso });
 });
 
@@ -450,6 +459,13 @@ router.patch('/ejercicios/:ejercicioAsignadoId/piso-reps', (req, res) => {
   const { piso_reps } = req.body || {};
   if (!Number.isInteger(piso_reps) || piso_reps <= 0) {
     return res.status(400).json({ error: 'piso_reps debe ser un entero mayor a 0.' });
+  }
+  // Igual que en /peso arriba: con una variante activa, esto edita el techo
+  // guardado de esa variante (que no vive en progreso_ejercicio_microciclo,
+  // no tiene microciclo), no el del titular.
+  if (ea.variante_activa_id) {
+    editarVariante(ea.variante_activa_id, { piso_reps });
+    return res.json({ id: ea.id, piso_reps });
   }
   const microcicloActual = db.prepare("SELECT id FROM microciclo WHERE rutina_id = ? AND estado = 'en_curso'").get(ea.rutina_id);
   if (!microcicloActual) return res.status(400).json({ error: 'No hay un microciclo en curso.' });
@@ -683,6 +699,89 @@ router.post('/ejercicios/:ejercicioAsignadoId/sustituir-pre-testeo', (req, res, 
     }
     next(err);
   }
+});
+
+// Agrega una variante equivalente al slot (candidatos: mismo endpoint de
+// arriba, /ejercicios/:id/candidatos) y la deja activa para la proxima
+// sesion. A diferencia de "sustituir", el ejercicio titular y su progreso
+// automatico quedan intactos - ver agregarVariante en rutinaService.js.
+router.post('/ejercicios/:ejercicioAsignadoId/variantes', (req, res, next) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { nuevo_ejercicio_id, nombre_personalizado, peso, reps } = req.body || {};
+  if ((!nuevo_ejercicio_id && !nombre_personalizado) || peso == null || reps == null) {
+    return res.status(400).json({ error: '(nuevo_ejercicio_id o nombre_personalizado), peso y reps son obligatorios.' });
+  }
+  try {
+    const out = agregarVariante({
+      ejercicioAsignadoId: ea.id, usuarioId: ea.usuario_id, nuevoEjercicioId: nuevo_ejercicio_id,
+      nombrePersonalizado: nombre_personalizado, peso, reps,
+    });
+    res.json(out);
+  } catch (err) {
+    if (err.message.includes('musculo') || err.message.includes('equipamiento') || err.message.includes('variante') || err.message.includes('titular') || err.message.includes('nombre')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// Cambia cual variante (o ninguna = volver al titular) se va a usar en la
+// proxima sesion de este slot, sin agregar una nueva.
+router.patch('/ejercicios/:ejercicioAsignadoId/variante-activa', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  const { variante_id } = req.body || {};
+  try {
+    activarVariante(ea.id, variante_id ?? null);
+    res.json({ id: ea.id, variante_activa_id: variante_id ?? null });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+function getVarianteOr404(req, res) {
+  const v = db.prepare(`
+    SELECT ev.*, r.usuario_id FROM ejercicio_variante ev
+    JOIN ejercicio_asignado ea ON ea.id = ev.ejercicio_asignado_id
+    JOIN dia_rutina dr ON dr.id = ea.dia_rutina_id
+    JOIN rutina r ON r.id = dr.rutina_id
+    WHERE ev.id = ?
+  `).get(req.params.varianteId);
+  if (!v) {
+    res.status(404).json({ error: 'Variante no encontrada.' });
+    return null;
+  }
+  if (!checkAccesoUsuario(req, res, v.usuario_id)) return null;
+  return v;
+}
+
+router.patch('/variantes/:varianteId', (req, res) => {
+  const v = getVarianteOr404(req, res);
+  if (!v) return;
+  const { peso, piso_reps } = req.body || {};
+  if (peso == null && piso_reps == null) {
+    return res.status(400).json({ error: 'peso y/o piso_reps son obligatorios.' });
+  }
+  if (peso != null && (typeof peso !== 'number' || !Number.isFinite(peso) || peso <= 0)) {
+    return res.status(400).json({ error: 'peso debe ser un numero mayor a 0.' });
+  }
+  if (piso_reps != null && (!Number.isInteger(piso_reps) || piso_reps <= 0)) {
+    return res.status(400).json({ error: 'piso_reps debe ser un entero mayor a 0.' });
+  }
+  try {
+    editarVariante(v.id, { peso_actual: peso, piso_reps });
+    res.json({ id: v.id, peso_actual: peso ?? v.peso_actual, piso_reps: piso_reps ?? v.piso_reps });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/variantes/:varianteId', (req, res) => {
+  const v = getVarianteOr404(req, res);
+  if (!v) return;
+  borrarVariante(v.id);
+  res.json({ ok: true });
 });
 
 function getDiaOr404(req, res) {
