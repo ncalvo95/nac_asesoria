@@ -1220,6 +1220,25 @@ cierre de microciclo → progreso → export a Excel):
   puede llamar al endpoint (403), un coach viendo la rutina de su alumno
   sí lo ve, y corregir "bíceps" (mal anotado) a "espalda" actualiza tanto
   el catálogo como la asignación ya existente.
+- **Fix: "Autocompletar" pisaba el peso que ya hubieras tipeado a mano en
+  una serie** (`autocompletarReferencia` en `EntrenamientoPage.jsx`): el
+  botón siempre reseteaba las 3 columnas (peso Y reps) de TODAS las series
+  al peso de base, incluso si ya habías cargado un peso distinto a mano en
+  alguna -por ejemplo, porque hoy entrenás más pesado que la última vez-,
+  perdiendo ese dato. Ahora solo completa lo que todavía está vacío: si
+  una serie ya tiene un peso o unas reps tipeadas, se respetan tal cual; el
+  resto se completa con el peso de base y, para las reps, con la misma
+  lógica que ya calcula el placeholder gris en vivo mientras tipeás
+  (`calcularSugerenciaReps`) -que compara el peso de cada serie contra la
+  anterior, así que si tipeaste un peso distinto en una serie, la cascada
+  de reps se corta ahí en vez de asumir que seguís con el peso de base.
+  Verificado con Playwright: tipear 45kg en la serie 1 (el de base es 40)
+  y tocar "Autocompletar" -la serie 1 queda en 45kg (no se pisa) con sus
+  reps completadas al techo, las series 2 y 3 se completan con 40kg (el
+  de base, que es lo que ya se mostraba en gris ahí) pero SIN reps
+  sugeridas (45≠40, no hay cascada); y el caso sin nada tipeado sigue
+  funcionando exactamente igual que antes (peso de base + cascada de a 2
+  reps en las 3 series).
 
 Pendiente / simplificaciones conocidas:
 

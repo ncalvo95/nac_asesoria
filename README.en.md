@@ -956,6 +956,25 @@ sessions → closing a microcycle → progress → Excel export):
   the endpoint (403), a coach viewing their client's routine can see it,
   and correcting "bíceps" (mistagged) to "espalda" updates both the
   catalog and the existing assignment.
+- **Fix: "Autocompletar" overwrote a weight already typed by hand into a
+  set** (`autocompletarReferencia` in `EntrenamientoPage.jsx`): the button
+  always reset all 3 columns (weight AND reps) of EVERY set to the base
+  weight, even if you had already typed a different weight into one by
+  hand -e.g. because you're training heavier today than last time- losing
+  that value. Now it only fills in what's still empty: a set that already
+  has a weight or reps typed in keeps it as-is; the rest gets filled with
+  the base weight and, for reps, with the same logic that already
+  computes the live gray placeholder as you type
+  (`calcularSugerenciaReps`) -which compares each set's weight against the
+  previous one, so if you typed a different weight into a set, the reps
+  cascade stops there instead of assuming you're still on the base
+  weight. Verified with Playwright: typing 45kg into set 1 (base is 40)
+  and tapping "Autocompletar" -set 1 stays at 45kg (not overwritten) with
+  its reps filled to the ceiling, sets 2 and 3 get filled with 40kg (the
+  base, which is what was already shown there in gray) but with NO
+  suggested reps (45≠40, no cascade); and the case with nothing typed
+  still works exactly as before (base weight + a 2-rep cascade across all
+  3 sets).
 
 Known limitations / accepted simplifications:
 

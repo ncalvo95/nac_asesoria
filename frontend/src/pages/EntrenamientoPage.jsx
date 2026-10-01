@@ -1705,19 +1705,24 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
     });
   }
 
-  // Carga de una el peso de referencia (el mismo que ya se ve como
-  // placeholder gris) y la baja de reps esperada en cada serie, para no
-  // tener que tipearlos serie por serie. Pisa lo que ya este tipeado en las
-  // filas reales (no toca las de dropset) - es una carga explicita, no un
-  // autocompletado silencioso.
+  // Completa el peso de referencia (el mismo que ya se ve como placeholder
+  // gris) y la baja de reps esperada en cada serie, para no tener que
+  // tipearlos serie por serie. Solo llena lo que todavia esta VACIO - si ya
+  // tipeaste un peso distinto al de base en alguna serie, se respeta (no se
+  // pisa), y las reps sugeridas para las filas vacias se calculan en
+  // relacion a lo que haya en cada fila (tipeado o de base), con la misma
+  // logica que ya usa el placeholder gris en vivo (calcularSugerenciaReps) -
+  // no siempre contra el peso de base si vos ya cambiaste algo.
   function autocompletarReferencia(ejercicioId) {
     setSeries((prev) => {
       const ej = dia.ejercicios.find((e) => e.id === ejercicioId);
       const actuales = prev[ejercicioId] ?? seriesPorEjercicio[ejercicioId];
       if (!ej || ej.peso_actual == null || !actuales) return prev;
       const pesoRef = String(ej.peso_actual);
-      const base = actuales.map((s) => (s.esDropset ? s : { ...s, peso: pesoRef, reps: '' }));
-      const conReps = base.map((s, idx) => (s.esDropset ? s : { ...s, reps: calcularSugerenciaReps(ej, base, idx) ?? '' }));
+      const conPeso = actuales.map((s) => (s.esDropset || s.peso !== '' ? s : { ...s, peso: pesoRef }));
+      const conReps = conPeso.map((s, idx) => (
+        s.esDropset || s.reps !== '' ? s : { ...s, reps: calcularSugerenciaReps(ej, conPeso, idx) ?? '' }
+      ));
       return { ...prev, [ejercicioId]: conReps };
     });
   }
