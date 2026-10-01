@@ -932,6 +932,30 @@ sessions → closing a microcycle → progress → Excel export):
   own values, and logging a real session with the variant active resets
   it on its own - the next time the routine loads, the titular is back,
   no badge.
+- **Coach/admin can correct a particular exercise's primary muscle**
+  ("Corregir músculo principal" button in Entrenamiento's "⋯" menu, only
+  visible/allowed for those 2 roles; `PATCH
+  /ejercicios/:id/musculo-principal` endpoint,
+  `cambiarMusculoEjercicioParticular` in `rutinaService.js`): requested,
+  because a "particular" exercise (one a client or the coach themselves
+  typed in by hand, outside the catalog) can end up wrongly classified by
+  a typo. Scoped to particular exercises only -never the global catalog,
+  which stays admin-only via "publish" in `/catalogo`, so one coach's
+  mistake can't reclassify an exercise other unrelated coaches/clients
+  use-. Unlike "Cambiar ejercicio", it doesn't go through any mini-test or
+  touch already-logged weight/ceiling/sets: it only fixes the
+  classification, both in the catalog (`ejercicio.musculo_primario_id`)
+  and in any `ejercicio_asignado` that already has that same particular
+  exercise assigned, across any routine/user (same pattern as the
+  deltoides/trapecio retroactive migrations, just triggered by hand). The
+  permission is checked on the backend itself (403 for a `cliente` calling
+  the endpoint directly, not just a hidden UI button) using the logged-in
+  actor's role, not the role of whoever's routine is being viewed - so a
+  coach looking at a client's routine still sees themselves as a coach.
+  Verified with Playwright and curl: a client can't see the button or call
+  the endpoint (403), a coach viewing their client's routine can see it,
+  and correcting "bíceps" (mistagged) to "espalda" updates both the
+  catalog and the existing assignment.
 
 Known limitations / accepted simplifications:
 

@@ -591,6 +591,44 @@ export function renombrarEjercicioParticular(ejercicioAsignadoId, nuevoNombre) {
   return { ejercicio_id: ea.ejercicio_id, nombre: nombreLimpio };
 }
 
+// Corrige el musculo principal de un ejercicio "particular" ya cargado -
+// mismo alcance que renombrarEjercicioParticular (solo estos, nunca uno del
+// catalogo global), pero para cuando lo que esta mal es la clasificacion,
+// no el nombre: un alumno (o el propio coach) lo anoto bajo el musculo
+// equivocado al cargarlo. El llamador (PATCH /ejercicios/:id/musculo-
+// principal en rutina.js) ya valida que quien pide esto sea coach o admin.
+// A diferencia de sustituirEjercicio, no pasa por ningun mini-testeo ni
+// toca peso/piso/series - solo la clasificacion. Como "ejercicio" es una
+// tabla global, actualiza tanto el catalogo (musculo_primario_id) como el
+// musculo_objetivo_id de CUALQUIER ejercicio_asignado que ya tenga este
+// mismo ejercicio puesto, en cualquier rutina/usuario - mismo patron que
+// las migraciones retroactivas de deltoides/trapecio en migrate.js, pero
+// disparado a mano en vez de en un deploy. No recalcula rango_reps_min/max
+// (dependen del objetivo de cada usuario, no solo del musculo) ni
+// es_top_de_musculo: quedan como estaban, a corregir aparte si hiciera
+// falta.
+export const cambiarMusculoEjercicioParticular = db.transaction((ejercicioAsignadoId, nuevoMusculoId) => {
+  const ea = db.prepare(`
+    SELECT ea.ejercicio_id, e.patron_movimiento, e.musculo_primario_id
+    FROM ejercicio_asignado ea JOIN ejercicio e ON e.id = ea.ejercicio_id
+    WHERE ea.id = ?
+  `).get(ejercicioAsignadoId);
+  if (!ea) throw new Error('Ejercicio asignado no encontrado.');
+  if (ea.patron_movimiento !== 'personalizado') {
+    throw new Error('Solo se puede corregir el musculo principal de un ejercicio particular, no uno del catalogo.');
+  }
+  const musculo = db.prepare('SELECT id, nombre FROM musculo WHERE id = ? AND activo = 1').get(nuevoMusculoId);
+  if (!musculo) throw new Error('musculo_id invalido.');
+  if (musculo.id === ea.musculo_primario_id) {
+    throw new Error('Ese ya es el musculo principal de este ejercicio.');
+  }
+
+  db.prepare('UPDATE ejercicio SET musculo_primario_id = ? WHERE id = ?').run(musculo.id, ea.ejercicio_id);
+  db.prepare('UPDATE ejercicio_asignado SET musculo_objetivo_id = ? WHERE ejercicio_id = ?').run(musculo.id, ea.ejercicio_id);
+
+  return { ejercicio_id: ea.ejercicio_id, musculo_id: musculo.id, musculo_nombre: musculo.nombre };
+});
+
 // Validaciones compartidas por las dos variantes de sustitucion: el nuevo
 // ejercicio existe, es del mismo musculo objetivo, y es compatible con el
 // equipamiento actual del usuario.

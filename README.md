@@ -1195,6 +1195,31 @@ cierre de microciclo → progreso → export a Excel):
   volver al titular desde el panel restaura sus propios valores, y
   registrar una sesión real con la variante activa la resetea sola -la
   próxima carga de la rutina vuelve a mostrar el titular, sin badge.
+- **Coach/admin puede corregir el músculo principal de un ejercicio
+  particular** (botón "Corregir músculo principal" en el menú "⋯" de
+  Entrenamiento, solo visible/habilitado para esos 2 roles; endpoint
+  `PATCH /ejercicios/:id/musculo-principal`,
+  `cambiarMusculoEjercicioParticular` en `rutinaService.js`): a pedido,
+  porque un ejercicio "particular" (uno que un alumno o el propio coach
+  cargó a mano, fuera del catálogo) puede haber quedado mal clasificado
+  por error de tipeo. Scopeado a ejercicios particulares únicamente -nunca
+  el catálogo global, que sigue siendo admin-only vía "publicar" en
+  `/catalogo`, para no dejar que un error de un coach reclasifique un
+  ejercicio que usan otros coaches/alumnos sin relación-. A diferencia de
+  "Cambiar ejercicio", no pasa por ningún mini-testeo ni toca peso/techo/
+  series ya registrados: solo corrige la clasificación, tanto en el
+  catálogo (`ejercicio.musculo_primario_id`) como en cualquier
+  `ejercicio_asignado` que ya tenga puesto ese mismo ejercicio particular,
+  en cualquier rutina/usuario (mismo patrón que las migraciones
+  retroactivas de deltoides/trapecio, pero disparado a mano). El permiso
+  se valida en el propio backend (403 para un `cliente` que llame al
+  endpoint directo, no solo el botón oculto en la UI) usando el rol de
+  quien está logueado, no el dueño de la rutina que se está mirando -así
+  un coach viendo la rutina de un alumno sigue viéndose a sí mismo como
+  coach. Verificado con Playwright y curl: un cliente no ve el botón ni
+  puede llamar al endpoint (403), un coach viendo la rutina de su alumno
+  sí lo ve, y corregir "bíceps" (mal anotado) a "espalda" actualiza tanto
+  el catálogo como la asignación ya existente.
 
 Pendiente / simplificaciones conocidas:
 

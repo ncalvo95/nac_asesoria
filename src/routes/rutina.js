@@ -3,9 +3,9 @@ import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import {
   agregarDiaRutina, agregarEjercicioADia, agregarEjercicioPersonalizadoADia, agregarVariante, activarVariante, ajustarSeriesManual, borrarVariante, cambiarDiaSemana,
-  copiarDia, copiarEjercicioADia, crearRutina, crearRutinaConSplit, crearRutinaManual, editarVariante, eliminarRutina, intercambiarDias, listarRutinas,
-  moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva, quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina, renombrarEjercicioParticular,
-  renombrarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
+  cambiarMusculoEjercicioParticular, copiarDia, copiarEjercicioADia, crearRutina, crearRutinaConSplit, crearRutinaManual, editarVariante, eliminarRutina,
+  intercambiarDias, listarRutinas, moverEjercicioADia, obtenerImpactoQuitarDia, obtenerRutinaActiva, quitarDiaRutina, quitarEjercicioAsignado, reactivarRutina,
+  renombrarEjercicioParticular, renombrarRutina, reordenarEjercicios, sustituirEjercicio, sustituirEjercicioPreTesteo,
 } from '../services/rutinaService.js';
 import {
   cerrarMicrociclo, editarResultadosSemana0, guardarBorradorDia, guardarBorradorSemana0, marcarFaseNutricional, marcarNuevoTesteo, marcarSemanaDescarga, obtenerSemana0Editable, obtenerTesteos,
@@ -621,6 +621,31 @@ router.patch('/ejercicios/:ejercicioAsignadoId/nombre-particular', (req, res, ne
     res.json(out);
   } catch (err) {
     if (err.message.includes('particular') || err.message.includes('vacio') || err.message.includes('encontrado')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// Corrige el musculo principal de un ejercicio "particular" (ver
+// cambiarMusculoEjercicioParticular) - solo coach/admin, nunca el propio
+// cliente: el caso de uso es justamente corregir una mala clasificacion
+// que un alumno (o el coach) pudo haber cargado por error.
+router.patch('/ejercicios/:ejercicioAsignadoId/musculo-principal', (req, res, next) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  if (!['coach', 'admin'].includes(req.usuario.rol)) {
+    return res.status(403).json({ error: 'Solo un coach o el administrador puede corregir el músculo principal.' });
+  }
+  const { musculo_id } = req.body || {};
+  if (!musculo_id) {
+    return res.status(400).json({ error: 'musculo_id es obligatorio.' });
+  }
+  try {
+    const out = cambiarMusculoEjercicioParticular(ea.id, musculo_id);
+    res.json(out);
+  } catch (err) {
+    if (err.message.includes('particular') || err.message.includes('invalido') || err.message.includes('encontrado') || err.message.includes('musculo principal')) {
       return res.status(400).json({ error: err.message });
     }
     next(err);

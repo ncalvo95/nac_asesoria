@@ -149,6 +149,7 @@ export default function EntrenamientoPage() {
       rutina={rutina}
       microciclo={microcicloActual}
       usuario={usuario}
+      actorRol={sesion.rol}
       progreso={progreso}
       onGuardado={recargarSilencioso}
       onRutinaCambiada={recargarSilencioso}
@@ -919,7 +920,7 @@ function NumberField({ label, value, onChange }) {
   );
 }
 
-function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos }) {
+function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progreso, onGuardado, onRutinaCambiada, todosMusculos }) {
   const diasUnicos = useMemo(() => {
     const vistos = new Set();
     return rutina.dias.filter((d) => {
@@ -1096,6 +1097,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, progreso, onGuardado, o
           dia={dia}
           microciclo={microciclo}
           usuario={usuario}
+          actorRol={actorRol}
           progreso={progreso}
           onGuardado={onGuardado}
           onRutinaCambiada={onRutinaCambiada}
@@ -1402,7 +1404,7 @@ function colorClaseInput(color) {
   return 'border-border';
 }
 
-function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaCambiada, todosMusculos, diasHermanos, semanaActual, coloreadoActivo }) {
+function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado, onRutinaCambiada, todosMusculos, diasHermanos, semanaActual, coloreadoActivo }) {
   const borradorKey = `nac_borrador_dia_${dia.id}_${microciclo.id}`;
   const [series, setSeries] = useState(() => {
     const base = construirEstadoInicial(dia);
@@ -2000,6 +2002,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
               <EjercicioAcciones
                 ejercicio={ej}
                 usuario={usuario}
+                actorRol={actorRol}
                 onCambiado={onRutinaCambiada}
                 diasHermanos={diasHermanos}
                 esUltimoDelMusculo={esUltimoDelMusculo}
@@ -2061,7 +2064,7 @@ function RegistroDia({ dia, microciclo, usuario, progreso, onGuardado, onRutinaC
   );
 }
 
-function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUltimoDelMusculo, dropsetActivo, onToggleDropset, onAutocompletar, todosMusculos }) {
+function EjercicioAcciones({ ejercicio, usuario, actorRol, onCambiado, diasHermanos, esUltimoDelMusculo, dropsetActivo, onToggleDropset, onAutocompletar, todosMusculos }) {
   const advertenciaQuitar = ejercicio.es_top_de_musculo || esUltimoDelMusculo
     ? `Este es el ejercicio ${ejercicio.es_top_de_musculo ? 'principal' : 'único'} de ${CAPITALIZAR(formatearMusculo(ejercicio.musculo_nombre))} en este día. ¿Seguro que querés quitarlo?`
     : null;
@@ -2075,6 +2078,7 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
   const [mostrarDescanso, setMostrarDescanso] = useState(false);
   const [mostrarMoverCopiar, setMostrarMoverCopiar] = useState(false);
   const [mostrarEditarNombre, setMostrarEditarNombre] = useState(false);
+  const [mostrarMusculoPrincipal, setMostrarMusculoPrincipal] = useState(false);
   const [mostrarSecundarios, setMostrarSecundarios] = useState(false);
   const [error, setError] = useState('');
   const menuRef = useRef(null);
@@ -2255,6 +2259,16 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
                   Editar nombre
                 </button>
               )}
+              {ejercicio.patron_movimiento === 'personalizado' && (actorRol === 'coach' || actorRol === 'admin') && (
+                <button
+                  type="button"
+                  onClick={() => abrir(setMostrarMusculoPrincipal)}
+                  title="Para cuando un alumno (o vos mismo) lo cargó bajo el músculo equivocado"
+                  className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg"
+                >
+                  Corregir músculo principal
+                </button>
+              )}
               <div className="border-t border-border my-1" />
               <div className="px-3 py-1.5">
                 <QuitarEjercicioBoton
@@ -2329,6 +2343,16 @@ function EjercicioAcciones({ ejercicio, usuario, onCambiado, diasHermanos, esUlt
             ejercicioId={ejercicio.id}
             nombreActual={ejercicio.ejercicio_nombre}
             onEditado={() => { setMostrarEditarNombre(false); onCambiado(); }}
+          />
+        </div>
+      )}
+      {mostrarMusculoPrincipal && (
+        <div className="flex justify-end">
+          <CorregirMusculoPrincipal
+            ejercicioId={ejercicio.id}
+            musculoActual={ejercicio.musculo_nombre}
+            todosMusculos={todosMusculos}
+            onCorregido={() => { setMostrarMusculoPrincipal(false); onCambiado(); }}
           />
         </div>
       )}
@@ -2890,6 +2914,68 @@ function EditarNombreParticular({ ejercicioId, nombreActual, onEditado }) {
         {enviando ? 'Guardando…' : 'Guardar'}
       </button>
       {error && <span className="text-[11px] text-danger">{error}</span>}
+    </div>
+  );
+}
+
+// Corrige el musculo principal de un ejercicio "particular" (ver
+// EjercicioAcciones: solo visible para coach/admin, y solo en ejercicios
+// particulares) - para cuando un alumno, o el propio coach, lo cargo bajo
+// el musculo equivocado. A diferencia de "Cambiar ejercicio", esto NO pasa
+// por un mini-testeo ni toca el peso/techo ya registrado: solo corrige la
+// clasificacion (ver cambiarMusculoEjercicioParticular en rutinaService.js,
+// que tambien actualiza cualquier otro ejercicio_asignado que ya use este
+// mismo ejercicio particular, en cualquier rutina).
+function CorregirMusculoPrincipal({ ejercicioId, musculoActual, todosMusculos, onCorregido }) {
+  const [musculoId, setMusculoId] = useState('');
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  const opciones = (todosMusculos || []).filter((m) => m.nombre !== musculoActual);
+
+  async function confirmar() {
+    if (!musculoId) {
+      setError('Elegí el músculo correcto.');
+      return;
+    }
+    setEnviando(true);
+    setError('');
+    try {
+      await api.patch(`/ejercicios/${ejercicioId}/musculo-principal`, { musculo_id: Number(musculoId) });
+      onCorregido();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="bg-bg border border-border rounded-xl p-3 flex flex-col gap-2.5 max-w-xs">
+      <span className="text-[12px] font-semibold">Corregir músculo principal</span>
+      <p className="text-[11.5px] text-text-muted leading-relaxed">
+        Está cargado como {formatearMusculo(musculoActual)}. Esto corrige la clasificación de este ejercicio particular
+        -y la de cualquier otro día que ya lo tenga puesto-, sin tocar su peso ni sus series registradas.
+      </p>
+      <select
+        value={musculoId}
+        onChange={(e) => setMusculoId(e.target.value)}
+        className="h-9 rounded-lg border border-border bg-surface px-2 text-[13px] outline-none focus:border-accent"
+      >
+        <option value="">Elegí el músculo correcto…</option>
+        {opciones.map((m) => (
+          <option key={m.id} value={m.id}>{formatearMusculo(m.nombre)}</option>
+        ))}
+      </select>
+      {error && <span className="text-[12px] text-danger">{error}</span>}
+      <button
+        type="button"
+        onClick={confirmar}
+        disabled={enviando || !musculoId}
+        className="h-9 rounded-lg bg-accent text-accent-fg text-[13px] font-semibold disabled:opacity-60"
+      >
+        {enviando ? 'Guardando…' : 'Corregir'}
+      </button>
     </div>
   );
 }
