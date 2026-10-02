@@ -1364,6 +1364,39 @@ cierre de microciclo → progreso → export a Excel):
   `reference_source: "plan_anterior"` y los gramos exactos), y un coach
   dando de alta el sexo biológico y el primer plan de un cliente nuevo sin
   nada cargado todavía.
+- **Nutrición - Etapa 4 de 5 (modo objetivo)**: dentro de Definición, un
+  checkbox nuevo "Modo objetivo" activa el cálculo avanzado de pérdida de
+  grasa: en vez de los g/kg con decremento fijo, las calorías del día 1
+  salen de un déficit calculado (kg a perder × 7700 kcal/kg, repartido
+  entre las semanas del plan), con el piso calórico como tope duro
+  (`calcularModoObjetivo`). La proteína/grasa siguen saliendo de la
+  Definición "simple" (misma referencia y excepciones que la Etapa 3) -el
+  modo objetivo solo cambia cómo se llega a las calorías, nunca el
+  criterio de esos dos macros. Necesita fecha de nacimiento y altura
+  cargadas (si faltan, el día 1 se calcula igual pero sin semáforo ni
+  proyección, con un aviso explicando por qué). Con esos datos se arma
+  todo lo demás: el semáforo de realismo (ritmo %/semana, déficit % de las
+  kcal de referencia, piso de BMR y piso calórico absoluto, siempre
+  quedándose con la condición más severa si se disparan varias a la vez),
+  el botón "Aplicar plazo sugerido" cuando no da óptimo (recalcula el
+  plazo mínimo al ritmo configurado y precarga el formulario con esa
+  duración), la tabla semana a semana y un gráfico SVG del peso
+  proyectado (`proyectarSemanaASemana`, sin librería -mismo criterio
+  "diseño liviano" del resto del proyecto-, con el modelo optimista
+  "toda la pérdida es grasa" si se carga el % graso inicial). "Recálculo
+  quincenal": un botón "Actualizar peso actual" en el plan activo
+  re-basea el mismo plan (no crea uno nuevo) con el peso real de hoy -
+  descuenta de las semanas restantes las que ya pasaron desde el último
+  re-baseo, y del objetivo restante lo que efectivamente se perdió (nunca
+  negativo, nunca cuenta una suba de peso como "grasa perdida"). Probado
+  en navegador con Playwright: el formulario de "Nuevo plan" precarga
+  automáticamente el modo objetivo y sus valores desde el plan activo, un
+  objetivo agresivo (10 kg en 4 semanas) dispara "No recomendable" con el
+  piso calórico aplicado en las 4 semanas de la tabla, aplicar el plazo
+  sugerido precarga las semanas correctas, y actualizar el peso real
+  recalcula el objetivo y las semanas restantes sin tocar lo demás.
+  Verificado además que un plan de Mantenimiento/Volumen/Definición sin
+  objetivo sigue sin semáforo ni proyección (no hay regresión).
 
 Pendiente / simplificaciones conocidas:
 

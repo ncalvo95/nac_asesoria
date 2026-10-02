@@ -13,6 +13,7 @@ import {
   listarPlanesArchivados,
   crearPlan,
   archivarPlanActivo,
+  actualizarProgresoPlan,
 } from '../services/nutritionService.js';
 
 const router = Router();
@@ -58,6 +59,19 @@ router.post('/usuarios/:usuarioId/plan', (req, res) => {
   try {
     const plan = crearPlan(usuarioId, req.body || {}, req.usuario.id);
     res.status(201).json(plan);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Seguimiento quincenal del modo objetivo: re-basea el plan activo con el
+// peso real de hoy (ver actualizarProgresoPlan).
+router.patch('/usuarios/:usuarioId/plan/progreso', (req, res) => {
+  const usuarioId = checkAccesoUsuario(req, res);
+  if (usuarioId === null) return;
+  const { pesoActualKg } = req.body || {};
+  try {
+    res.json(actualizarProgresoPlan(usuarioId, pesoActualKg));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

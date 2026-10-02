@@ -1,8 +1,9 @@
 // Capa DB-aware del modulo de nutricion: es la unica que le pega a SQLite y
 // a la config (shared/nutrition/nutritionEngine.js nunca lo hace - recibe
 // todo resuelto por parametro, ver ese archivo). Etapa 3: alta y resultado
-// de un plan Mantenimiento/Volumen/Definicion "simple" -sin modo objetivo
-// (proyeccion semana a semana, Etapa 4).
+// de un plan Mantenimiento/Volumen/Definicion "simple". Etapa 4: modo
+// objetivo de Definicion (deficit calculado, proyeccion semana a semana,
+// semaforo de realismo, seguimiento quincenal).
 import db from '../db/index.js';
 import {
   calcularMacrosFase,
@@ -11,6 +12,10 @@ import {
   calcularTdeeMifflin,
   calcularNivelActividadAutomatico,
   resolverReferenciaDefinicion,
+  calcularModoObjetivo,
+  calcularSemaforo,
+  calcularPlazoMinimoSugerido,
+  proyectarSemanaASemana,
   NIVELES,
 } from '../../shared/nutrition/nutritionEngine.js';
 import { obtenerConfigActiva, obtenerVersionConfig } from './nutritionConfigService.js';
@@ -83,14 +88,22 @@ const insertPlan = db.prepare(`
   INSERT INTO nutrition_plans (
     user_id, created_by, phase, focus, activity_level, activity_source,
     reference_source, reference_macros_json, reference_weight_kg,
-    weeks, config_version_id, params_json
+    weeks, goal_fat_kg, config_version_id, params_json
   ) VALUES (
     @user_id, @created_by, @phase, @focus, @activity_level, @activity_source,
     @reference_source, @reference_macros_json, @reference_weight_kg,
-    @weeks, @config_version_id, @params_json
+    @weeks, @goal_fat_kg, @config_version_id, @params_json
   )
 `);
 const getPlanPorId = db.prepare('SELECT * FROM nutrition_plans WHERE id = ?');
+const actualizarProgreso = db.prepare(`
+  UPDATE nutrition_plans SET reference_weight_kg = ?, goal_fat_kg = ?, weeks = ?, start_date = date('now')
+  WHERE id = ?
+`);
+
+function resolverConfigDePlan(plan) {
+  return plan.status === 'active' ? obtenerConfigActiva().config : obtenerVersionConfig(plan.config_version_id).config;
+}
 
 // Semana actual de un plan (1-indexada) segun cuanto paso desde start_date -
 // solo le importa a la excepcion de grasa en hombres en definiciones
@@ -109,7 +122,7 @@ function semanaActualDesde(startDateIso, weeks) {
 // archivado contra la version de config que tenia congelada al crearse
 // (ver nutrition_config_versions) - nunca se reescribe solo en silencio.
 export function calcularResultadoPlan(plan, usuario) {
-  const config = plan.status === 'active' ? obtenerConfigActiva().config : obtenerVersionConfig(plan.config_version_id).config;
+  const config = resolverConfigDePlan(plan);
   const params = {
     fase: plan.phase, enfoque: plan.focus, sexo: usuario.sexo_biologico,
     nivel: plan.activity_level, pesoActualKg: plan.reference_weight_kg,
@@ -133,10 +146,76 @@ function mifflinInformativo(usuario, pesoActualKg, nivel, config) {
   return { edad, bmr: Math.round(bmr), tdee: Math.round(tdee) };
 }
 
+// Modo objetivo de Definicion: la "Definicion simple" (calcularMacrosFase)
+// sigue dando la proteina/grasa de referencia (con sus excepciones) y las
+// kcal que tendria SIN objetivo (kcalReferencia) - el modo objetivo solo
+// cambia COMO se llega a las kcal del dia (deficit calculado en base a
+// cuanta grasa perder y en cuantas semanas, ver calcularModoObjetivo),
+// nunca el criterio de proteina/grasa. El semaforo y la proyeccion
+// necesitan el BMR de Mifflin, que a su vez necesita fecha de nacimiento y
+// altura - si faltan, se devuelve igual el resultado del dia 1 pero sin
+// semaforo/proyeccion (mifflinDisponible: false, el frontend explica por que).
+function calcularResultadoObjetivo(plan, usuario, config) {
+  const params = JSON.parse(plan.params_json || '{}');
+  const referenciaGKg = JSON.parse(plan.reference_macros_json);
+  const { activity_level: nivel, focus: enfoque, reference_weight_kg: pesoActualKg, weeks: semanas } = plan;
+  const sexo = usuario.sexo_biologico;
+
+  const simple = calcularMacrosFase(
+    { fase: 'definicion', enfoque, sexo, nivel, pesoActualKg, referenciaGKg, semanasPlan: semanas, semanaActual: 1 },
+    config
+  );
+  const modoObjetivo = calcularModoObjetivo({
+    kcalReferencia: simple.kcal, kgAPerder: plan.goal_fat_kg, semanas,
+    macrosDefinicionGKg: { proteina: simple.proteinaGKg, grasa: simple.grasaGKg },
+    pesoActualKg, sexo, config,
+  });
+
+  const mifflinDisponible = Boolean(usuario.fecha_nacimiento && usuario.altura_cm);
+  let semaforo = null;
+  let plazoMinimoSugeridoSemanas = null;
+  let proyeccion = [];
+
+  if (mifflinDisponible) {
+    const edad = calcularEdad(usuario.fecha_nacimiento);
+    const bmrMifflin = calcularMifflinStJeor({ sexo, pesoKg: pesoActualKg, alturaCm: usuario.altura_cm, edad });
+    const pctGrasaInicial = params.pctGrasaInicial ?? null;
+
+    proyeccion = proyectarSemanaASemana({
+      pesoInicialKg: pesoActualKg, pctGrasaInicial, deficitSemanalKcal: modoObjetivo.deficitSemanalKcal,
+      kcalReferencia: simple.kcal, semanas, enfoque, sexo, nivel, referenciaGKg,
+    }, config);
+    const grasaFinalEstimadaPct = pctGrasaInicial != null
+      ? proyeccion[proyeccion.length - 1]?.pctGrasaProyectado ?? null
+      : null;
+
+    semaforo = calcularSemaforo({
+      pesoActualKg, deficitSemanalKcal: modoObjetivo.deficitSemanalKcal, kcalReferencia: simple.kcal,
+      kcalObjetivo: modoObjetivo.kcalObjetivo, sexo, bmrMifflin, grasaFinalEstimadaPct,
+    }, config);
+    if (semaforo.nivel !== 'optimo') {
+      plazoMinimoSugeridoSemanas = calcularPlazoMinimoSugerido({ kgAPerder: plan.goal_fat_kg, pesoActualKg }, config);
+    }
+  }
+
+  return {
+    resultado: { ...modoObjetivo, excepciones: simple.excepciones },
+    semaforo, plazoMinimoSugeridoSemanas, proyeccion, mifflinDisponible,
+  };
+}
+
 // Arma la respuesta completa que consume el frontend para un plan dado
-// (activo o uno del historial): el resultado de macros + el Mifflin
-// informativo, sin tocar nada.
+// (activo o uno del historial): el resultado de macros (o del modo
+// objetivo, si el plan tiene goal_fat_kg) + el Mifflin informativo.
 function construirRespuestaPlan(plan, usuario) {
+  if (plan.phase === 'definicion' && plan.goal_fat_kg) {
+    const config = resolverConfigDePlan(plan);
+    const objetivo = calcularResultadoObjetivo(plan, usuario, config);
+    return {
+      ...plan, ...objetivo,
+      mifflin: mifflinInformativo(usuario, plan.reference_weight_kg, plan.activity_level, config),
+    };
+  }
   const { resultado, config } = calcularResultadoPlan(plan, usuario);
   return {
     ...plan,
@@ -183,10 +262,19 @@ export const crearPlan = db.transaction((usuarioId, datos, creadoPor) => {
   if (!usuario.sexo_biologico) {
     throw new Error('Falta cargar el sexo biológico del usuario antes de calcular un plan de nutrición.');
   }
-  const { phase, focus, pesoActualKg, nivelManual, diasEntrenamientoManual, weeks, macrosActualesDeclaradosGDia } = datos;
+  const { phase, focus, pesoActualKg, nivelManual, diasEntrenamientoManual, weeks, macrosActualesDeclaradosGDia, goalFatKg, pctGrasaInicial } = datos;
   if (!['mantenimiento', 'volumen', 'definicion'].includes(phase)) throw new Error('phase inválida.');
   if (!['estandar', 'carbohidratos'].includes(focus)) throw new Error('focus inválida.');
   if (!(Number(pesoActualKg) > 0)) throw new Error('pesoActualKg debe ser un número mayor a 0.');
+
+  const modoObjetivoActivo = phase === 'definicion' && goalFatKg;
+  if (modoObjetivoActivo) {
+    if (!(Number(goalFatKg) > 0)) throw new Error('goalFatKg debe ser un número mayor a 0.');
+    if (!(Number(weeks) > 0)) throw new Error('Para el modo objetivo hace falta indicar la duración del plan en semanas.');
+    if (!usuario.fecha_nacimiento || !usuario.altura_cm) {
+      throw new Error('Para el modo objetivo hace falta cargar fecha de nacimiento y altura (se usan para el semáforo de realismo).');
+    }
+  }
 
   const activa = obtenerConfigActiva();
   const config = activa.config;
@@ -219,11 +307,13 @@ export const crearPlan = db.transaction((usuarioId, datos, creadoPor) => {
     reference_macros_json: referenceMacrosJson,
     reference_weight_kg: Number(pesoActualKg),
     weeks: weeks || null,
+    goal_fat_kg: modoObjetivoActivo ? Number(goalFatKg) : null,
     config_version_id: activa.id,
     params_json: JSON.stringify({
       diasEntrenamiento: nivelResuelto.diasEntrenamiento ?? null,
       pasosPromedio: nivelResuelto.pasosPromedio ?? null,
       motivosNivel: nivelResuelto.motivos,
+      pctGrasaInicial: modoObjetivoActivo && pctGrasaInicial ? Number(pctGrasaInicial) : null,
     }),
   });
 
@@ -236,3 +326,38 @@ export const archivarPlanActivo = db.transaction((usuarioId) => {
   archivarPlan.run(previo.id);
   return { archivado: true, id: previo.id };
 });
+
+// "Recalculo quincenal" del modo objetivo: en vez de inventar una fecha
+// exacta cada 14 dias, se re-basea el plan cuando el usuario carga su peso
+// real (coach o cliente, cuando les parezca) - las semanas YA pasadas
+// desde el ultimo re-baseo se descuentan de las semanas que quedan, y lo
+// efectivamente perdido (peso anterior - peso nuevo, nunca negativo) se
+// descuenta del objetivo restante. Mismo plan, misma fila (un check-in de
+// progreso no es un plan nuevo) - start_date se reinicia a hoy para que
+// la excepcion de grasa en hombres en definiciones largas siga contando
+// las semanas correctamente desde este nuevo punto de partida.
+export const actualizarProgresoPlan = db.transaction((usuarioId, pesoActualKg) => {
+  const plan = getPlanActivo.get(usuarioId);
+  if (!plan) throw new Error('No hay un plan activo.');
+  if (plan.phase !== 'definicion' || !plan.goal_fat_kg) {
+    throw new Error('Solo un plan de Definición con objetivo tiene seguimiento de progreso.');
+  }
+  if (!(Number(pesoActualKg) > 0)) throw new Error('pesoActualKg debe ser un número mayor a 0.');
+
+  const inicio = new Date(`${plan.start_date}T00:00:00Z`);
+  const hoy = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  const semanasTranscurridas = Math.max(0, Math.floor((hoy - inicio) / (7 * 86400000)));
+
+  const kgPerdidos = Math.max(0, plan.reference_weight_kg - Number(pesoActualKg));
+  const nuevoGoal = Math.max(0.1, round1(plan.goal_fat_kg - kgPerdidos));
+  const nuevasSemanas = Math.max(1, plan.weeks - semanasTranscurridas);
+
+  actualizarProgreso.run(Number(pesoActualKg), nuevoGoal, nuevasSemanas, plan.id);
+
+  const usuario = getUsuario.get(usuarioId);
+  return construirRespuestaPlan(getPlanPorId.get(plan.id), usuario);
+});
+
+function round1(n) {
+  return Math.round(n * 10) / 10;
+}

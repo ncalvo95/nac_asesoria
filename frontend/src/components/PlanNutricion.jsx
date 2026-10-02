@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { NIVELES, FASES, ENFOQUES } from '@shared/nutrition/nutritionEngine.js';
-import { LABEL_NIVEL, LABEL_ENFOQUE, LABEL_FASE, LABEL_FUENTE_REFERENCIA } from '../utils/nutricionLabels.js';
+import { LABEL_NIVEL, LABEL_ENFOQUE, LABEL_FASE, LABEL_FUENTE_REFERENCIA, LABEL_SEMAFORO, CLASE_SEMAFORO } from '../utils/nutricionLabels.js';
+import GraficoProyeccion from './GraficoProyeccion.jsx';
 
 function formatearFecha(iso) {
   return new Date(iso.replace(' ', 'T') + (iso.includes('Z') ? '' : 'Z')).toLocaleDateString('es-AR', {
@@ -21,6 +22,7 @@ export default function PlanNutricion({ usuarioId }) {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [mostrarHistorial, setMostrarHistorial] = useState(false);
   const [historial, setHistorial] = useState(null);
+  const [semanasSugeridas, setSemanasSugeridas] = useState(null);
 
   async function cargarTodo() {
     setError('');
@@ -79,7 +81,10 @@ export default function PlanNutricion({ usuarioId }) {
       {plan && !mostrarForm && (
         <ResultadoPlan
           plan={plan}
-          onNuevoPlan={() => setMostrarForm(true)}
+          usuarioId={usuarioId}
+          onNuevoPlan={() => { setSemanasSugeridas(null); setMostrarForm(true); }}
+          onAplicarPlazoSugerido={(semanas) => { setSemanasSugeridas(semanas); setMostrarForm(true); }}
+          onProgresoActualizado={(p) => setPlan(p)}
           onVerHistorial={toggleHistorial}
           mostrandoHistorial={mostrarHistorial}
         />
@@ -90,7 +95,8 @@ export default function PlanNutricion({ usuarioId }) {
           usuarioId={usuarioId}
           rutinaActiva={rutinaActiva}
           planActual={plan}
-          onCreado={(p) => { setPlan(p); setMostrarForm(false); setHistorial(null); }}
+          semanasSugeridas={semanasSugeridas}
+          onCreado={(p) => { setPlan(p); setMostrarForm(false); setHistorial(null); setSemanasSugeridas(null); }}
           onCancelar={plan ? () => setMostrarForm(false) : null}
         />
       )}
@@ -176,17 +182,25 @@ function DatosPersonalesForm({ usuarioId, datosPersonales, onGuardado }) {
   );
 }
 
-function ResultadoPlan({ plan, onNuevoPlan, onVerHistorial, mostrandoHistorial }) {
+function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, onProgresoActualizado, onVerHistorial, mostrandoHistorial }) {
   const r = plan.resultado;
+  const conObjetivo = Boolean(plan.goal_fat_kg);
+  const [mostrarProgreso, setMostrarProgreso] = useState(false);
+
   return (
     <section className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>
           <span className="text-[11.5px] font-semibold uppercase tracking-wide text-text-faint">
-            {LABEL_FASE[plan.phase]} · {LABEL_ENFOQUE[plan.focus]}
+            {LABEL_FASE[plan.phase]} · {LABEL_ENFOQUE[plan.focus]}{conObjetivo ? ' · Modo objetivo' : ''}
           </span>
           <div className="text-[26px] font-bold leading-tight">{r.kcal} kcal</div>
         </div>
+        {conObjetivo && plan.semaforo && (
+          <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${CLASE_SEMAFORO[plan.semaforo.nivel]}`}>
+            {LABEL_SEMAFORO[plan.semaforo.nivel]}
+          </span>
+        )}
       </div>
 
       <div className="flex gap-4 text-[13px]">
@@ -207,6 +221,9 @@ function ResultadoPlan({ plan, onNuevoPlan, onVerHistorial, mostrandoHistorial }
       {r.carbohidratosPorDebajoDelMinimo && (
         <p className="text-[11.5px] text-danger">Los carbohidratos quedaron por debajo del mínimo recomendado.</p>
       )}
+      {conObjetivo && r.pisoCalorioAplicado && (
+        <p className="text-[11.5px] text-danger">Se aplicó el piso calórico de seguridad: el déficit calculado daba menos calorías de las permitidas.</p>
+      )}
 
       <div className="flex flex-col gap-1 text-[11.5px] text-text-faint border-t border-border pt-2.5">
         <span>Peso de referencia: {plan.reference_weight_kg} kg · Nivel de actividad: {LABEL_NIVEL[plan.activity_level]} ({plan.activity_source === 'auto' ? 'automático' : 'manual'})</span>
@@ -216,7 +233,83 @@ function ResultadoPlan({ plan, onNuevoPlan, onVerHistorial, mostrandoHistorial }
         {plan.mifflin && (
           <span>Mifflin-St Jeor informativo: BMR {plan.mifflin.bmr} kcal · TDEE {plan.mifflin.tdee} kcal ({plan.mifflin.edad} años).</span>
         )}
+        {conObjetivo && (
+          <span>Objetivo: perder {plan.goal_fat_kg} kg de grasa en {plan.weeks} semana{plan.weeks === 1 ? '' : 's'} (déficit de {r.deficitDiarioKcal} kcal/día).</span>
+        )}
       </div>
+
+      {conObjetivo && !plan.mifflinDisponible && (
+        <p className="text-[11.5px] text-danger">
+          Cargá tu fecha de nacimiento y altura para ver el semáforo de realismo y la proyección semana a semana.
+        </p>
+      )}
+
+      {conObjetivo && plan.semaforo && (
+        <div className="flex flex-col gap-1.5 border-t border-border pt-2.5">
+          {plan.semaforo.motivos.map((m) => (
+            <p key={m} className="text-[11.5px] text-text-muted">{m}</p>
+          ))}
+          {plan.semaforo.advertenciaGrasaBaja && (
+            <p className="text-[11.5px] text-danger">El % de grasa corporal proyectado al final del plan queda en un nivel bajo.</p>
+          )}
+          {plan.plazoMinimoSugeridoSemanas != null && (
+            <button
+              onClick={() => onAplicarPlazoSugerido(plan.plazoMinimoSugeridoSemanas)}
+              className="text-[12px] font-semibold text-accent text-left"
+            >
+              Aplicar plazo sugerido ({plan.plazoMinimoSugeridoSemanas} semanas)
+            </button>
+          )}
+        </div>
+      )}
+
+      {conObjetivo && plan.proyeccion?.length > 1 && (
+        <div className="flex flex-col gap-3 border-t border-border pt-3">
+          <GraficoProyeccion proyeccion={plan.proyeccion} />
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11.5px]">
+              <thead>
+                <tr className="text-text-faint">
+                  <th className="text-left font-normal pb-1">Sem.</th>
+                  <th className="text-right font-normal pb-1">Peso</th>
+                  <th className="text-right font-normal pb-1">Kcal</th>
+                  <th className="text-right font-normal pb-1">P</th>
+                  <th className="text-right font-normal pb-1">G</th>
+                  <th className="text-right font-normal pb-1">C</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plan.proyeccion.map((f) => (
+                  <tr key={f.semana} className="border-t border-border">
+                    <td className="py-1">{f.semana}</td>
+                    <td className="text-right tabular">{f.pesoProyectadoKg}</td>
+                    <td className="text-right tabular">{f.kcal}</td>
+                    <td className="text-right tabular">{f.proteinaG}</td>
+                    <td className="text-right tabular">{f.grasaG}</td>
+                    <td className="text-right tabular">{f.carbohidratosG}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {conObjetivo && (
+        <div className="border-t border-border pt-2.5">
+          {!mostrarProgreso ? (
+            <button onClick={() => setMostrarProgreso(true)} className="text-[12px] font-semibold text-accent">
+              Actualizar peso actual
+            </button>
+          ) : (
+            <ActualizarProgreso
+              usuarioId={usuarioId}
+              onActualizado={(p) => { onProgresoActualizado(p); setMostrarProgreso(false); }}
+              onCancelar={() => setMostrarProgreso(false)}
+            />
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-between pt-1">
         <button onClick={onNuevoPlan} className="text-[12.5px] font-semibold text-accent">Nuevo plan</button>
@@ -228,18 +321,62 @@ function ResultadoPlan({ plan, onNuevoPlan, onVerHistorial, mostrandoHistorial }
   );
 }
 
-function FormularioPlan({ usuarioId, rutinaActiva, planActual, onCreado, onCancelar }) {
+function ActualizarProgreso({ usuarioId, onActualizado, onCancelar }) {
+  const [peso, setPeso] = useState('');
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if (!(Number(peso) > 0)) { setError('Ingresá tu peso actual en kg.'); return; }
+    setEnviando(true);
+    try {
+      const actualizado = await api.patch(`/nutricion/usuarios/${usuarioId}/plan/progreso`, { pesoActualKg: Number(peso) });
+      onActualizado(actualizado);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-2">
+      <p className="text-[11.5px] text-text-faint">
+        Recalcula lo que falta del plan (objetivo y semanas restantes) en base a tu peso de hoy.
+      </p>
+      <div className="flex gap-2">
+        <input type="number" step="0.1" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="Peso actual (kg)"
+          className="flex-1 h-9 rounded-lg border border-border bg-bg px-2.5 text-[13px] outline-none focus:border-accent" />
+        <button type="button" onClick={onCancelar} className="h-9 px-3 rounded-lg border border-border text-text-muted text-[12.5px] font-semibold">
+          Cancelar
+        </button>
+        <button type="submit" disabled={enviando} className="h-9 px-3 rounded-lg bg-accent text-accent-fg text-[12.5px] font-semibold disabled:opacity-60">
+          {enviando ? 'Guardando…' : 'Guardar'}
+        </button>
+      </div>
+      {error && <p className="text-[12px] text-danger">{error}</p>}
+    </form>
+  );
+}
+
+function FormularioPlan({ usuarioId, rutinaActiva, planActual, semanasSugeridas, onCreado, onCancelar }) {
+  const planConObjetivo = Boolean(planActual?.goal_fat_kg);
   const [peso, setPeso] = useState(planActual?.reference_weight_kg?.toString() || '');
   const [fase, setFase] = useState(planActual?.phase || 'mantenimiento');
   const [enfoque, setEnfoque] = useState(planActual?.focus || 'estandar');
   const [diasManual, setDiasManual] = useState('4');
   const [nivelManualActivo, setNivelManualActivo] = useState(false);
   const [nivelManual, setNivelManual] = useState('intermedio');
-  const [semanas, setSemanas] = useState('');
+  const [semanas, setSemanas] = useState(semanasSugeridas?.toString() || planActual?.weeks?.toString() || '');
   const [declararMacros, setDeclararMacros] = useState(false);
   const [proteinaDeclarada, setProteinaDeclarada] = useState('');
   const [grasaDeclarada, setGrasaDeclarada] = useState('');
   const [carbosDeclarados, setCarbosDeclarados] = useState('');
+  const [modoObjetivoActivo, setModoObjetivoActivo] = useState(Boolean(semanasSugeridas) || planConObjetivo);
+  const [kgAPerder, setKgAPerder] = useState(planActual?.goal_fat_kg?.toString() || '');
+  const [pctGrasaInicial, setPctGrasaInicial] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -254,6 +391,10 @@ function FormularioPlan({ usuarioId, rutinaActiva, planActual, onCreado, onCance
       setError('Indicá cuántos días por semana entrenás (entre 1 y 7).');
       return;
     }
+    if (fase === 'definicion' && modoObjetivoActivo) {
+      if (!(Number(kgAPerder) > 0)) { setError('Indicá cuántos kg de grasa querés perder.'); return; }
+      if (!(Number(semanas) > 0)) { setError('El modo objetivo necesita la duración del plan en semanas.'); return; }
+    }
     setEnviando(true);
     try {
       const payload = {
@@ -264,6 +405,8 @@ function FormularioPlan({ usuarioId, rutinaActiva, planActual, onCreado, onCance
         macrosActualesDeclaradosGDia: fase === 'definicion' && declararMacros
           ? { proteina: Number(proteinaDeclarada) || 0, grasa: Number(grasaDeclarada) || 0, carbohidratos: Number(carbosDeclarados) || 0 }
           : undefined,
+        goalFatKg: fase === 'definicion' && modoObjetivoActivo ? Number(kgAPerder) : undefined,
+        pctGrasaInicial: fase === 'definicion' && modoObjetivoActivo && pctGrasaInicial ? Number(pctGrasaInicial) : undefined,
       };
       const creado = await api.post(`/nutricion/usuarios/${usuarioId}/plan`, payload);
       onCreado(creado);
@@ -336,7 +479,9 @@ function FormularioPlan({ usuarioId, rutinaActiva, planActual, onCreado, onCance
       {fase === 'definicion' && (
         <>
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-text-muted">Duración del plan en semanas (opcional)</span>
+            <span className="text-[11px] text-text-muted">
+              Duración del plan en semanas {modoObjetivoActivo ? '(obligatoria para el modo objetivo)' : '(opcional)'}
+            </span>
             <input type="number" min="1" value={semanas} onChange={(e) => setSemanas(e.target.value)}
               className="h-10 rounded-lg border border-border bg-bg px-3 text-[13.5px] outline-none focus:border-accent" />
           </label>
@@ -363,6 +508,32 @@ function FormularioPlan({ usuarioId, rutinaActiva, planActual, onCreado, onCance
               </label>
             </div>
           )}
+
+          <div className="flex flex-col gap-2 border-t border-border pt-2.5">
+            <label className="flex items-center gap-2 text-[12.5px] font-semibold text-text">
+              <input type="checkbox" checked={modoObjetivoActivo} onChange={(e) => setModoObjetivoActivo(e.target.checked)} className="w-4 h-4 accent-accent" />
+              Modo objetivo (déficit calculado para perder grasa en un plazo)
+            </label>
+            {modoObjetivoActivo && (
+              <>
+                <p className="text-[11.5px] text-text-faint -mt-1">
+                  Necesita tu fecha de nacimiento y altura cargadas (se usan para el semáforo de realismo).
+                </p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10.5px] text-text-muted">Grasa a perder (kg)</span>
+                    <input type="number" step="0.1" value={kgAPerder} onChange={(e) => setKgAPerder(e.target.value)}
+                      className="h-9 rounded-lg border border-border bg-bg px-2 text-[12.5px] outline-none focus:border-accent" />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10.5px] text-text-muted">% graso actual (opcional)</span>
+                    <input type="number" step="0.1" value={pctGrasaInicial} onChange={(e) => setPctGrasaInicial(e.target.value)}
+                      className="h-9 rounded-lg border border-border bg-bg px-2 text-[12.5px] outline-none focus:border-accent" />
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
         </>
       )}
 

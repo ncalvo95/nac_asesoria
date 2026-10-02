@@ -1096,6 +1096,38 @@ sessions → closing a microcycle → progress → Excel export):
   `reference_source: "plan_anterior"` and the exact grams), and a coach
   entering biological sex and the first plan for a brand-new client with
   nothing on file yet.
+- **Nutrition - Stage 4 of 5 (goal mode)**: inside Definición, a new "Goal
+  mode" checkbox turns on the advanced fat-loss calculation: instead of
+  the fixed g/kg decrement, day-1 calories come from a calculated deficit
+  (kg to lose × 7700 kcal/kg, spread over the plan's weeks), with the
+  calorie floor as a hard cap (`calcularModoObjetivo`). Protein/fat still
+  come from the "simple" Definición (same reference and exceptions as
+  Stage 3) - goal mode only changes how the calories are reached, never
+  the criterion for those two macros. It needs birth date and height on
+  file (if missing, day 1 still calculates but without the semáforo or
+  projection, with a note explaining why). With those on file, everything
+  else gets built: the realism semáforo (rate %/week, deficit as % of
+  reference kcal, BMR floor and absolute calorie floor, always keeping the
+  most severe condition when several trigger at once), the "Apply
+  suggested timeframe" button when it isn't optimal (recalculates the
+  minimum timeframe at the configured rate and preloads the form with that
+  duration), the week-by-week table and an SVG chart of projected weight
+  (`proyectarSemanaASemana`, no library -same "light design" rule as the
+  rest of the project-, with the optimistic "all the loss is fat" model
+  when a starting body-fat % is entered). "Biweekly recalculation": an
+  "Update current weight" button on the active plan re-bases that same
+  plan (doesn't create a new one) with today's actual weight - it
+  subtracts from the remaining weeks however many have passed since the
+  last re-base, and from the remaining goal whatever was actually lost
+  (never negative, a weight gain is never counted as "fat lost"). Tested
+  in the browser with Playwright: the "New plan" form auto-preloads goal
+  mode and its values from the active plan, an aggressive goal (10 kg in
+  4 weeks) triggers "Not recommended" with the calorie floor applied
+  across all 4 weeks of the table, applying the suggested timeframe
+  preloads the right number of weeks, and updating the real weight
+  recalculates the remaining goal and weeks without touching anything
+  else. Also verified that a Mantenimiento/Volumen/Definición plan without
+  a goal still has no semáforo or projection (no regression).
 
 Known limitations / accepted simplifications:
 
