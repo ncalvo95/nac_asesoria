@@ -37,6 +37,7 @@ const columnasNuevas = [
   // variante borrada) la mantiene la app (ver borrarVariante en
   // rutinaService.js), no una FK.
   { tabla: 'ejercicio_asignado', columna: 'variante_activa_id', definicion: 'INTEGER' },
+  { tabla: 'usuarios', columna: 'pasos_por_defecto', definicion: 'INTEGER' },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

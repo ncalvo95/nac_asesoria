@@ -1414,6 +1414,32 @@ cierre de microciclo → progreso → export a Excel):
   motor de cálculo puro y config versionada (1), panel de admin (2), alta
   y resultado de un plan (3), modo objetivo con proyección y semáforo (4),
   y esta integración al reporte (5).
+- **Pasos diarios: día fijo (nunca libre), días de descanso en los tabs, y
+  un valor por defecto**: 3 ajustes pedidos sobre la carga de pasos diarios
+  de Entrenamiento. (1) El botón de pasos ya no tiene un selector de fecha
+  libre -cargaba el riesgo de anotar pasos en cualquier día sin querer-:
+  ahora recibe por prop la fecha del día que se está viendo (de
+  entrenamiento o de descanso) y siempre carga/edita ESE día, mostrando
+  "Pasos {fecha}: N" en el botón. (2) La fila de tabs de arriba
+  (`DiaEntrenamiento` en `EntrenamientoPage.jsx`) ahora arma los 7 días de
+  la semana en orden real (antes solo mostraba los días CON entrenamiento
+  asignado): un día sin rutina se ve como un tab con borde punteado que,
+  al tocarlo, muestra una tarjeta simple de "Día de descanso" -pensado
+  para poder cargar los pasos de un día libre, y para tener dónde pararse
+  si el entrenamiento se termina moviendo de día-. (3) Nuevo "pasos por
+  defecto" (`usuarios.pasos_por_defecto`, `PUT
+  /usuarios/:id/pasos-por-defecto`): un valor fijo que se usa como pasos
+  de cualquier día sin un registro explícito, tanto para mostrarlo en la
+  UI ("Pasos {fecha}: N (por defecto)") como para el cálculo del nivel de
+  actividad automático (`pasosRecientes` en `nutritionService.js` ahora
+  rellena los días sin carga explícita con el default antes de promediar,
+  en vez de ignorarlos) - así alguien que camina siempre más o menos lo
+  mismo no tiene que cargar día por día. Probado en navegador con
+  Playwright: saltear el testeo para llegar a un microciclo real, verificar
+  que aparecen los 7 días (incluidos sábado/domingo como descanso) con sus
+  fechas correctas, cargar pasos en un día de descanso, confirmar que el
+  botón cambia de fecha automáticamente al cambiar de tab, y que setear un
+  default lo muestra correctamente en un día nunca cargado.
 
 Pendiente / simplificaciones conocidas:
 

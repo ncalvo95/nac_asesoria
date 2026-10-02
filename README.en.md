@@ -1144,6 +1144,31 @@ sessions → closing a microcycle → progress → Excel export):
   of the nutrition module: the pure calculation engine and versioned
   config (1), the admin panel (2), creating and viewing a plan (3), goal
   mode with projection and semáforo (4), and this report integration (5).
+- **Daily steps: fixed day (never free-form), rest days in the tabs, and a
+  default value**: 3 requested tweaks to Entrenamiento's daily step
+  logging. (1) The steps button no longer has a free date picker -it
+  carried the risk of logging steps on the wrong day by accident-: it now
+  receives the date of the day being viewed (training or rest) as a prop
+  and always loads/edits THAT day, showing "Pasos {date}: N" on the
+  button. (2) The tab row up top (`DiaEntrenamiento` in
+  `EntrenamientoPage.jsx`) now builds all 7 days of the week in real order
+  (it used to only show days WITH training assigned): a day with no
+  routine shows as a dashed-border tab that, when tapped, shows a simple
+  "Rest day" card -meant for logging steps on an off day, and for having
+  somewhere to land if training ends up moving to a different day-. (3) A
+  new "default steps" (`usuarios.pasos_por_defecto`, `PUT
+  /usuarios/:id/pasos-por-defecto`): a fixed value used as the steps for
+  any day without an explicit entry, both for display ("Pasos {date}: N
+  (default)") and for the automatic activity level calculation
+  (`pasosRecientes` in `nutritionService.js` now fills days with no
+  explicit entry with the default before averaging, instead of skipping
+  them) - so someone who walks roughly the same amount every day doesn't
+  have to log it day by day. Tested in the browser with Playwright:
+  skipped the testing week to reach a real microciclo, verified all 7 days
+  show up (Saturday/Sunday included as rest) with correct dates, logged
+  steps on a rest day, confirmed the button's date switches automatically
+  when changing tabs, and that setting a default shows correctly on a day
+  that was never logged.
 
 Known limitations / accepted simplifications:
 

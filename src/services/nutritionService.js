@@ -40,16 +40,37 @@ export function diasEntrenamientoDesdeRutina(usuarioId) {
 
 // Promedio de pasos de los ultimos N dias (config.actividad.pasosVentanaDias)
 // y cuantos de esos dias tienen un valor cargado - calcularNivelActividadAutomatico
-// decide con eso si el promedio es confiable o no.
+// decide con eso si el promedio es confiable o no. Un dia sin registro_pasos
+// explicito cuenta igual si el usuario tiene "pasos por defecto" seteado
+// (ver pasos_por_defecto en usuarios) - asi alguien que camina siempre mas o
+// menos lo mismo no tiene que cargar dia por dia para que el nivel
+// automatico funcione.
 export function pasosRecientes(usuarioId, ventanaDias) {
   const filas = db.prepare(`
-    SELECT pasos FROM registro_pasos
+    SELECT fecha, pasos FROM registro_pasos
     WHERE usuario_id = ? AND fecha >= date('now', '-' || ? || ' days')
   `).all(usuarioId, ventanaDias);
-  const diasConPasosCargados = filas.length;
-  const pasosPromedioUltimos14 = diasConPasosCargados > 0
-    ? filas.reduce((suma, f) => suma + f.pasos, 0) / diasConPasosCargados
-    : 0;
+  const explicitos = new Map(filas.map((f) => [f.fecha, f.pasos]));
+
+  const { pasos_por_defecto: pasosPorDefecto } = db.prepare(
+    'SELECT pasos_por_defecto FROM usuarios WHERE id = ?'
+  ).get(usuarioId);
+
+  let total = 0;
+  let diasConPasosCargados = 0;
+  const hoy = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z');
+  for (let i = 0; i < ventanaDias; i++) {
+    const fecha = new Date(hoy.getTime() - i * 86400000).toISOString().slice(0, 10);
+    if (explicitos.has(fecha)) {
+      total += explicitos.get(fecha);
+      diasConPasosCargados++;
+    } else if (pasosPorDefecto != null) {
+      total += pasosPorDefecto;
+      diasConPasosCargados++;
+    }
+  }
+
+  const pasosPromedioUltimos14 = diasConPasosCargados > 0 ? total / diasConPasosCargados : 0;
   return { pasosPromedioUltimos14, diasConPasosCargados };
 }
 

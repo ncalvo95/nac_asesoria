@@ -290,12 +290,29 @@ router.get('/:usuarioId/pasos', (req, res) => {
   const usuario_id = checkAcceso(req, res);
   if (usuario_id === null) return;
   const dias = Math.min(Math.max(Number(req.query.dias) || 7, 1), 90);
-  const rows = db.prepare(`
+  const historial = db.prepare(`
     SELECT fecha, pasos FROM registro_pasos
     WHERE usuario_id = ? AND fecha >= date('now', ?)
     ORDER BY fecha DESC
   `).all(usuario_id, `-${dias} days`);
-  res.json(rows);
+  const { pasos_por_defecto } = db.prepare('SELECT pasos_por_defecto FROM usuarios WHERE id = ?').get(usuario_id);
+  res.json({ historial, pasos_por_defecto });
+});
+
+// "Pasos por defecto": un valor fijo que se usa como pasos de cualquier
+// dia que no tenga un registro explicito (ver registro_pasos y
+// pasosRecientes en nutritionService.js) - para no tener que cargar dia
+// por dia cuando siempre se camina mas o menos lo mismo. null = sin
+// default (hay que cargar cada dia a mano, comportamiento de siempre).
+router.put('/:usuarioId/pasos-por-defecto', (req, res) => {
+  const usuario_id = checkAcceso(req, res);
+  if (usuario_id === null) return;
+  const { pasos_por_defecto } = req.body || {};
+  if (pasos_por_defecto != null && (!Number.isInteger(pasos_por_defecto) || pasos_por_defecto < 0)) {
+    return res.status(400).json({ error: 'pasos_por_defecto debe ser un entero mayor o igual a 0, o null para desactivarlo.' });
+  }
+  db.prepare('UPDATE usuarios SET pasos_por_defecto = ? WHERE id = ?').run(pasos_por_defecto ?? null, usuario_id);
+  res.json({ pasos_por_defecto: pasos_por_defecto ?? null });
 });
 
 // ---- Vista consolidada del perfil (para armar la rutina) ----

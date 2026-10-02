@@ -932,6 +932,19 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progreso, onG
 
   const [diaId, setDiaId] = useState(() => elegirDiaInicial(diasUnicos) ?? rutina.dias[0].id);
   const dia = rutina.dias.find((d) => d.id === diaId) ?? rutina.dias[0];
+  // Dia de descanso que se esta viendo (si hay uno) - null mientras se ve un
+  // dia de entrenamiento normal. Se agrega para poder cargar pasos en un
+  // dia sin entrenamiento, y para tener donde pararse si algun dia se
+  // termina moviendo el entrenamiento a otro dia de la semana.
+  const [descansoDiaSemana, setDescansoDiaSemana] = useState(null);
+  // Todos los dias de la semana en orden real (lunes a domingo), cada uno
+  // con su dia de entrenamiento si lo tiene o un marcador de descanso si no -
+  // a diferencia de diasUnicos (que solo trae los dias CON entrenamiento,
+  // en el orden en que estan guardados), esto arma la fila de tabs completa.
+  const diasSemanaCompletos = useMemo(
+    () => ORDEN_DIAS.map((ds) => diasUnicos.find((d) => d.dia_semana === ds) ?? { esDescanso: true, dia_semana: ds }),
+    [diasUnicos]
+  );
   const [mostrarAgregarDia, setMostrarAgregarDia] = useState(false);
   const [mostrarQuitarDia, setMostrarQuitarDia] = useState(false);
   const [mostrarCambiarDia, setMostrarCambiarDia] = useState(false);
@@ -959,35 +972,46 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progreso, onG
       return nuevo;
     });
   }
-  const fechaDia = rutina.semana_actual
-    ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), dia.dia_semana)
+  const fechaVista = rutina.semana_actual
+    ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), descansoDiaSemana ?? dia.dia_semana)
     : null;
+  // Fecha a la que van los pasos que se carguen desde esta pantalla - la del
+  // dia que se esta viendo (entrenamiento o descanso), nunca una fecha
+  // libre: si no hay microciclo en curso todavia (testeo), cae a la fecha
+  // real de hoy.
+  const fechaParaPasos = fechaVista ? fechaVista.toISOString().slice(0, 10) : hoyISO();
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-6 md:max-w-5xl md:mx-auto">
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-[17px] font-bold">{CAPITALIZAR(dia.dia_semana)}</h1>
-            {fechaDia && <span className="tabular text-[12px] text-text-faint">{formatearFechaCorta(fechaDia)}</span>}
-            <span className="tabular text-[12px] text-text-muted">Microciclo {microciclo.numero}</span>
-            <span
-              className="tabular text-[12px] text-text-faint"
-              title="Estimado: 30s de trabajo por serie + el descanso entre series + 5 min de transición por ejercicio (cambiar de máquina, cargar/descargar)"
-            >
-              ~{duracionEstimadaDia(dia)} min
-            </span>
-            <FaseNutricional rutinaId={rutina.id} faseActual={microciclo.fase_nutricional} onCambiada={onRutinaCambiada} />
-            <button
-              type="button"
-              onClick={alternarColoreado}
-              title={coloreadoActivo ? 'Apagar el coloreado de peso/reps contra lo pactado' : 'Prender el coloreado de peso/reps contra lo pactado'}
-              className={`h-6 rounded-full border px-2.5 text-[11px] font-semibold ${
-                coloreadoActivo ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
-              }`}
-            >
-              Colores {coloreadoActivo ? 'ON' : 'OFF'}
-            </button>
+            <h1 className="text-[17px] font-bold">
+              {descansoDiaSemana ? CAPITALIZAR(descansoDiaSemana) : CAPITALIZAR(dia.dia_semana)}
+            </h1>
+            {fechaVista && <span className="tabular text-[12px] text-text-faint">{formatearFechaCorta(fechaVista)}</span>}
+            {!descansoDiaSemana && (
+              <>
+                <span className="tabular text-[12px] text-text-muted">Microciclo {microciclo.numero}</span>
+                <span
+                  className="tabular text-[12px] text-text-faint"
+                  title="Estimado: 30s de trabajo por serie + el descanso entre series + 5 min de transición por ejercicio (cambiar de máquina, cargar/descargar)"
+                >
+                  ~{duracionEstimadaDia(dia)} min
+                </span>
+                <FaseNutricional rutinaId={rutina.id} faseActual={microciclo.fase_nutricional} onCambiada={onRutinaCambiada} />
+                <button
+                  type="button"
+                  onClick={alternarColoreado}
+                  title={coloreadoActivo ? 'Apagar el coloreado de peso/reps contra lo pactado' : 'Prender el coloreado de peso/reps contra lo pactado'}
+                  className={`h-6 rounded-full border px-2.5 text-[11px] font-semibold ${
+                    coloreadoActivo ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                  }`}
+                >
+                  Colores {coloreadoActivo ? 'ON' : 'OFF'}
+                </button>
+              </>
+            )}
           </div>
           <ExportarExcel rutinaId={rutina.id} usuarioId={usuario.id} microciclos={rutina.microciclos} />
         </div>
@@ -1009,7 +1033,25 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progreso, onG
         )}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex gap-1.5 flex-wrap">
-            {diasUnicos.map((d) => {
+            {diasSemanaCompletos.map((d) => {
+              if (d.esDescanso) {
+                const fechaTab = rutina.semana_actual
+                  ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), d.dia_semana)
+                  : null;
+                return (
+                  <button
+                    key={d.dia_semana}
+                    type="button"
+                    onClick={() => setDescansoDiaSemana(d.dia_semana)}
+                    className={`flex flex-col items-center px-3 h-9 justify-center rounded-xl border text-[12.5px] font-semibold leading-tight ${
+                      descansoDiaSemana === d.dia_semana ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border border-dashed text-text-faint'
+                    }`}
+                  >
+                    {CAPITALIZAR(d.dia_semana)}
+                    {fechaTab && <span className="text-[9.5px] font-normal opacity-80">{formatearFechaCorta(fechaTab)}</span>}
+                  </button>
+                );
+              }
               const registroTab = d.registros_semana ? d.registros_semana[semanaVista] : d.sesion_actual;
               const fechaTab = rutina.semana_actual
                 ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), d.dia_semana)
@@ -1017,9 +1059,9 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progreso, onG
               return (
               <button
                 key={d.id}
-                onClick={() => setDiaId(d.id)}
+                onClick={() => { setDescansoDiaSemana(null); setDiaId(d.id); }}
                 className={`relative flex flex-col items-center px-3 h-9 justify-center rounded-xl border text-[12.5px] font-semibold leading-tight ${
-                  d.id === dia.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
+                  !descansoDiaSemana && d.id === dia.id ? 'bg-accent text-accent-fg border-accent' : 'bg-surface border-border text-text-muted'
                 }`}
               >
                 {CAPITALIZAR(d.dia_semana)}
@@ -1046,53 +1088,66 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progreso, onG
             </button>
           </div>
           <div className="flex items-center gap-3">
-            <PasosDiariosBoton usuarioId={usuario.id} />
-            <ComentarioBoton
-              endpoint={`/dias/${dia.id}/comentario`}
-              comentarioActual={dia.comentario}
-              recordarActual={dia.comentario_recordar}
-              onGuardado={onRutinaCambiada}
-              etiqueta="Comentario del día"
-            />
-            <button
-              type="button"
-              onClick={() => setMostrarCambiarDia(true)}
-              className="text-[11.5px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
-            >
-              Cambiar día
-            </button>
-            <button
-              type="button"
-              onClick={() => setMostrarMoverCopiarDia(true)}
-              className="text-[11.5px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
-            >
-              Intercambiar/copiar día
-            </button>
-            {microciclo.numero >= 1 && (
-              <button
-                type="button"
-                onClick={() => setMostrarEditarSemana0(true)}
-                className="text-[11.5px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
-              >
-                Editar Semana 0
-              </button>
+            <PasosDiariosBoton usuarioId={usuario.id} fecha={fechaParaPasos} />
+            {!descansoDiaSemana && (
+              <>
+                <ComentarioBoton
+                  endpoint={`/dias/${dia.id}/comentario`}
+                  comentarioActual={dia.comentario}
+                  recordarActual={dia.comentario_recordar}
+                  onGuardado={onRutinaCambiada}
+                  etiqueta="Comentario del día"
+                />
+                <button
+                  type="button"
+                  onClick={() => setMostrarCambiarDia(true)}
+                  className="text-[11.5px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+                >
+                  Cambiar día
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMostrarMoverCopiarDia(true)}
+                  className="text-[11.5px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+                >
+                  Intercambiar/copiar día
+                </button>
+                {microciclo.numero >= 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarEditarSemana0(true)}
+                    className="text-[11.5px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+                  >
+                    Editar Semana 0
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setMostrarQuitarDia(true)}
+                  className="text-[11.5px] font-medium text-danger underline underline-offset-2"
+                >
+                  Quitar {CAPITALIZAR(dia.dia_semana)}
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              onClick={() => setMostrarQuitarDia(true)}
-              className="text-[11.5px] font-medium text-danger underline underline-offset-2"
-            >
-              Quitar {CAPITALIZAR(dia.dia_semana)}
-            </button>
           </div>
         </div>
-        {Boolean(dia.comentario_recordar && dia.comentario) && (
+        {!descansoDiaSemana && Boolean(dia.comentario_recordar && dia.comentario) && (
           <ComentarioRecordatorio comentario={dia.comentario} />
         )}
       </div>
 
+      {descansoDiaSemana && (
+        <div className="bg-surface border border-border border-dashed rounded-2xl p-6 text-center">
+          <p className="text-[14px] font-semibold text-text-muted">Día de descanso</p>
+          <p className="text-[12.5px] text-text-faint mt-1">
+            No hay entrenamiento asignado este día. Arriba podés cargar los pasos que caminaste.
+          </p>
+        </div>
+      )}
+
       {/* key={dia.id} fuerza un remount limpio del estado de series al cambiar de dia */}
-      {esSemanaActual ? (
+      {!descansoDiaSemana && (esSemanaActual ? (
         <RegistroDia
           key={dia.id}
           dia={dia}
@@ -1115,7 +1170,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progreso, onG
           registro={dia.registros_semana?.[semanaVista] ?? null}
           coloreadoActivo={coloreadoActivo}
         />
-      )}
+      ))}
 
       {mostrarAgregarDia && (
         <AgregarDiaModal
@@ -3177,37 +3232,39 @@ function hoyISO() {
 
 // Pasos diarios (podómetro/celular, cargados a mano) - un valor por día de
 // calendario, independiente de si ese día tiene entrenamiento o es de
-// descanso (no hay una pestaña de "día" para los días que no se entrena,
-// así que esto vive aparte, no colgado de ningún dia_rutina puntual - ver
-// registro_pasos en schema.sql). Pensado como insumo para la futura
-// calculadora de calorías/actividad.
-function PasosDiariosBoton({ usuarioId }) {
+// descanso (de ahi el prop "fecha": la del dia que se esta viendo arriba,
+// entrenamiento o descanso - nunca una fecha libre a elegir desde aca, ver
+// registro_pasos en schema.sql). Insumo para la calculadora de calorias
+// (nivel de actividad automatico, ver pasosRecientes en nutritionService.js).
+function PasosDiariosBoton({ usuarioId, fecha }) {
   const [abierto, setAbierto] = useState(false);
   const [historial, setHistorial] = useState(null);
-  const [fecha, setFecha] = useState(hoyISO());
+  const [pasosPorDefecto, setPasosPorDefecto] = useState(null);
   const [pasos, setPasos] = useState('');
+  const [defectoInput, setDefectoInput] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [guardandoDefecto, setGuardandoDefecto] = useState(false);
 
   // Se trae una sola vez al montar (no recien al abrir el panel) - asi el
-  // boton ya puede mostrar "Pasos hoy: X" apenas carga la pantalla, sin
-  // que haga falta abrir el panel primero para enterarse de que ya se
-  // habian cargado.
+  // boton ya puede mostrar "Pasos hoy: X" apenas carga la pantalla.
   useEffect(() => {
-    api.get(`/usuarios/${usuarioId}/pasos`).then((rows) => {
+    api.get(`/usuarios/${usuarioId}/pasos`).then(({ historial: rows, pasos_por_defecto }) => {
       setHistorial(rows);
-      const deHoy = rows.find((r) => r.fecha === fecha);
-      if (deHoy) setPasos(String(deHoy.pasos));
+      setPasosPorDefecto(pasos_por_defecto);
+      setDefectoInput(pasos_por_defecto != null ? String(pasos_por_defecto) : '');
     }).catch((err) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarioId]);
 
-  function elegirFecha(nuevaFecha) {
-    setFecha(nuevaFecha);
-    setError('');
-    const existente = historial?.find((r) => r.fecha === nuevaFecha);
+  // Si se carga un valor explicito para esta fecha, precargarlo al abrir o
+  // al cambiar de dia (tab) - en blanco si no hay (el placeholder ya avisa
+  // si hay un default que se usaria en su lugar).
+  useEffect(() => {
+    const existente = historial?.find((r) => r.fecha === fecha);
     setPasos(existente ? String(existente.pasos) : '');
-  }
+    setError('');
+  }, [fecha, historial]);
 
   async function guardar() {
     const valor = Number(pasos);
@@ -3228,7 +3285,27 @@ function PasosDiariosBoton({ usuarioId }) {
     }
   }
 
-  const pasosDeHoy = historial?.find((r) => r.fecha === hoyISO());
+  async function guardarDefecto() {
+    const valor = defectoInput === '' ? null : Number(defectoInput);
+    if (valor != null && (!Number.isInteger(valor) || valor < 0)) {
+      setError('El valor por defecto debe ser un número válido.');
+      return;
+    }
+    setGuardandoDefecto(true);
+    setError('');
+    try {
+      await api.put(`/usuarios/${usuarioId}/pasos-por-defecto`, { pasos_por_defecto: valor });
+      setPasosPorDefecto(valor);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardandoDefecto(false);
+    }
+  }
+
+  const registroFecha = historial?.find((r) => r.fecha === fecha);
+  const pasosEfectivos = registroFecha ? registroFecha.pasos : pasosPorDefecto;
+  const etiquetaDia = fecha === hoyISO() ? 'hoy' : formatearFechaCorta(new Date(`${fecha}T00:00:00`));
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -3237,53 +3314,62 @@ function PasosDiariosBoton({ usuarioId }) {
         onClick={() => setAbierto((v) => !v)}
         className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
       >
-        {pasosDeHoy ? `Pasos hoy: ${pasosDeHoy.pasos.toLocaleString('es-AR')}` : 'Pasos diarios'}
+        {pasosEfectivos != null
+          ? `Pasos ${etiquetaDia}: ${pasosEfectivos.toLocaleString('es-AR')}${!registroFecha ? ' (por defecto)' : ''}`
+          : `Pasos ${etiquetaDia}`}
       </button>
       {abierto && (
         <div className="flex flex-col gap-2 bg-bg border border-border rounded-lg p-2.5 min-w-[230px]">
           <div className="flex items-center gap-2">
             <input
-              type="date"
-              value={fecha}
-              max={hoyISO()}
-              onChange={(e) => elegirFecha(e.target.value)}
-              className="h-8 rounded-md border border-border bg-surface px-2 text-[12.5px] outline-none focus:border-accent"
-            />
-            <input
               type="number" inputMode="numeric" min="0" value={pasos}
               onChange={(e) => setPasos(e.target.value)}
-              placeholder="Pasos"
-              className="w-20 h-8 rounded-md border border-border bg-surface px-2 tabular text-[13px] outline-none focus:border-accent"
+              placeholder={pasosPorDefecto != null && !registroFecha ? String(pasosPorDefecto) : 'Pasos'}
+              className="w-24 h-8 rounded-md border border-border bg-surface px-2 tabular text-[13px] outline-none focus:border-accent"
             />
+            <button
+              type="button"
+              onClick={guardar}
+              disabled={enviando}
+              className="h-8 px-3 rounded-md bg-accent text-accent-fg text-[12px] font-semibold disabled:opacity-60"
+            >
+              {enviando ? 'Guardando…' : 'Guardar'}
+            </button>
           </div>
+          {pasosPorDefecto != null && !registroFecha && (
+            <span className="text-[10.5px] text-text-faint">Sin cargar - se usa el valor por defecto ({pasosPorDefecto}).</span>
+          )}
           {error && <span className="text-[11px] text-danger">{error}</span>}
-          <button
-            type="button"
-            onClick={guardar}
-            disabled={enviando}
-            className="self-start h-8 px-3 rounded-md bg-accent text-accent-fg text-[12px] font-semibold disabled:opacity-60"
-          >
-            {enviando ? 'Guardando…' : 'Guardar'}
-          </button>
+
           {historial === null && <span className="text-[11px] text-text-faint">Cargando…</span>}
           {historial?.length > 0 && (
             <div className="flex flex-col gap-0.5 pt-1.5 border-t border-border">
-              <span className="text-[10px] font-semibold text-text-faint uppercase tracking-wide">Últimos días</span>
+              <span className="text-[10px] font-semibold text-text-faint uppercase tracking-wide">Últimos días cargados</span>
               {historial.slice(0, 7).map((r) => (
-                <button
-                  key={r.fecha}
-                  type="button"
-                  onClick={() => elegirFecha(r.fecha)}
-                  className={`flex items-center justify-between gap-2 text-[12px] px-1.5 py-1 rounded ${
-                    r.fecha === fecha ? 'bg-accent/10 font-semibold' : 'hover:bg-surface'
-                  }`}
-                >
+                <div key={r.fecha} className="flex items-center justify-between gap-2 text-[12px] px-1.5 py-1">
                   <span className="text-text-muted">{formatearFechaCorta(new Date(`${r.fecha}T00:00:00`))}</span>
                   <span className="tabular">{r.pasos.toLocaleString('es-AR')}</span>
-                </button>
+                </div>
               ))}
             </div>
           )}
+
+          <div className="flex items-center gap-2 pt-1.5 border-t border-border">
+            <input
+              type="number" inputMode="numeric" min="0" value={defectoInput}
+              onChange={(e) => setDefectoInput(e.target.value)}
+              placeholder="Por defecto"
+              className="w-24 h-8 rounded-md border border-border bg-surface px-2 tabular text-[13px] outline-none focus:border-accent"
+            />
+            <button
+              type="button"
+              onClick={guardarDefecto}
+              disabled={guardandoDefecto}
+              className="h-8 px-3 rounded-md border border-border text-text-muted text-[12px] font-semibold disabled:opacity-60"
+            >
+              {guardandoDefecto ? 'Guardando…' : 'Aplicar a todos los días'}
+            </button>
+          </div>
         </div>
       )}
     </div>

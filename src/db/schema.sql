@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
   anios_entrenamiento_continuo REAL,
   unidad_medida TEXT NOT NULL DEFAULT 'kg_cm' CHECK (unidad_medida IN ('kg_cm', 'lb_in')),
   activo INTEGER NOT NULL DEFAULT 1,
+  -- Pasos/dia a usar como default en cualquier dia sin un registro_pasos
+  -- explicito (ver PUT /usuarios/:id/pasos-por-defecto). NULL = sin default.
+  pasos_por_defecto INTEGER,
   -- No NULL mientras la cuenta es un placeholder de invitacion sin reclamar
   -- (usuario/password_hash random, ver src/services/invites.js). Se pisa
   -- (vuelve a NULL) al reclamar el codigo - a partir de ahi la cuenta ya es
