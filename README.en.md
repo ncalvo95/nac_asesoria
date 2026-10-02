@@ -1128,6 +1128,22 @@ sessions → closing a microcycle → progress → Excel export):
   recalculates the remaining goal and weeks without touching anything
   else. Also verified that a Mantenimiento/Volumen/Definición plan without
   a goal still has no semáforo or projection (no regression).
+- **Nutrition - Stage 5 of 5 (integration into the semestral report)**:
+  the report (`generarDatosReporte` in `reportes.js`) now adds a
+  "Nutrición" section with the user's **entire** plan history (active +
+  archived, chronological order) via a new `obtenerEvolucionNutricional`
+  in `nutritionService.js` -each one recalculated against the config it's
+  tied to, same frozen/current rule the rest of the module already
+  follows-. Nutrition has its own timeline (it isn't tied to the routine's
+  microciclos that drive the rest of the report), so it's added in full
+  rather than filtered to the covered period. If the user never set their
+  biological sex or never built a plan, the function returns an empty list
+  and the report still generates fine - nutrition is an optional addition,
+  never a new requirement to generate a report-, verified with a user that
+  has no sex on file and with a nonexistent id. This closes all 5 stages
+  of the nutrition module: the pure calculation engine and versioned
+  config (1), the admin panel (2), creating and viewing a plan (3), goal
+  mode with projection and semáforo (4), and this report integration (5).
 
 Known limitations / accepted simplifications:
 

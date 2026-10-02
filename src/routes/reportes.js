@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import { repsEfectivas } from '../services/progressionEngine.js';
+import { obtenerEvolucionNutricional } from '../services/nutritionService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -121,7 +122,13 @@ function generarDatosReporte(usuarioId) {
     ? `Microciclo ${cerrados[0].numero} (${cerrados[0].fecha_inicio}) a microciclo ${cerrados[cerrados.length - 1].numero} (${cerrados[cerrados.length - 1].fecha_fin})`
     : 'Todavia no se cerro ningun microciclo';
 
-  return { periodo, microciclos_cerrados: cerrados.length, porEjercicio, porMusculo };
+  // La nutricion es su propia linea de tiempo (no esta atada a microciclos
+  // de esta rutina), asi que se agrega entera - si el usuario no cargo el
+  // sexo o nunca armo un plan, obtenerEvolucionNutricional ya devuelve []
+  // en vez de romper el reporte.
+  const nutricion = obtenerEvolucionNutricional(usuarioId);
+
+  return { periodo, microciclos_cerrados: cerrados.length, porEjercicio, porMusculo, nutricion };
 }
 
 router.post('/usuarios/:usuarioId/reportes', (req, res, next) => {

@@ -3,6 +3,11 @@ import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import { formatearMusculo } from '../utils/musculo.js';
+import { LABEL_FASE, LABEL_ENFOQUE } from '../utils/nutricionLabels.js';
+
+function formatearFecha(iso) {
+  return new Date(iso.replace(' ', 'T') + (iso.includes('Z') ? '' : 'Z')).toLocaleDateString('es-AR');
+}
 
 export default function ReportesPage() {
   const { usuario: sesion } = useAuth();
@@ -138,6 +143,30 @@ function DetalleReporte({ datos }) {
           ))}
         </div>
       </section>
+
+      {datos.nutricion?.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">Nutrición</span>
+          <div className="flex flex-col gap-2">
+            {datos.nutricion.map((n) => (
+              <div key={n.id} className="flex items-center justify-between gap-2">
+                <div className="flex flex-col">
+                  <span className="text-[12.5px]">
+                    {LABEL_FASE[n.phase]} · {LABEL_ENFOQUE[n.focus]}{n.goal_fat_kg ? ' · Objetivo' : ''}
+                  </span>
+                  <span className="text-[11px] text-text-faint">
+                    {formatearFecha(n.created_at)} · {n.reference_weight_kg} kg{n.status === 'active' ? ' · activo' : ''}
+                  </span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="tabular text-[12px] font-semibold">{n.kcal} kcal</span>
+                  <span className="tabular text-[11px] text-text-faint">P{n.proteinaG} G{n.grasaG} C{n.carbohidratosG}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

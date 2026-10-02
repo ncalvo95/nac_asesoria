@@ -1397,6 +1397,23 @@ cierre de microciclo → progreso → export a Excel):
   recalcula el objetivo y las semanas restantes sin tocar lo demás.
   Verificado además que un plan de Mantenimiento/Volumen/Definición sin
   objetivo sigue sin semáforo ni proyección (no hay regresión).
+- **Nutrición - Etapa 5 de 5 (integración al reporte semestral)**: el
+  reporte (`generarDatosReporte` en `reportes.js`) ahora suma una sección
+  "Nutrición" con **todo** el historial de planes del usuario (activo +
+  archivados, orden cronológico) vía `obtenerEvolucionNutricional` nueva
+  en `nutritionService.js` -cada uno recalculado con la config que le
+  corresponde, mismo criterio congelado/vigente que ya usa el resto del
+  módulo-. La nutrición tiene su propia línea de tiempo (no está atada a
+  los microciclos de la rutina que arma el resto del reporte), así que se
+  agrega completa en vez de filtrarla al período cubierto. Si el usuario
+  nunca cargó el sexo biológico o nunca armó un plan, la función devuelve
+  una lista vacía y el reporte sigue generándose igual -la nutrición es un
+  agregado opcional, nunca un requisito nuevo para poder generar un
+  reporte-, verificado con un usuario sin sexo cargado y con un id
+  inexistente. Esto cierra las 5 etapas del módulo de nutrición completo:
+  motor de cálculo puro y config versionada (1), panel de admin (2), alta
+  y resultado de un plan (3), modo objetivo con proyección y semáforo (4),
+  y esta integración al reporte (5).
 
 Pendiente / simplificaciones conocidas:
 

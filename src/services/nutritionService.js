@@ -361,3 +361,40 @@ export const actualizarProgresoPlan = db.transaction((usuarioId, pesoActualKg) =
 function round1(n) {
   return Math.round(n * 10) / 10;
 }
+
+const listarTodosLosPlanes = db.prepare(
+  'SELECT * FROM nutrition_plans WHERE user_id = ? ORDER BY created_at ASC, id ASC'
+);
+
+// Etapa 5: evolucion nutricional para el reporte semestral. Devuelve TODOS
+// los planes del usuario (activo + archivados), en orden cronologico, cada
+// uno recalculado con la config que le corresponde (vigente si es el
+// activo, congelada si es uno viejo - mismo criterio que el resto del
+// modulo). Si el usuario nunca cargo el sexo biologico, o nunca armo un
+// plan, devuelve una lista vacia en vez de romper el reporte entero -la
+// nutricion es un agregado opcional del reporte, no un requisito.
+export function obtenerEvolucionNutricional(usuarioId) {
+  const usuario = getUsuario.get(usuarioId);
+  if (!usuario || !usuario.sexo_biologico) return [];
+
+  return listarTodosLosPlanes.all(usuarioId).map((plan) => {
+    const config = resolverConfigDePlan(plan);
+    const resultado = plan.phase === 'definicion' && plan.goal_fat_kg
+      ? calcularResultadoObjetivo(plan, usuario, config).resultado
+      : calcularResultadoPlan(plan, usuario).resultado;
+    return {
+      id: plan.id,
+      phase: plan.phase,
+      focus: plan.focus,
+      status: plan.status,
+      created_at: plan.created_at,
+      reference_weight_kg: plan.reference_weight_kg,
+      weeks: plan.weeks,
+      goal_fat_kg: plan.goal_fat_kg,
+      kcal: resultado.kcal,
+      proteinaG: resultado.proteinaG,
+      grasaG: resultado.grasaG,
+      carbohidratosG: resultado.carbohidratosG,
+    };
+  });
+}
