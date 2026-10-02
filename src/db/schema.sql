@@ -423,3 +423,69 @@ CREATE TABLE IF NOT EXISTS borrador_dia (
   actualizado_en TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (dia_rutina_id, microciclo_id)
 );
+
+-- ---------------------------------------------------------------------------
+-- Nutricion / calculadora de calorias y macros
+-- ---------------------------------------------------------------------------
+
+-- Cada guardado desde el panel de admin crea una fila nueva (nunca se
+-- edita una existente) - la de id mas alto es la version activa. "Volver a
+-- una version anterior" tambien crea una fila nueva con ese config_json
+-- copiado, asi el historial queda siempre lineal y completo (ver
+-- nutritionConfigService.js). config_json trae TODOS los numeros del
+-- modulo (tablas base, incrementos, excepciones, umbrales de actividad,
+-- kcal por gramo/por kg de grasa, umbrales del semaforo, pisos caloricos,
+-- minimo de carbohidratos, adaptacion metabolica) - ver nutritionDefaults.js
+-- para la forma exacta y los valores de fabrica.
+CREATE TABLE IF NOT EXISTS nutrition_config_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  config_json TEXT NOT NULL,
+  created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  comment TEXT
+);
+
+-- Un plan de nutricion (fase/enfoque/nivel + como se resolvio la
+-- referencia para Definicion) - los resultados en si (macros, semana a
+-- semana, semaforo) NUNCA se guardan, se recalculan "on read" con el
+-- motor puro de shared/nutrition/ (ver nutritionService.js). Solo el plan
+-- ACTIVO de cada usuario se recalcula con la configuracion VIGENTE -los
+-- archivados quedan congelados con su propio config_version_id, para que
+-- tocar el panel de admin no reescriba en silencio como se veia un plan
+-- viejo, y para que "el ultimo plan" usado como referencia de uno nuevo
+-- siga reflejando lo que se le recomendo en su momento (ver
+-- resolverReferenciaDefinicion en el motor).
+CREATE TABLE IF NOT EXISTS nutrition_plans (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  phase TEXT NOT NULL CHECK (phase IN ('mantenimiento', 'volumen', 'definicion')),
+  focus TEXT NOT NULL CHECK (focus IN ('estandar', 'carbohidratos')),
+  activity_level TEXT NOT NULL CHECK (activity_level IN ('sin_entrenar', 'bajo', 'intermedio', 'alto')),
+  activity_source TEXT NOT NULL CHECK (activity_source IN ('auto', 'manual')),
+  -- NULL salvo en Definicion (la unica fase con "referencia" de la que
+  -- restar/completar) - ver resolverReferenciaDefinicion.
+  reference_source TEXT CHECK (reference_source IN ('plan_anterior', 'macros_actuales', 'tabla')),
+  reference_macros_json TEXT,
+  -- Peso corporal (kg) con el que se armo ESTE plan - columna propia, no
+  -- enterrada en params_json, porque el motor la necesita en el camino
+  -- critico: para usar este plan como referencia de uno nuevo hay que
+  -- reconvertir sus macros a g/kg, y eso exige saber que peso se uso aca.
+  reference_weight_kg REAL NOT NULL,
+  start_date TEXT NOT NULL DEFAULT (date('now')),
+  -- Duracion estimada/objetivo en semanas - obligatoria en el modo
+  -- objetivo (goal_fat_kg no nulo), opcional en el resto (sirve igual para
+  -- decidir si aplica la excepcion de grasa de definiciones largas).
+  weeks INTEGER,
+  goal_fat_kg REAL,
+  config_version_id INTEGER NOT NULL REFERENCES nutrition_config_versions(id),
+  params_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_nutrition_plans_usuario ON nutrition_plans(user_id, status);
+-- Un solo plan activo por usuario, a nivel base de datos (no solo de
+-- aplicacion) - el service que activa un plan nuevo primero archiva el
+-- que estuviera activo, en la misma transaccion.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_plans_un_activo ON nutrition_plans(user_id) WHERE status = 'active';

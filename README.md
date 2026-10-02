@@ -1257,6 +1257,47 @@ cierre de microciclo → progreso → export a Excel):
   toque, persiste después de recargar la página, y tocar un día del
   historial (ej. "ayer") precarga su fecha/valor para editarlo sin
   duplicar la fila (mismo `UNIQUE`, `ON CONFLICT DO UPDATE`).
+- **Nutrición / calculadora de calorías y macros - Etapa 1 de 5 (motor de
+  cálculo, sin UI todavía)**: arranca el módulo nuevo, en etapas. Esta
+  primera entrega es toda la base no visible: `shared/nutrition/` -motor
+  de cálculo JS puro, sin dependencias, que **recibe la configuración
+  como parámetro** en vez de importar constantes (así el frontend, en
+  etapas futuras, calcula en vivo con la misma lógica exacta que usa
+  Express para validar y recalcular al guardar)-, con funciones para
+  macros por fase (Mantenimiento/Volumen/Definición, con todas las tablas
+  y excepciones del prompt original -incluida la de grasa en hombres en
+  definiciones largas, que se activa recién dentro de las últimas N
+  semanas, nunca el día 1 de un plan recién creado-), nivel de actividad
+  automático (días + ajuste por pasos de los últimos 14 días, con aviso
+  si faltan datos), resolución de la referencia para Definición (las 3
+  fuentes, en orden de prioridad), modo objetivo de pérdida de grasa
+  (déficit, piso calórico como tope duro -no solo una advertencia del
+  semáforo-, semáforo de realismo tomando siempre la condición más
+  severa si se disparan varias a la vez, plazo mínimo sugerido), proyección
+  semana a semana (con adaptación metabólica lineal con tope, y el
+  modelo optimista de "toda la pérdida es grasa" si hay % graso cargado),
+  y Mifflin-St Jeor puramente informativo. 76 tests (`node:test`, sin
+  dependencias nuevas - `npm run test:nutrition`) cubren todas las
+  combinaciones de sexo/enfoque/fase/nivel, las 3 fuentes de referencia,
+  cada excepción, el nivel automático, el modo objetivo en casos límite
+  (plazos extremos, carbohidratos en negativo, piso calórico), y que el
+  motor efectivamente usa la config que se le pasa (nunca un valor fijo
+  propio). Nuevas tablas `nutrition_config_versions` (cada guardado
+  inserta una fila nueva, nunca edita una existente - así "volver a una
+  versión anterior" y el historial completo salen gratis) y
+  `nutrition_plans` (un solo plan activo por usuario, reforzado con un
+  índice único parcial en SQLite; `reference_weight_kg` como columna
+  propia, no enterrada en JSON, porque el motor la necesita para
+  reconvertir a g/kg cuando un plan se usa como referencia de uno nuevo).
+  Los planes **archivados** quedan congelados con la versión de config
+  que tenían al crearse -solo el plan **activo** de cada usuario se
+  recalcula con la config vigente-, para que tocar el panel de admin
+  (todavía no construido) no reescriba en silencio un plan viejo.
+  `src/services/nutritionConfigService.js` cachea la config activa en
+  memoria (se invalida sola al guardar una versión nueva) y
+  `GET /api/nutricion/config` la expone de solo lectura. Sin UI
+  (panel de admin, alta de plan, resultado, modo objetivo) todavía -eso
+  son las próximas etapas.
 
 Pendiente / simplificaciones conocidas:
 

@@ -19,6 +19,7 @@ import reportesRouter from './routes/reportes.js';
 import catalogoRouter from './routes/catalogo.js';
 import solicitudesRouter from './routes/solicitudes.js';
 import feedbackRouter from './routes/feedback.js';
+import nutricionRouter from './routes/nutricion.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
@@ -48,6 +49,7 @@ router.use('/api', reportesRouter);
 router.use('/api/catalogo', catalogoRouter);
 router.use('/api', solicitudesRouter);
 router.use('/api', feedbackRouter);
+router.use('/api/nutricion', nutricionRouter);
 
 router.use(express.static(frontendDist));
 router.get('*', (req, res, next) => {

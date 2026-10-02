@@ -992,6 +992,44 @@ sessions → closing a microcycle → progress → Excel export):
   reload, and tapping a day from the history (e.g. "yesterday") preloads
   its date/value for editing without duplicating the row (same `UNIQUE`,
   `ON CONFLICT DO UPDATE`).
+- **Nutrition / calorie and macro calculator - Stage 1 of 5 (calculation
+  engine, no UI yet)**: kicks off the new module, built in stages. This
+  first delivery is all the non-visible foundation: `shared/nutrition/` -a
+  pure JS calculation engine, no dependencies, that **receives the
+  configuration as a parameter** instead of importing constants (so the
+  frontend, in future stages, calculates live with the exact same logic
+  Express uses to validate and recalculate on save)-, with functions for
+  per-phase macros (Mantenimiento/Volumen/Definición, with every table and
+  exception from the original prompt -including the late-stage fat
+  exception for men in long cuts, which only kicks in within the last N
+  weeks, never on day 1 of a freshly created plan-), automatic activity
+  level (training days + adjustment from the last 14 days of steps, with a
+  warning when data is missing), reference resolution for Definición (the
+  3 sources, in priority order), the fat-loss goal mode (deficit, a hard
+  calorie floor -not just a semáforo warning-, a realism semáforo that
+  always takes the most severe condition when several trigger at once, a
+  suggested minimum timeframe), week-by-week projection (with a linear,
+  capped metabolic adaptation, and the optimistic "all the loss is fat"
+  model when a body-fat % is on file), and a purely informational
+  Mifflin-St Jeor. 76 tests (`node:test`, no new dependencies -
+  `npm run test:nutrition`) cover every sex/focus/phase/level combination,
+  the 3 reference sources, each exception, the automatic level, edge cases
+  in goal mode (extreme timeframes, negative carbs, the calorie floor),
+  and that the engine actually uses the config it's handed (never one of
+  its own fixed values). New `nutrition_config_versions` table (every save
+  inserts a new row, never edits an existing one - so "revert to an
+  earlier version" and the full history come for free) and
+  `nutrition_plans` table (one active plan per user, enforced with a
+  partial unique SQLite index; `reference_weight_kg` as its own column,
+  not buried in JSON, because the engine needs it to re-derive g/kg ratios
+  when a plan is used as the reference for a new one). **Archived** plans
+  stay frozen with whatever config version they were created with -only
+  each user's **active** plan recalculates against the current config- so
+  tweaking the admin panel (not built yet) can't silently rewrite an old
+  plan. `src/services/nutritionConfigService.js` caches the active config
+  in memory (auto-invalidated on every new version saved) and
+  `GET /api/nutricion/config` exposes it read-only. No UI yet (admin
+  panel, creating a plan, results, goal mode) - that's the next stages.
 
 Known limitations / accepted simplifications:
 
