@@ -1046,6 +1046,7 @@ function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progreso, onG
             </button>
           </div>
           <div className="flex items-center gap-3">
+            <PasosDiariosBoton usuarioId={usuario.id} />
             <ComentarioBoton
               endpoint={`/dias/${dia.id}/comentario`}
               comentarioActual={dia.comentario}
@@ -3164,6 +3165,125 @@ function ComentarioBoton({ endpoint, comentarioActual, recordarActual, onGuardad
           >
             {enviando ? 'Guardando…' : 'Guardar'}
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Pasos diarios (podómetro/celular, cargados a mano) - un valor por día de
+// calendario, independiente de si ese día tiene entrenamiento o es de
+// descanso (no hay una pestaña de "día" para los días que no se entrena,
+// así que esto vive aparte, no colgado de ningún dia_rutina puntual - ver
+// registro_pasos en schema.sql). Pensado como insumo para la futura
+// calculadora de calorías/actividad.
+function PasosDiariosBoton({ usuarioId }) {
+  const [abierto, setAbierto] = useState(false);
+  const [historial, setHistorial] = useState(null);
+  const [fecha, setFecha] = useState(hoyISO());
+  const [pasos, setPasos] = useState('');
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  // Se trae una sola vez al montar (no recien al abrir el panel) - asi el
+  // boton ya puede mostrar "Pasos hoy: X" apenas carga la pantalla, sin
+  // que haga falta abrir el panel primero para enterarse de que ya se
+  // habian cargado.
+  useEffect(() => {
+    api.get(`/usuarios/${usuarioId}/pasos`).then((rows) => {
+      setHistorial(rows);
+      const deHoy = rows.find((r) => r.fecha === fecha);
+      if (deHoy) setPasos(String(deHoy.pasos));
+    }).catch((err) => setError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuarioId]);
+
+  function elegirFecha(nuevaFecha) {
+    setFecha(nuevaFecha);
+    setError('');
+    const existente = historial?.find((r) => r.fecha === nuevaFecha);
+    setPasos(existente ? String(existente.pasos) : '');
+  }
+
+  async function guardar() {
+    const valor = Number(pasos);
+    if (pasos === '' || !Number.isInteger(valor) || valor < 0) {
+      setError('Ingresá un número de pasos válido.');
+      return;
+    }
+    setEnviando(true);
+    setError('');
+    try {
+      await api.put(`/usuarios/${usuarioId}/pasos/${fecha}`, { pasos: valor });
+      setHistorial((prev) => [{ fecha, pasos: valor }, ...(prev || []).filter((r) => r.fecha !== fecha)]
+        .sort((a, b) => (a.fecha < b.fecha ? 1 : -1)));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const pasosDeHoy = historial?.find((r) => r.fecha === hoyISO());
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="self-start text-[11px] font-medium text-text-muted underline underline-offset-2 whitespace-nowrap"
+      >
+        {pasosDeHoy ? `Pasos hoy: ${pasosDeHoy.pasos.toLocaleString('es-AR')}` : 'Pasos diarios'}
+      </button>
+      {abierto && (
+        <div className="flex flex-col gap-2 bg-bg border border-border rounded-lg p-2.5 min-w-[230px]">
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={fecha}
+              max={hoyISO()}
+              onChange={(e) => elegirFecha(e.target.value)}
+              className="h-8 rounded-md border border-border bg-surface px-2 text-[12.5px] outline-none focus:border-accent"
+            />
+            <input
+              type="number" inputMode="numeric" min="0" value={pasos}
+              onChange={(e) => setPasos(e.target.value)}
+              placeholder="Pasos"
+              className="w-20 h-8 rounded-md border border-border bg-surface px-2 tabular text-[13px] outline-none focus:border-accent"
+            />
+          </div>
+          {error && <span className="text-[11px] text-danger">{error}</span>}
+          <button
+            type="button"
+            onClick={guardar}
+            disabled={enviando}
+            className="self-start h-8 px-3 rounded-md bg-accent text-accent-fg text-[12px] font-semibold disabled:opacity-60"
+          >
+            {enviando ? 'Guardando…' : 'Guardar'}
+          </button>
+          {historial === null && <span className="text-[11px] text-text-faint">Cargando…</span>}
+          {historial?.length > 0 && (
+            <div className="flex flex-col gap-0.5 pt-1.5 border-t border-border">
+              <span className="text-[10px] font-semibold text-text-faint uppercase tracking-wide">Últimos días</span>
+              {historial.slice(0, 7).map((r) => (
+                <button
+                  key={r.fecha}
+                  type="button"
+                  onClick={() => elegirFecha(r.fecha)}
+                  className={`flex items-center justify-between gap-2 text-[12px] px-1.5 py-1 rounded ${
+                    r.fecha === fecha ? 'bg-accent/10 font-semibold' : 'hover:bg-surface'
+                  }`}
+                >
+                  <span className="text-text-muted">{formatearFechaCorta(new Date(`${r.fecha}T00:00:00`))}</span>
+                  <span className="tabular">{r.pasos.toLocaleString('es-AR')}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

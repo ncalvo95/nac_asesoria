@@ -975,6 +975,23 @@ sessions → closing a microcycle → progress → Excel export):
   suggested reps (45≠40, no cascade); and the case with nothing typed
   still works exactly as before (base weight + a 2-rep cascade across all
   3 sets).
+- **Daily steps** ("Pasos diarios"/"Pasos hoy: N" button in Entrenamiento's
+  header; new `registro_pasos` table, `PUT`/`GET /usuarios/:id/pasos`
+  routes in `perfil.js`): the first building block for the future calorie
+  calculator, which will need the whole week's activity level (TDEE), not
+  just gym days. Deliberately NOT hung off any `dia_rutina` or specific
+  microcycle -the routine only has days for when you train, but steps get
+  walked every day, rest days included-: it's a separate table, one value
+  per user and calendar date (`UNIQUE(usuario_id, fecha)`), with its own
+  small panel in the header (date + steps + Save, listing the last 7 days
+  to check/fix one with a tap). The button already shows "Pasos hoy: N" as
+  soon as the screen loads if that day was already logged -no need to open
+  the panel first to find out- thanks to fetching the short history on
+  mount, not only when the panel opens. Verified with Playwright: logging
+  today's steps updates the button right away, persists after a page
+  reload, and tapping a day from the history (e.g. "yesterday") preloads
+  its date/value for editing without duplicating the row (same `UNIQUE`,
+  `ON CONFLICT DO UPDATE`).
 
 Known limitations / accepted simplifications:
 

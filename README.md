@@ -1239,6 +1239,24 @@ cierre de microciclo → progreso → export a Excel):
   sugeridas (45≠40, no hay cascada); y el caso sin nada tipeado sigue
   funcionando exactamente igual que antes (peso de base + cascada de a 2
   reps en las 3 series).
+- **Pasos diarios** (botón "Pasos diarios"/"Pasos hoy: N" en el header de
+  Entrenamiento; tabla nueva `registro_pasos`, rutas `PUT`/`GET
+  /usuarios/:id/pasos` en `perfil.js`): primer paso para la futura
+  calculadora de calorías, que va a necesitar el nivel de actividad de la
+  semana completa (TDEE), no solo de los días de gym. A propósito NO vive
+  colgado de ningún `dia_rutina` ni microciclo puntual -la rutina solo
+  tiene días para cuando se entrena, pero los pasos se caminan todos los
+  días, incluidos los de descanso-: es una tabla aparte, un valor por
+  usuario y día de calendario (`UNIQUE(usuario_id, fecha)`), con su propio
+  mini panel en el header (fecha + pasos + Guardar, con los últimos 7 días
+  listados para consultar/corregir uno de un toque). El botón ya muestra
+  "Pasos hoy: N" apenas carga la pantalla si ese día ya se cargó -sin
+  tener que abrir el panel primero para enterarse-, gracias a traer el
+  historial corto al montar el componente, no recién al abrir el panel.
+  Verificado con Playwright: cargar los pasos de hoy actualiza el botón al
+  toque, persiste después de recargar la página, y tocar un día del
+  historial (ej. "ayer") precarga su fecha/valor para editarlo sin
+  duplicar la fila (mismo `UNIQUE`, `ON CONFLICT DO UPDATE`).
 
 Pendiente / simplificaciones conocidas:
 

@@ -230,6 +230,43 @@ router.patch('/:usuarioId/aprobacion-coach', (req, res) => {
   res.json({ usuario_id, requiere_aprobacion_coach: activo });
 });
 
+// ---- Pasos diarios ----
+// Un valor por dia de calendario, sin importar si ese dia tuvo
+// entrenamiento o fue de descanso - ver registro_pasos en schema.sql.
+const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+router.put('/:usuarioId/pasos/:fecha', (req, res) => {
+  const usuario_id = checkAcceso(req, res);
+  if (usuario_id === null) return;
+  const { fecha } = req.params;
+  if (!FECHA_RE.test(fecha)) {
+    return res.status(400).json({ error: 'fecha invalida (formato YYYY-MM-DD).' });
+  }
+  const { pasos } = req.body || {};
+  if (!Number.isInteger(pasos) || pasos < 0) {
+    return res.status(400).json({ error: 'pasos debe ser un entero mayor o igual a 0.' });
+  }
+  db.prepare(`
+    INSERT INTO registro_pasos (usuario_id, fecha, pasos) VALUES (?, ?, ?)
+    ON CONFLICT(usuario_id, fecha) DO UPDATE SET pasos = excluded.pasos
+  `).run(usuario_id, fecha, pasos);
+  res.json({ fecha, pasos });
+});
+
+// Ultimos N dias (7 por defecto), mas recientes primero - pensado para un
+// mini listado/edicion rapida en la UI, no un historico completo.
+router.get('/:usuarioId/pasos', (req, res) => {
+  const usuario_id = checkAcceso(req, res);
+  if (usuario_id === null) return;
+  const dias = Math.min(Math.max(Number(req.query.dias) || 7, 1), 90);
+  const rows = db.prepare(`
+    SELECT fecha, pasos FROM registro_pasos
+    WHERE usuario_id = ? AND fecha >= date('now', ?)
+    ORDER BY fecha DESC
+  `).all(usuario_id, `-${dias} days`);
+  res.json(rows);
+});
+
 // ---- Vista consolidada del perfil (para armar la rutina) ----
 router.get('/:usuarioId/perfil', (req, res) => {
   const usuario_id = checkAcceso(req, res);

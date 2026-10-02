@@ -96,6 +96,21 @@ CREATE TABLE IF NOT EXISTS registro_antropometrico (
 
 CREATE INDEX IF NOT EXISTS idx_registro_antropometrico_usuario ON registro_antropometrico(usuario_id, fecha);
 
+-- Pasos diarios (podometro/celular, cargados a mano) - UN valor por usuario
+-- y dia de calendario, independiente de si ese dia tiene entrenamiento o es
+-- de descanso (a diferencia de dia_rutina, que solo existe para los dias
+-- que se entrena). Pensado como insumo para la futura calculadora de
+-- calorias/actividad (TDEE necesita el nivel de actividad de la semana
+-- completa, no solo de los dias de gym) - por eso vive aparte del motor de
+-- entrenamiento, no colgado de ningun dia_rutina/microciclo puntual.
+CREATE TABLE IF NOT EXISTS registro_pasos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  fecha TEXT NOT NULL,
+  pasos INTEGER NOT NULL,
+  UNIQUE (usuario_id, fecha)
+);
+
 -- ---------------------------------------------------------------------------
 -- Catalogo de musculos y ejercicios (fijo, mantenido por el coach/admin)
 -- ---------------------------------------------------------------------------
