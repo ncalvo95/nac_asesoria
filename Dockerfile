@@ -12,6 +12,10 @@ ENV BASE_PATH=$BASE_PATH
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 COPY frontend/ ./
+# El motor de nutricion vive en shared/ (fuera de frontend/), compartido
+# con el backend - vite.config.js lo resuelve via alias a ../shared/nutrition
+# relativo a /app/frontend, asi que tiene que estar en /app/shared aca.
+COPY shared/ /app/shared/
 RUN npm run build
 
 # Instalacion de dependencias del backend (compila better-sqlite3 para la
@@ -35,6 +39,10 @@ COPY --from=server-deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY src/ ./src/
 COPY scripts/ ./scripts/
+# El backend tambien importa el motor de nutricion desde shared/ (ver
+# src/services/nutritionConfigService.js y nutritionService.js:
+# '../../shared/nutrition/...' resuelve a /app/shared/nutrition aca).
+COPY shared/ ./shared/
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 RUN mkdir -p /app/data
