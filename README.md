@@ -1325,6 +1325,45 @@ cierre de microciclo → progreso → export a Excel):
   vuelo, guardar crea una versión nueva, restaurar una versión puntual del
   historial trae de vuelta sus valores exactos (verificado con un valor
   distinguible), y restaurar de fábrica funciona por separado.
+- **Nutrición - Etapa 3 de 5 (alta y resultado de un plan)**: coach y
+  cliente ya pueden armar y ver un plan de verdad (Mantenimiento, Volumen o
+  Definición "simple" -sin modo objetivo todavía, eso es la Etapa 4-),
+  tanto en `/nutricion` (la propia) como en
+  `/coach/clientes/:id/nutricion` (nueva pestaña "Nutrición" en el panel
+  del cliente) - la misma pantalla sirve para los dos casos, igual que
+  `EntrenamientoPage` con `usuarioIdParam`: la ruta decide de quién es el
+  plan, no el rol de quien mira. Si todavía no cargó el sexo biológico
+  (obligatorio para el motor; columna que ya existía en el schema pero
+  nunca se había conectado a ninguna ruta) pide ese dato primero -fecha de
+  nacimiento y altura quedan opcionales, solo alimentan el Mifflin-St Jeor
+  informativo del resultado. El formulario de alta pide el peso actual
+  (obligatorio, a mano, como pidió el dueño del proyecto) y la fase/enfoque;
+  los días de entrenamiento salen solos de la rutina activa si existe
+  (`GET /usuarios/:id/rutina`), y si no hay rutina (alguien que solo usa la
+  calculadora) los pide a mano, con opción de pisar el nivel de actividad
+  automático a mano en cualquier caso. `src/services/nutritionService.js`
+  es la capa nueva que sí toca la base (el motor en `shared/nutrition/`
+  sigue sin tocarla nunca): resuelve el nivel de actividad (días + promedio
+  de pasos de la ventana configurada), arma la referencia de Definición
+  siguiendo las 3 prioridades del prompt (último plan de
+  Mantenimiento/Volumen -recalculado con SU PROPIA config congelada y
+  convertido a g/kg- → lo que el usuario declara que come hoy → la tabla),
+  y crea el plan archivando el anterior en la misma transacción (nunca
+  coexisten 2 activos, ya reforzado además por el índice único parcial).
+  Un plan activo se recalcula siempre con la config vigente; uno archivado
+  con la versión que tenía al crearse - mismo criterio ya probado en la
+  Etapa 1/2. Nuevo endpoint `PUT /api/usuarios/:id/datos-personales`
+  (escritura directa, sin pasar por `solicitud_cambio`: son datos
+  biométricos objetivos, no una decisión de entrenamiento a aprobar) y 4
+  rutas en `/api/nutricion/usuarios/:id/plan[es]` con el mismo
+  `puedeAccederAUsuario` que el resto de la app (verificado con un coach
+  sin relación con el cliente: 403). Probado en navegador con Playwright de
+  punta a punta en 3 escenarios: cliente con plan activo viendo su
+  resultado e historial, cliente armando un plan de Definición que
+  efectivamente usa su plan anterior como referencia (confirmado
+  `reference_source: "plan_anterior"` y los gramos exactos), y un coach
+  dando de alta el sexo biológico y el primer plan de un cliente nuevo sin
+  nada cargado todavía.
 
 Pendiente / simplificaciones conocidas:
 

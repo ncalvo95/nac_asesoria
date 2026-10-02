@@ -47,6 +47,7 @@ export default function App() {
                 <Route path="rutinas" element={<RutinasPage />} />
                 <Route path="progreso" element={<ProgresoPage />} />
                 <Route path="reportes" element={<ReportesPage />} />
+                <Route path="nutricion" element={<NutricionPage />} />
                 <Route path="preferencias" element={<PreferenciasPage />} />
               </Route>
             </Routes>

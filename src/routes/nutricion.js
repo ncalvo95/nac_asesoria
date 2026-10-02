@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, puedeAccederAUsuario } from '../middleware/auth.js';
 import {
   obtenerConfigActiva,
   obtenerVersionConfig,
@@ -8,6 +8,12 @@ import {
   restaurarVersionConfig,
   restaurarValoresDeFabrica,
 } from '../services/nutritionConfigService.js';
+import {
+  obtenerPlanActivo,
+  listarPlanesArchivados,
+  crearPlan,
+  archivarPlanActivo,
+} from '../services/nutritionService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -17,6 +23,54 @@ router.use(requireAuth);
 router.get('/config', (req, res) => {
   const activa = obtenerConfigActiva();
   res.json({ id: activa.id, config: activa.config, createdAt: activa.createdAt, comment: activa.comment });
+});
+
+// ---- Plan de nutricion de un usuario (no exclusivo del admin: el propio
+// usuario, su coach o el admin) ----
+function checkAccesoUsuario(req, res) {
+  const usuarioId = Number(req.params.usuarioId);
+  if (!puedeAccederAUsuario(req.usuario, usuarioId)) {
+    res.status(403).json({ error: 'No autorizado.' });
+    return null;
+  }
+  return usuarioId;
+}
+
+router.get('/usuarios/:usuarioId/plan', (req, res) => {
+  const usuarioId = checkAccesoUsuario(req, res);
+  if (usuarioId === null) return;
+  try {
+    res.json(obtenerPlanActivo(usuarioId));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/usuarios/:usuarioId/planes', (req, res) => {
+  const usuarioId = checkAccesoUsuario(req, res);
+  if (usuarioId === null) return;
+  res.json(listarPlanesArchivados(usuarioId));
+});
+
+router.post('/usuarios/:usuarioId/plan', (req, res) => {
+  const usuarioId = checkAccesoUsuario(req, res);
+  if (usuarioId === null) return;
+  try {
+    const plan = crearPlan(usuarioId, req.body || {}, req.usuario.id);
+    res.status(201).json(plan);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/usuarios/:usuarioId/plan', (req, res) => {
+  const usuarioId = checkAccesoUsuario(req, res);
+  if (usuarioId === null) return;
+  try {
+    res.json(archivarPlanActivo(usuarioId));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Todo lo demas (historial, guardar, restaurar) es exclusivo del admin -

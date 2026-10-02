@@ -11,11 +11,7 @@ import {
   FASES,
   NIVELES,
 } from '@shared/nutrition/nutritionEngine.js';
-
-const LABEL_SEXO = { masculino: 'Hombres', femenino: 'Mujeres' };
-const LABEL_NIVEL = { sin_entrenar: 'Sin entrenar', bajo: 'Bajo', intermedio: 'Intermedio', alto: 'Alto' };
-const LABEL_ENFOQUE = { estandar: 'Estándar', carbohidratos: 'Enfoque carbohidratos' };
-const LABEL_FASE = { mantenimiento: 'Mantenimiento', volumen: 'Volumen', definicion: 'Definición' };
+import { LABEL_SEXO, LABEL_NIVEL, LABEL_ENFOQUE, LABEL_FASE } from '../utils/nutricionLabels.js';
 
 function leerPath(obj, path) {
   return path.reduce((acc, k) => (acc == null ? undefined : acc[k]), obj);

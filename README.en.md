@@ -1057,6 +1057,45 @@ sessions → closing a microcycle → progress → Excel export):
   specific version from the history brings back its exact values (checked
   with a distinguishable value), and restoring factory defaults works
   independently.
+- **Nutrition - Stage 3 of 5 (creating and viewing an actual plan)**: coach
+  and client can now build and see a real plan (Mantenimiento, Volumen or
+  "simple" Definición -no goal mode yet, that's Stage 4-), both at
+  `/nutricion` (their own) and at `/coach/clientes/:id/nutricion` (new
+  "Nutrición" tab on the client panel) - the same screen serves both cases,
+  just like `EntrenamientoPage` with `usuarioIdParam`: the route decides
+  whose plan it is, not the viewer's role. If biological sex hasn't been
+  set yet (required by the engine; a column that already existed in the
+  schema but had never been wired to any route) it asks for that first -
+  birth date and height stay optional, only feeding the informational
+  Mifflin-St Jeor in the result. The creation form asks for current weight
+  (required, entered by hand, as the project owner asked) and phase/focus;
+  training days come straight from the active routine when one exists
+  (`GET /usuarios/:id/rutina`), and when there's no routine (someone using
+  only the calculator) it asks for them by hand, with the option to
+  override the automatic activity level by hand either way.
+  `src/services/nutritionService.js` is the new DB-touching layer (the
+  engine in `shared/nutrition/` still never touches the database): it
+  resolves the activity level (training days + average steps over the
+  configured window), builds the Definición reference following the
+  prompt's 3 priorities (last Mantenimiento/Volumen plan -recalculated with
+  ITS OWN frozen config and converted to g/kg- → what the user declares
+  eating today → the table), and creates the plan by archiving the
+  previous one in the same transaction (2 active plans never coexist,
+  already enforced by the partial unique index too). An active plan always
+  recalculates against the current config; an archived one against the
+  version it had when created - same rule already proven in Stage 1/2. New
+  `PUT /api/usuarios/:id/datos-personales` endpoint (direct write, no
+  `solicitud_cambio` detour: this is objective biometric data, not a
+  training decision to approve) and 4 routes under
+  `/api/nutricion/usuarios/:id/plan[es]` with the same
+  `puedeAccederAUsuario` check as the rest of the app (verified with a
+  coach unrelated to the client: 403). Tested end-to-end in the browser
+  with Playwright across 3 scenarios: a client with an active plan viewing
+  its result and history, a client building a Definición plan that
+  actually uses their previous plan as the reference (confirmed
+  `reference_source: "plan_anterior"` and the exact grams), and a coach
+  entering biological sex and the first plan for a brand-new client with
+  nothing on file yet.
 
 Known limitations / accepted simplifications:
 

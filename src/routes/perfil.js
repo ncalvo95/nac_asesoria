@@ -92,6 +92,37 @@ router.put('/:usuarioId/equipamiento', (req, res) => {
   res.json({ usuario_id, ...payload });
 });
 
+// ---- Datos personales (sexo biologico, fecha de nacimiento, altura) ----
+// Viven en la tabla usuarios (columnas ya existian en el schema original
+// pero nunca se habian conectado a ninguna ruta). El motor de nutricion
+// necesita sexo_biologico para TODO calculo -por eso es obligatorio aca-;
+// fecha_nacimiento y altura_cm son opcionales, solo alimentan el
+// Mifflin-St Jeor informativo del resultado del plan. Escritura directa,
+// sin pasar por solicitud_cambio: son datos biometricos objetivos, no una
+// decision de entrenamiento que el coach deba aprobar.
+const updateDatosPersonales = db.prepare(`
+  UPDATE usuarios SET sexo_biologico = @sexo_biologico, fecha_nacimiento = @fecha_nacimiento, altura_cm = @altura_cm
+  WHERE id = @usuario_id
+`);
+
+router.put('/:usuarioId/datos-personales', (req, res) => {
+  const usuario_id = checkAcceso(req, res);
+  if (usuario_id === null) return;
+  const { sexo_biologico, fecha_nacimiento, altura_cm } = req.body || {};
+  if (!['masculino', 'femenino'].includes(sexo_biologico)) {
+    return res.status(400).json({ error: 'sexo_biologico debe ser masculino o femenino.' });
+  }
+  if (altura_cm != null && !(Number(altura_cm) > 0)) {
+    return res.status(400).json({ error: 'altura_cm debe ser un número mayor a 0.' });
+  }
+  updateDatosPersonales.run({
+    usuario_id, sexo_biologico,
+    fecha_nacimiento: fecha_nacimiento || null,
+    altura_cm: altura_cm != null ? Number(altura_cm) : null,
+  });
+  res.json({ usuario_id, sexo_biologico, fecha_nacimiento: fecha_nacimiento || null, altura_cm: altura_cm ?? null });
+});
+
 // ---- Perfil medico (opcional) ----
 const upsertPerfilMedico = db.prepare(`
   INSERT INTO perfil_medico (usuario_id, historial_lesiones, limitaciones_articulares)
@@ -274,7 +305,8 @@ router.get('/:usuarioId/perfil', (req, res) => {
   const objetivo = db.prepare('SELECT * FROM objetivo WHERE usuario_id = ?').get(usuario_id);
   const disponibilidad = db.prepare('SELECT * FROM disponibilidad WHERE usuario_id = ?').get(usuario_id);
   const equipamiento = db.prepare('SELECT * FROM equipamiento WHERE usuario_id = ?').get(usuario_id);
-  res.json({ objetivo, disponibilidad, equipamiento });
+  const datos_personales = db.prepare('SELECT sexo_biologico, fecha_nacimiento, altura_cm FROM usuarios WHERE id = ?').get(usuario_id);
+  res.json({ objetivo, disponibilidad, equipamiento, datos_personales });
 });
 
 export default router;
