@@ -1030,6 +1030,33 @@ sessions → closing a microcycle → progress → Excel export):
   in memory (auto-invalidated on every new version saved) and
   `GET /api/nutricion/config` exposes it read-only. No UI yet (admin
   panel, creating a plan, results, goal mode) - that's the next stages.
+- **Nutrition - Stage 2 of 5 (admin panel + new tab)**: new "Nutrición" tab
+  in the bottom bar, visible to all 3 roles (coach and client see a
+  "coming soon" notice until Stage 3; the admin sees the full panel). The
+  panel edits all 7 sections of the original prompt's config (energy, the
+  base table, carb increments, Definición, exceptions, automatic activity
+  level, goal mode/semáforo, and "other" -calorie floors and Mifflin
+  factors-) with a live preview (an editable example profile:
+  sex/weight/level/phase/focus) that recalculates on every keystroke
+  **without hitting the backend**, importing
+  `shared/nutrition/nutritionEngine.js` straight into the frontend through
+  a new Vite alias (`@shared/nutrition`, with `server.fs.allow` widened so
+  Vite can serve a file living outside `frontend/`) - the same pure engine
+  Express uses, no calculation logic duplicated client-side. Saving hits
+  `POST /api/nutricion/config` (rejects with 400 + the list of errors if
+  `validarConfig` finds something inconsistent, e.g. an inverted semáforo
+  range); the history (`GET /config/historial`) lists every version with
+  author/date/comment and lets you "Restore" any of them or reset to
+  factory defaults, always inserting a new version (history is never
+  lost). All 4 write routes (`POST /config`, `/config/restaurar/:id`,
+  `/config/restaurar-fabrica`, `GET /config/historial`) are gated with
+  `requireRole('admin')` on the backend -not just hidden in the UI-,
+  verified by hitting the API directly with a coach session (403 on all
+  4). Tested end-to-end in the browser with Playwright: the live preview
+  recalculates on the fly, saving creates a new version, restoring a
+  specific version from the history brings back its exact values (checked
+  with a distinguishable value), and restoring factory defaults works
+  independently.
 
 Known limitations / accepted simplifications:
 

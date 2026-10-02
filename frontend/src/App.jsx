@@ -17,6 +17,7 @@ import CoachPage from './pages/CoachPage.jsx';
 import CatalogoPage from './pages/CatalogoPage.jsx';
 import ReportesPage from './pages/ReportesPage.jsx';
 import PreferenciasPage from './pages/PreferenciasPage.jsx';
+import NutricionPage from './pages/NutricionPage.jsx';
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
                 <Route path="/rutinas" element={<RutinasPage />} />
                 <Route path="/progreso" element={<ProgresoPage />} />
                 <Route path="/reportes" element={<ReportesPage />} />
+                <Route path="/nutricion" element={<NutricionPage />} />
               </Route>
               <Route path="/coach" element={<ProtectedRoute><CoachPage /></ProtectedRoute>} />
               <Route path="/catalogo" element={<ProtectedRoute><CatalogoPage /></ProtectedRoute>} />

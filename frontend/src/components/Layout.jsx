@@ -8,6 +8,7 @@ const tabs = [
   { to: '/rutinas', label: 'Rutinas' },
   { to: '/progreso', label: 'Progreso' },
   { to: '/reportes', label: 'Reportes' },
+  { to: '/nutricion', label: 'Nutrición' },
 ];
 
 export default function Layout() {

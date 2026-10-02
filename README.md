@@ -1298,6 +1298,33 @@ cierre de microciclo → progreso → export a Excel):
   `GET /api/nutricion/config` la expone de solo lectura. Sin UI
   (panel de admin, alta de plan, resultado, modo objetivo) todavía -eso
   son las próximas etapas.
+- **Nutrición - Etapa 2 de 5 (panel de admin + pestaña nueva)**: pestaña
+  "Nutrición" nueva en la barra inferior, visible para los 3 roles (coach y
+  cliente ven un aviso de "próximamente" hasta la Etapa 3; el admin ve el
+  panel completo). El panel edita las 7 secciones de la config del prompt
+  original (energía, tabla base, incrementos de carbohidratos, Definición,
+  excepciones, nivel de actividad automático, modo objetivo/semáforo, y
+  "otros" -pisos calóricos y factores de Mifflin-) con una vista previa en
+  vivo (perfil de ejemplo editable: sexo/peso/nivel/fase/enfoque) que
+  recalcula en cada tecla **sin pegarle al backend**, importando
+  `shared/nutrition/nutritionEngine.js` directo en el frontend vía un alias
+  nuevo de Vite (`@shared/nutrition`, con `server.fs.allow` ampliado para
+  que Vite pueda servir un archivo fuera de `frontend/`) - el mismo motor
+  puro que usa Express, sin duplicar la lógica de cálculo en el cliente.
+  Guardar pega a `POST /api/nutricion/config` (rechaza con 400 + la lista
+  de errores si `validarConfig` encuentra algo inconsistente, ej. un rango
+  del semáforo invertido); el historial (`GET /config/historial`) lista
+  cada versión con autor/fecha/comentario y permite "Restaurar" cualquiera
+  o volver a los valores de fábrica, siempre insertando una versión nueva
+  (nunca se pierde el historial). Las 4 rutas de escritura
+  (`POST /config`, `/config/restaurar/:id`, `/config/restaurar-fabrica`,
+  `GET /config/historial`) están gateadas con `requireRole('admin')` en el
+  backend -no es solo que la UI las esconda-, verificado pegándole
+  directo a la API con una sesión de coach (403 en las 4). Probado en
+  navegador con Playwright de punta a punta: la vista previa recalcula al
+  vuelo, guardar crea una versión nueva, restaurar una versión puntual del
+  historial trae de vuelta sus valores exactos (verificado con un valor
+  distinguible), y restaurar de fábrica funciona por separado.
 
 Pendiente / simplificaciones conocidas:
 
