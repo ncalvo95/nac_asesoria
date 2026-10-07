@@ -15,6 +15,7 @@ import {
   archivarPlanActivo,
   actualizarProgresoPlan,
 } from '../services/nutritionService.js';
+import { debeQuedarPendiente, crearSolicitudCambio } from '../services/solicitudCambio.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -53,9 +54,21 @@ router.get('/usuarios/:usuarioId/planes', (req, res) => {
   res.json(listarPlanesArchivados(usuarioId));
 });
 
+// Crear (o reemplazar) un plan es una decision de estrategia -como
+// objetivo/disponibilidad/rutina-, asi que respeta el mismo toggle
+// "que mi coach apruebe mis cambios" (debeQuedarPendiente en
+// solicitudCambio.js): si esta activo, queda pendiente en vez de aplicarse
+// directo. El seguimiento quincenal (PATCH /plan/progreso, mas abajo) NO
+// pasa por aca a proposito - es reportar el peso real de hoy sobre un plan
+// YA aprobado, no una estrategia nueva, mismo criterio que registrar una
+// sesion de entrenamiento.
 router.post('/usuarios/:usuarioId/plan', (req, res) => {
   const usuarioId = checkAccesoUsuario(req, res);
   if (usuarioId === null) return;
+  if (debeQuedarPendiente(req.usuario, usuarioId)) {
+    const s = crearSolicitudCambio({ usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'nutricion_plan', payload: req.body || {} });
+    return res.status(202).json({ pendiente: true, solicitud_id: s.id });
+  }
   try {
     const plan = crearPlan(usuarioId, req.body || {}, req.usuario.id);
     res.status(201).json(plan);

@@ -1169,6 +1169,31 @@ sessions → closing a microcycle → progress → Excel export):
   steps on a rest day, confirmed the button's date switches automatically
   when changing tabs, and that setting a default shows correctly on a day
   that was never logged.
+- **Coach approval now also covers new nutrition plans**: the optional
+  coach-approval gate (`requiere_aprobacion_coach`, see below) now also
+  covers creating a new nutrition plan (`POST
+  /nutricion/usuarios/:id/plan`) - it used to only cover goal,
+  availability, equipment and routine. With the toggle on, the POST
+  returns `202 { pendiente: true, solicitud_id }` instead of creating the
+  plan right away, and it sits in `solicitud_cambio` (type
+  `nutricion_plan`) until the coach approves or rejects it from their
+  panel - once approved, the plan is created with `created_by` set to the
+  client themself (it's their plan, the coach just unlocks it). On
+  purpose, updating an already-active plan's progress (`PATCH
+  /plan/progreso`, reporting current weight, a fact, not a new strategy
+  decision) and discarding the active plan (`DELETE /plan`) are **not**
+  gated - same reasoning already applied to logging a training session,
+  which isn't gated either. This also fixed a latent bug in
+  `solicitud_cambio.tipo`'s CHECK constraint: it was never updated when
+  the `dia_agregar`/`dia_quitar`/`dia_cambiar_semana` types were added
+  (see below), so a request of those types would crash with "CHECK
+  constraint failed" if approval mode was on - `schema.sql` and a new
+  migration (`fixSolicitudCambioTipoCheck` in `migrate.js`, rebuilds the
+  table the same way the missing `ON DELETE CASCADE`s already do) fix it
+  together with the new type. Tested end-to-end with a script: turn the
+  toggle on, create a plan (stays pending, 202), see it in the coach's
+  list, confirm there's still no active plan, approve it, confirm there
+  now is one with the right `created_by`.
 
 Known limitations / accepted simplifications:
 
@@ -1188,7 +1213,7 @@ Known limitations / accepted simplifications:
   admin or coach generated) - it fits "a coach manages their clients",
   not a marketplace-style app.
 - A client with an assigned coach can turn on "let my coach approve my
-  changes to goal/availability/equipment/routine"
+  changes to goal/availability/equipment/routine/nutrition"
   (`PATCH /usuarios/:id/aprobacion-coach`, a toggle on the Progress
   screen) - while it's on, those changes sit in `solicitud_cambio` until
   the coach approves or rejects them (`src/services/solicitudCambio.js`,

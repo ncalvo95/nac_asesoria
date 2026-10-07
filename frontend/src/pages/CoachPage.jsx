@@ -15,6 +15,7 @@ const TIPO_LABEL = {
   dia_agregar: 'Agregar día',
   dia_quitar: 'Quitar día',
   dia_cambiar_semana: 'Cambiar día de la semana',
+  nutricion_plan: 'Nuevo plan de nutrición',
 };
 
 export default function CoachPage() {

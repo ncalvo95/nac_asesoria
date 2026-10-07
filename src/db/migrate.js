@@ -315,4 +315,39 @@ function corregirDescansoUnilaterales() {
 }
 corregirDescansoUnilaterales();
 
+// solicitud_cambio.tipo quedo con un CHECK viejo que nunca se actualizo
+// cuando se agregaron los tipos dia_agregar/dia_quitar/dia_cambiar_semana
+// (y ahora nutricion_plan) al switch de aplicarSolicitud - una solicitud de
+// esos tipos rompia con "CHECK constraint failed" al crearse. CHECK no se
+// puede alterar en SQLite, asi que hay que reconstruir la tabla (mismo
+// patron que fixDeloadCascade); el guard mira el SQL guardado en
+// sqlite_master porque, a diferencia de un FK, un CHECK no se puede
+// inspeccionar con PRAGMA.
+function fixSolicitudCambioTipoCheck() {
+  const { sql } = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'solicitud_cambio'").get();
+  if (sql.includes('nutricion_plan')) return;
+
+  db.exec(`
+    ALTER TABLE solicitud_cambio RENAME TO solicitud_cambio_old;
+    CREATE TABLE solicitud_cambio (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      coach_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      tipo TEXT NOT NULL CHECK (tipo IN (
+        'objetivo', 'disponibilidad', 'equipamiento', 'rutina_auto', 'rutina_manual', 'rutina_split',
+        'dia_agregar', 'dia_quitar', 'dia_cambiar_semana', 'nutricion_plan'
+      )),
+      payload_json TEXT NOT NULL,
+      estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'aprobada', 'rechazada')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      resuelta_at TEXT,
+      nota_coach TEXT
+    );
+    INSERT INTO solicitud_cambio (id, usuario_id, coach_id, tipo, payload_json, estado, created_at, resuelta_at, nota_coach)
+      SELECT id, usuario_id, coach_id, tipo, payload_json, estado, created_at, resuelta_at, nota_coach FROM solicitud_cambio_old;
+    DROP TABLE solicitud_cambio_old;
+  `);
+}
+fixSolicitudCambioTipoCheck();
+
 console.log('Migracion aplicada correctamente.');

@@ -16,6 +16,7 @@ const TIPO_LABEL = {
   dia_agregar: 'Agregar día',
   dia_quitar: 'Quitar día',
   dia_cambiar_semana: 'Cambiar día de la semana',
+  nutricion_plan: 'Nuevo plan de nutrición',
 };
 
 export default function ProgresoPage() {
@@ -383,7 +384,7 @@ function AprobacionCoach({ usuario }) {
     <section className="flex flex-col gap-2.5 bg-surface border border-border rounded-xl p-3.5">
       <label className="flex items-center justify-between gap-3">
         <span className="text-[12.5px] text-text-muted leading-snug">
-          Que mi coach apruebe mis cambios de objetivo, disponibilidad, equipamiento y rutina
+          Que mi coach apruebe mis cambios de objetivo, disponibilidad, equipamiento, rutina y nutrición
         </span>
         <button
           type="button"

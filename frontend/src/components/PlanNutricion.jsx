@@ -379,6 +379,7 @@ function FormularioPlan({ usuarioId, rutinaActiva, planActual, semanasSugeridas,
   const [pctGrasaInicial, setPctGrasaInicial] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [pendiente, setPendiente] = useState(false);
 
   const tieneRutina = Boolean(rutinaActiva);
   const diasDeRutina = rutinaActiva?.dias?.length;
@@ -409,12 +410,35 @@ function FormularioPlan({ usuarioId, rutinaActiva, planActual, semanasSugeridas,
         pctGrasaInicial: fase === 'definicion' && modoObjetivoActivo && pctGrasaInicial ? Number(pctGrasaInicial) : undefined,
       };
       const creado = await api.post(`/nutricion/usuarios/${usuarioId}/plan`, payload);
-      onCreado(creado);
+      // requiere_aprobacion_coach activo: el plan todavia no existe, queda
+      // esperando a que el coach lo apruebe (ver debeQuedarPendiente en
+      // solicitudCambio.js) - no hay un plan nuevo que mostrar todavia.
+      if (creado.pendiente) {
+        setPendiente(true);
+      } else {
+        onCreado(creado);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setEnviando(false);
     }
+  }
+
+  if (pendiente) {
+    return (
+      <div className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-2.5">
+        <p className="text-[13.5px] font-semibold">Plan enviado a tu coach</p>
+        <p className="text-[12.5px] text-text-muted">
+          Tenés activado que tu coach apruebe tus cambios, así que este plan va a activarse recién cuando lo revise.
+        </p>
+        {onCancelar && (
+          <button type="button" onClick={onCancelar} className="self-start text-[12.5px] font-semibold text-accent">
+            Volver a mi plan actual
+          </button>
+        )}
+      </div>
+    );
   }
 
   return (

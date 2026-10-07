@@ -67,7 +67,10 @@ CREATE TABLE IF NOT EXISTS solicitud_cambio (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   coach_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-  tipo TEXT NOT NULL CHECK (tipo IN ('objetivo', 'disponibilidad', 'equipamiento', 'rutina_auto', 'rutina_manual', 'rutina_split')),
+  tipo TEXT NOT NULL CHECK (tipo IN (
+    'objetivo', 'disponibilidad', 'equipamiento', 'rutina_auto', 'rutina_manual', 'rutina_split',
+    'dia_agregar', 'dia_quitar', 'dia_cambiar_semana', 'nutricion_plan'
+  )),
   payload_json TEXT NOT NULL,
   estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'aprobada', 'rechazada')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

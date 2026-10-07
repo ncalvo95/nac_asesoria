@@ -1440,6 +1440,30 @@ cierre de microciclo → progreso → export a Excel):
   fechas correctas, cargar pasos en un día de descanso, confirmar que el
   botón cambia de fecha automáticamente al cambiar de tab, y que setear un
   default lo muestra correctamente en un día nunca cargado.
+- **Aprobación del coach también para planes de nutrición nuevos**: la
+  aprobación opcional del coach (`requiere_aprobacion_coach`, ver más abajo)
+  ahora también cubre crear un plan de nutrición nuevo (`POST
+  /nutricion/usuarios/:id/plan`) - antes solo cubría objetivo,
+  disponibilidad, equipamiento y rutina. Con el toggle activo, el POST
+  devuelve `202 { pendiente: true, solicitud_id }` en vez de crear el plan
+  directo, y queda en `solicitud_cambio` (tipo `nutricion_plan`) hasta que
+  el coach lo aprueba o rechaza desde su panel - al aprobarlo, el plan se
+  crea con `created_by` del propio cliente (es su plan, el coach solo lo
+  habilita). A propósito **no** se gatea actualizar el progreso de un plan
+  ya activo (`PATCH /plan/progreso`, es reportar el peso actual, un hecho,
+  no una decisión de estrategia nueva) ni descartar el plan activo (`DELETE
+  /plan`) - mismo criterio que ya existe para el registro de sesiones de
+  entrenamiento, que tampoco se gatea. De paso se corrigió un bug latente
+  en el CHECK de `solicitud_cambio.tipo`: nunca se había actualizado cuando
+  se agregaron los tipos `dia_agregar`/`dia_quitar`/`dia_cambiar_semana`
+  (ver más abajo), así que una solicitud de esos tipos rompía con "CHECK
+  constraint failed" si la aprobación estaba activa - `schema.sql` y una
+  migración nueva (`fixSolicitudCambioTipoCheck` en `migrate.js`,
+  reconstruye la tabla como ya se hace para los `ON DELETE CASCADE`
+  faltantes) lo corrigen junto con el tipo nuevo. Probado end-to-end con
+  script: activar el toggle, crear un plan (queda pendiente, 202), verlo en
+  la lista del coach, confirmar que todavía no hay plan activo, aprobarlo,
+  confirmar que ahora sí lo hay con el `created_by` correcto.
 
 Pendiente / simplificaciones conocidas:
 
@@ -1460,7 +1484,7 @@ Pendiente / simplificaciones conocidas:
   admin o un coach) - encaja con "un coach gestiona a sus clientes", no con
   una app tipo marketplace.
 - Un cliente con un coach asignado puede activar "que mi coach apruebe mis
-  cambios de objetivo/disponibilidad/equipamiento/rutina"
+  cambios de objetivo/disponibilidad/equipamiento/rutina/nutrición"
   (`PATCH /usuarios/:id/aprobacion-coach`, toggle en la pantalla de
   Progreso) - mientras está activo, esos cambios quedan en
   `solicitud_cambio` hasta que el coach los aprueba o rechaza
