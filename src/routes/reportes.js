@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import { repsEfectivas } from '../services/progressionEngine.js';
 import { obtenerEvolucionNutricional } from '../services/nutritionService.js';
+import { generarWorkbookReporte } from '../services/excelGenerator.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -165,6 +166,26 @@ router.get('/usuarios/:usuarioId/reportes/:reporteId', (req, res) => {
   const row = db.prepare('SELECT * FROM reporte_progreso WHERE id = ? AND usuario_id = ?').get(req.params.reporteId, usuarioId);
   if (!row) return res.status(404).json({ error: 'Reporte no encontrado.' });
   res.json({ ...row, datos: JSON.parse(row.datos_json) });
+});
+
+// Exporta el reporte TAL COMO quedo guardado (datos_json) - nunca recalcula
+// con datos mas nuevos, para que el Excel coincida con lo que se vio en
+// pantalla cuando se genero el reporte.
+router.get('/usuarios/:usuarioId/reportes/:reporteId/export.xlsx', async (req, res) => {
+  const usuarioId = Number(req.params.usuarioId);
+  if (!checkAcceso(req, res, usuarioId)) return;
+  const row = db.prepare('SELECT * FROM reporte_progreso WHERE id = ? AND usuario_id = ?').get(req.params.reporteId, usuarioId);
+  if (!row) return res.status(404).json({ error: 'Reporte no encontrado.' });
+  const usuario = db.prepare('SELECT nombre FROM usuarios WHERE id = ?').get(usuarioId);
+  try {
+    const { workbook } = generarWorkbookReporte(JSON.parse(row.datos_json), usuario.nombre, row.tipo);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="reporte-progreso.xlsx"');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 export default router;

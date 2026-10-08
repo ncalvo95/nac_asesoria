@@ -712,6 +712,43 @@ function estilarHeaderTabla(row) {
   });
 }
 
+// Tabla de planes de nutricion (fecha/estado/fase/enfoque/.../objetivo) -
+// compartida entre el export de nutricion sola y el reporte combinado (ver
+// generarWorkbookReporte), para no duplicar el armado de filas.
+function agregarTablaPlanes(sheet, planes, { conEncabezadoVacio = 'Todavía no armaste ningún plan de nutrición.' } = {}) {
+  if (planes.length === 0) {
+    sheet.addRow([conEncabezadoVacio]);
+    return;
+  }
+  const filaHeader = sheet.addRow(COLUMNAS_PLANES);
+  estilarHeaderTabla(filaHeader);
+
+  planes.forEach((p, i) => {
+    const objetivo = p.goal_fat_kg ? `Perder ${p.goal_fat_kg} kg en ${p.weeks} semana${p.weeks === 1 ? '' : 's'}` : '';
+    const fila = sheet.addRow([
+      formatearFechaHistorial(p.created_at),
+      p.status === 'active' ? 'Activo' : 'Archivado',
+      LABEL_FASE[p.phase] || p.phase,
+      LABEL_ENFOQUE[p.focus] || p.focus,
+      LABEL_NIVEL[p.activity_level] || p.activity_level,
+      p.reference_weight_kg,
+      p.kcal,
+      p.proteinaG,
+      p.grasaG,
+      p.carbohidratosG,
+      objetivo,
+    ]);
+    fila.eachCell((cell, colNumber) => {
+      cell.alignment = { horizontal: colNumber >= 6 && colNumber <= 10 ? 'right' : 'left', vertical: 'middle' };
+      cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
+      if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
+    });
+    if (p.status === 'active') {
+      fila.getCell(2).font = { bold: true, color: { argb: COLOR_MEJORA_TEXTO } };
+    }
+  });
+}
+
 export function generarWorkbookNutricion(usuarioId) {
   const usuario = db.prepare('SELECT nombre FROM usuarios WHERE id = ?').get(usuarioId);
   if (!usuario) throw new Error('Usuario no encontrado.');
@@ -741,37 +778,7 @@ export function generarWorkbookNutricion(usuarioId) {
   filaTitulo.height = 26;
   sheetPlanes.addRow([]);
 
-  if (planes.length === 0) {
-    sheetPlanes.addRow(['Todavía no armaste ningún plan de nutrición.']);
-  } else {
-    const filaHeader = sheetPlanes.addRow(COLUMNAS_PLANES);
-    estilarHeaderTabla(filaHeader);
-
-    planes.forEach((p, i) => {
-      const objetivo = p.goal_fat_kg ? `Perder ${p.goal_fat_kg} kg en ${p.weeks} semana${p.weeks === 1 ? '' : 's'}` : '';
-      const fila = sheetPlanes.addRow([
-        formatearFechaHistorial(p.created_at),
-        p.status === 'active' ? 'Activo' : 'Archivado',
-        LABEL_FASE[p.phase] || p.phase,
-        LABEL_ENFOQUE[p.focus] || p.focus,
-        LABEL_NIVEL[p.activity_level] || p.activity_level,
-        p.reference_weight_kg,
-        p.kcal,
-        p.proteinaG,
-        p.grasaG,
-        p.carbohidratosG,
-        objetivo,
-      ]);
-      fila.eachCell((cell, colNumber) => {
-        cell.alignment = { horizontal: colNumber >= 6 && colNumber <= 10 ? 'right' : 'left', vertical: 'middle' };
-        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
-        if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
-      });
-      if (p.status === 'active') {
-        fila.getCell(2).font = { bold: true, color: { argb: COLOR_MEJORA_TEXTO } };
-      }
-    });
-  }
+  agregarTablaPlanes(sheetPlanes, planes);
 
   const sheetPesajes = wb.addWorksheet('Pesajes');
   sheetPesajes.columns = [{ width: 12 }, { width: 18 }, { width: 10 }];
@@ -807,6 +814,119 @@ export function generarWorkbookNutricion(usuarioId) {
       });
     });
   }
+
+  return { workbook: wb };
+}
+
+// ---------------------------------------------------------------------------
+// Export de un reporte ya generado (ver generarDatosReporte en
+// reportes.js): el UNICO lugar de la app donde entrenamiento y nutricion ya
+// estan cruzados en un mismo objeto - reusa exactamente los `datos`
+// guardados en su momento (reporte_progreso.datos_json), nunca recalcula
+// con informacion mas nueva, para que el export coincida con lo que se vio
+// en pantalla al generarlo.
+// ---------------------------------------------------------------------------
+
+function agregarFilaVacia(sheet, numColumnas, texto) {
+  const fila = sheet.addRow([texto]);
+  sheet.mergeCells(fila.number, 1, fila.number, numColumnas);
+  fila.getCell(1).font = { italic: true, color: { argb: 'FF837F77' } };
+}
+
+export function generarWorkbookReporte(datos, usuarioNombre, tipo) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'nac_asesoria';
+  wb.created = new Date();
+  wb.views = [{ activeTab: 0 }];
+
+  // ---- Resumen: peso corporal y volumen por musculo, uno al lado del otro
+  // en la misma hoja - no se buscan hacer coincidir fila a fila por fecha
+  // (son 2 lineas de tiempo independientes, entrenamiento por microciclo y
+  // nutricion por plan), pero verlos uno al lado del otro ya alcanza para
+  // que un coach cruce a ojo "bajó de peso mientras el volumen subía", que
+  // es el cruce que se pidió.
+  const sheetResumen = wb.addWorksheet('Resumen');
+  sheetResumen.columns = [
+    { width: 12 }, { width: 12 }, { width: 14 }, { width: 3 },
+    { width: 18 }, { width: 22 }, { width: 22 },
+  ];
+  const filaTitulo = sheetResumen.addRow([`Reporte de progreso (${tipo}) - ${usuarioNombre}`]);
+  sheetResumen.mergeCells(filaTitulo.number, 1, filaTitulo.number, 7);
+  filaTitulo.getCell(1).font = { bold: true, size: 14, color: { argb: COLOR_BORDO } };
+  filaTitulo.height = 26;
+  sheetResumen.addRow([`Período: ${datos.periodo}  ·  Microciclos cerrados: ${datos.microciclos_cerrados}`]).getCell(1).font = { italic: true, size: 10, color: { argb: 'FF837F77' } };
+  sheetResumen.addRow([]);
+
+  const filaHeaderResumen = sheetResumen.addRow(['Fecha', 'Peso (kg)', 'Fase', null, 'Músculo', 'Volumen: inicial → actual', 'Reps efectivas: inicial → actual']);
+  estilarHeaderTabla(filaHeaderResumen);
+
+  const filasPeso = datos.nutricion.map((p) => [formatearFechaHistorial(p.created_at), p.reference_weight_kg, LABEL_FASE[p.phase] || p.phase]);
+  const filasVolumen = datos.porMusculo.map((m) => {
+    const h = m.historial;
+    const volumenTexto = h.length ? `${h[0].volumen_directo} → ${h[h.length - 1].volumen_directo}` : 'sin datos';
+    const reTexto = h.length ? `${h[0].reps_efectivas} → ${h[h.length - 1].reps_efectivas}` : 'sin datos';
+    return [CAPITALIZAR(formatearMusculo(m.musculo)), volumenTexto, reTexto];
+  });
+  const filasTotales = Math.max(filasPeso.length, filasVolumen.length);
+  for (let i = 0; i < filasTotales; i++) {
+    const peso = filasPeso[i] || ['', '', ''];
+    const volumen = filasVolumen[i] || ['', '', ''];
+    const fila = sheetResumen.addRow([...peso, null, ...volumen]);
+    fila.eachCell((cell, colNumber) => {
+      if (colNumber === 4) return;
+      cell.alignment = { horizontal: colNumber === 1 || colNumber === 5 ? 'left' : 'right', vertical: 'middle' };
+      cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
+      if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
+    });
+  }
+  if (filasTotales === 0) agregarFilaVacia(sheetResumen, 7, 'Todavía no hay datos de entrenamiento ni de nutrición para este reporte.');
+
+  // ---- Por ejercicio: el detalle que en pantalla (ReportesPage.jsx) se ve
+  // comprimido en texto con flechas ("20kg×8 → 24kg×10") - aca cada dato
+  // tiene su propia columna.
+  const sheetEjercicio = wb.addWorksheet('Por ejercicio');
+  sheetEjercicio.columns = [{ width: 28 }, { width: 16 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }, { width: 14 }];
+  const headerEj = sheetEjercicio.addRow(['Ejercicio', 'Músculo', 'Peso inicial (kg)', 'Peso actual (kg)', 'Reps piso inicial', 'Reps techo actual', 'Reps efectivas totales']);
+  estilarHeaderTabla(headerEj);
+  if (datos.porEjercicio.length === 0) {
+    agregarFilaVacia(sheetEjercicio, 7, 'Todavía no hay microciclos cerrados con datos de ejercicios.');
+  } else {
+    datos.porEjercicio.forEach((e, i) => {
+      const totalRe = e.historial.reduce((acc, h) => acc + (h.reps_efectivas || 0), 0);
+      const fila = sheetEjercicio.addRow([e.ejercicio_nombre, CAPITALIZAR(formatearMusculo(e.musculo_nombre)), e.peso_inicial, e.peso_actual, e.reps_piso_inicial, e.reps_techo_actual, totalRe]);
+      fila.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: colNumber <= 2 ? 'left' : 'right', vertical: 'middle' };
+        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
+        if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
+      });
+    });
+  }
+
+  // ---- Por musculo: una fila por musculo x microciclo (el detalle completo
+  // que en pantalla tambien queda comprimido con flechas).
+  const sheetMusculo = wb.addWorksheet('Por músculo');
+  sheetMusculo.columns = [{ width: 18 }, { width: 11 }, { width: 16 }, { width: 16 }, { width: 14 }, { width: 11 }];
+  const headerMus = sheetMusculo.addRow(['Músculo', 'Microciclo', 'Volumen directo', 'Volumen indirecto', 'Reps efectivas', 'Estancado']);
+  estilarHeaderTabla(headerMus);
+  const filasMusculo = datos.porMusculo.flatMap((m) => m.historial.map((h) => ({ musculo: m.musculo, ...h })));
+  if (filasMusculo.length === 0) {
+    agregarFilaVacia(sheetMusculo, 6, 'Todavía no hay microciclos cerrados con datos de volumen muscular.');
+  } else {
+    filasMusculo.forEach((h, i) => {
+      const fila = sheetMusculo.addRow([CAPITALIZAR(formatearMusculo(h.musculo)), h.numero, h.volumen_directo, h.volumen_indirecto, h.reps_efectivas, h.estancado ? 'Sí' : 'No']);
+      fila.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
+        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
+        if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
+      });
+      if (h.estancado) fila.getCell(6).font = { color: { argb: COLOR_EMPEORA_TEXTO }, bold: true };
+    });
+  }
+
+  // ---- Nutricion: misma tabla que el export de nutricion sola.
+  const sheetNutricion = wb.addWorksheet('Nutrición');
+  sheetNutricion.columns = [{ width: 12 }, { width: 11 }, { width: 14 }, { width: 18 }, { width: 14 }, { width: 18 }, { width: 8 }, { width: 12 }, { width: 10 }, { width: 16 }, { width: 28 }];
+  agregarTablaPlanes(sheetNutricion, datos.nutricion, { conEncabezadoVacio: 'Este usuario todavía no armó ningún plan de nutrición.' });
 
   return { workbook: wb };
 }

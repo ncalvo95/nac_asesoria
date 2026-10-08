@@ -1268,6 +1268,27 @@ sessions → closing a microcycle → progress → Excel export):
   returns a clear error instead of an empty file. Tested end-to-end with a
   script: a user with 8 plans plus weigh-ins (full content in both sheets),
   and one with no data at all (400 error with a message).
+- **Excel export of a report (training + nutrition crossed together)**: new
+  "Exportar Excel" button on each already-generated report on the Reportes
+  screen (`GET /usuarios/:id/reportes/:reporteId/export.xlsx`,
+  `generarWorkbookReporte` in `excelGenerator.js`). Exports exactly what was
+  saved in `reporte_progreso.datos_json` at the time -never recomputed with
+  newer data, so the Excel matches what was seen on screen when it was
+  generated- with 4 sheets. "Resumen": period and closed microciclos, plus
+  2 mini tables side by side on the same sheet - body weight (per nutrition
+  plan) on the left, volume (start → current) per muscle on the right - so
+  they can be eyeballed together without forcing a row-by-row date match
+  (they're 2 independent timelines: training by microciclo, nutrition by
+  plan). "Por ejercicio" and "Por músculo": the same detail already shown
+  on screen compressed with arrows ("20kg×8 → 24kg×10"), now with each
+  value in its own column (in "Por músculo", one row per muscle ×
+  microciclo). "Nutrición": the same table as the standalone nutrition
+  export (extracted into a shared function, `agregarTablaPlanes`, to avoid
+  duplicating the row-building logic). Tested end-to-end: a real report (32
+  exercises, 16 muscles, 1 plan) against dev DB data - confirming the
+  sheets handle the no-data case gracefully (empty muscle volume for this
+  test user) - and separately with full synthetic data to validate the
+  populated path across all 4 sheets.
 
 Known limitations / accepted simplifications:
 

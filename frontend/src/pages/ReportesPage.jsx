@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { api } from '../api/client.js';
+import { api, API_BASE } from '../api/client.js';
 import { formatearMusculo } from '../utils/musculo.js';
 import { LABEL_FASE, LABEL_ENFOQUE } from '../utils/nutricionLabels.js';
 
@@ -94,7 +94,7 @@ export default function ReportesPage() {
               </div>
               <span className="text-[11px] text-text-faint">{new Date(r.fecha_generacion).toLocaleDateString('es-AR')}</span>
             </button>
-            {abierto?.id === r.id && <DetalleReporte datos={abierto.datos} />}
+            {abierto?.id === r.id && <DetalleReporte datos={abierto.datos} usuarioId={usuario.id} reporteId={r.id} />}
           </div>
         ))}
       </div>
@@ -102,10 +102,16 @@ export default function ReportesPage() {
   );
 }
 
-function DetalleReporte({ datos }) {
+function DetalleReporte({ datos, usuarioId, reporteId }) {
   if (!datos) return null;
   return (
     <div className="border-t border-border p-3.5 flex flex-col gap-5">
+      <a
+        href={`${API_BASE}/usuarios/${usuarioId}/reportes/${reporteId}/export.xlsx`}
+        className="self-start text-[12.5px] font-semibold text-accent"
+      >
+        Exportar Excel
+      </a>
       <section className="flex flex-col gap-2">
         <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">Por ejercicio</span>
         <div className="flex flex-col gap-2">

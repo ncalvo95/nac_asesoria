@@ -1541,6 +1541,28 @@ cierre de microciclo → progreso → export a Excel):
   en vez de un archivo vacío. Probado end-to-end por script: un usuario con
   8 planes + pesajes (contenido completo en ambas hojas), y uno sin ningún
   dato (error 400 con mensaje).
+- **Exportación a Excel de un reporte (cruce entrenamiento + nutrición)**:
+  nuevo botón "Exportar Excel" en cada reporte ya generado en la pantalla de
+  Reportes (`GET /usuarios/:id/reportes/:reporteId/export.xlsx`,
+  `generarWorkbookReporte` en `excelGenerator.js`). Exporta tal cual quedó
+  guardado en `reporte_progreso.datos_json` en su momento -nunca recalcula
+  con datos más nuevos, para que el Excel coincida con lo que se vio en
+  pantalla al generarlo-, con 4 hojas. "Resumen": período y microciclos
+  cerrados, más 2 mini tablas una al lado de la otra en la misma hoja -peso
+  corporal (por plan de nutrición) a la izquierda, volumen inicial→actual
+  por músculo a la derecha- para poder cruzarlas a ojo sin forzar una
+  coincidencia fila a fila por fecha (son 2 líneas de tiempo independientes:
+  entrenamiento por microciclo, nutrición por plan). "Por ejercicio" y "Por
+  músculo": el mismo detalle que ya se veía en pantalla comprimido con
+  flechas ("20kg×8 → 24kg×10"), ahora con cada dato en su propia columna
+  (en "Por músculo", una fila por músculo × microciclo). "Nutrición":
+  misma tabla que el export de nutrición sola (se extrajo a una función
+  compartida, `agregarTablaPlanes`, para no duplicar el armado de filas).
+  Probado end-to-end: un reporte real (32 ejercicios, 16 músculos, 1 plan)
+  contra datos de la base de dev -confirmando que las hojas manejan bien
+  los casos sin datos (volumen muscular vacío para este usuario de
+  prueba)-, y por separado con datos sintéticos completos para validar el
+  camino con información en las 4 hojas.
 
 Pendiente / simplificaciones conocidas:
 
