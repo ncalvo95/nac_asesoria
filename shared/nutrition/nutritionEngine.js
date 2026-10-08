@@ -447,6 +447,29 @@ export function compararTendenciaConPlan({ kgPorSemanaTendencia, deficitSemanalK
   return { estado, ritmoEsperadoKgSemana: round2(ritmoEsperadoKgSemana), ritmoRealKgSemana: round2(perdidaRealKgSemana) };
 }
 
+// Seguimiento corporal general (cualquier fase, no solo el modo objetivo de
+// Definicion con kg declarados): compara el ritmo REAL de calcularTendenciaPeso
+// contra lo que la FASE del plan espera (volumen -> subir, definicion ->
+// bajar, mantenimiento -> quedarse estable), con una banda "estable" en %
+// del peso de tendencia (no un deficit en kcal, que aca no existe). Volumen/
+// definicion dentro de la banda es "estancado" (ni sube ni baja); en
+// mantenimiento, salirse de la banda - en cualquier direccion - es
+// "en_contra" (la direccion exacta ya se ve en los numeros al lado).
+export function clasificarTendenciaSegunFase({ kgPorSemanaTendencia, pesoTendenciaKg, fase }, config) {
+  const banda = Math.abs(pesoTendenciaKg) * (config.tendenciaPeso.bandaEstablePctSemana / 100);
+  const estable = Math.abs(kgPorSemanaTendencia) <= banda;
+  const subiendo = kgPorSemanaTendencia > banda;
+  const bajando = kgPorSemanaTendencia < -banda;
+
+  let estado;
+  if (fase === 'mantenimiento') estado = estable ? 'en_objetivo' : 'en_contra';
+  else if (fase === 'volumen') estado = subiendo ? 'en_objetivo' : bajando ? 'en_contra' : 'estancado';
+  else if (fase === 'definicion') estado = bajando ? 'en_objetivo' : subiendo ? 'en_contra' : 'estancado';
+  else estado = estable ? 'en_objetivo' : 'estancado';
+
+  return { estado, bandaKgSemana: round2(banda) };
+}
+
 // ---------------------------------------------------------------------------
 // Validacion de la config (usada por Express al guardar una version nueva)
 // ---------------------------------------------------------------------------
@@ -543,6 +566,8 @@ export function validarConfig(config) {
       if (!esNumeroFinito(tp.ventanaDias) || tp.ventanaDias <= 0) errores.push('tendenciaPeso.ventanaDias debe ser un número mayor a 0.');
       if (!esNumeroFinito(tp.minPuntos) || tp.minPuntos < 2) errores.push('tendenciaPeso.minPuntos debe ser un número mayor o igual a 2.');
       if (!esNumeroFinito(tp.toleranciaPct) || tp.toleranciaPct < 0) errores.push('tendenciaPeso.toleranciaPct debe ser un número mayor o igual a 0.');
+      if (!esNumeroFinito(tp.bandaEstablePctSemana) || tp.bandaEstablePctSemana < 0) errores.push('tendenciaPeso.bandaEstablePctSemana debe ser un número mayor o igual a 0.');
+      if (!esNumeroFinito(tp.semanasHistorial) || tp.semanasHistorial <= 0) errores.push('tendenciaPeso.semanasHistorial debe ser un número mayor a 0.');
     }
   } catch (err) {
     errores.push(`Error inesperado validando la configuración: ${err.message}`);

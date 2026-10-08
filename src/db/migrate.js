@@ -38,6 +38,8 @@ const columnasNuevas = [
   // rutinaService.js), no una FK.
   { tabla: 'ejercicio_asignado', columna: 'variante_activa_id', definicion: 'INTEGER' },
   { tabla: 'usuarios', columna: 'pasos_por_defecto', definicion: 'INTEGER' },
+  { tabla: 'registro_antropometrico', columna: 'porcentaje_graso', definicion: 'REAL' },
+  { tabla: 'registro_antropometrico', columna: 'porcentaje_muscular', definicion: 'REAL' },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

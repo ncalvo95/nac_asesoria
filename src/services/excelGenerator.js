@@ -697,7 +697,7 @@ export function generarWorkbookHistorial(usuarioId, { microcicloDesde = null, mi
 // ---------------------------------------------------------------------------
 
 const COLUMNAS_PLANES = ['Fecha', 'Estado', 'Fase', 'Enfoque', 'Nivel actividad', 'Peso referencia (kg)', 'Kcal', 'Proteína (g)', 'Grasa (g)', 'Carbohidratos (g)', 'Objetivo'];
-const COLUMNAS_PESAJES = ['Fecha', 'Peso corporal (kg)', '% graso'];
+const COLUMNAS_PESAJES = ['Fecha', 'Peso corporal (kg)', '% graso (pliegues)', '% graso', '% muscular'];
 
 function formatearFechaHistorial(iso) {
   return new Date(`${iso.replace(' ', 'T')}${iso.includes('Z') ? '' : 'Z'}`).toLocaleDateString('es-AR');
@@ -755,7 +755,7 @@ export function generarWorkbookNutricion(usuarioId) {
 
   const planes = obtenerEvolucionNutricional(usuarioId);
   const pesajes = db.prepare(`
-    SELECT fecha, peso_corporal, porcentaje_graso_calculado
+    SELECT fecha, peso_corporal, porcentaje_graso_calculado, porcentaje_graso, porcentaje_muscular
     FROM registro_antropometrico WHERE usuario_id = ? AND peso_corporal IS NOT NULL
     ORDER BY fecha
   `).all(usuarioId);
@@ -781,7 +781,7 @@ export function generarWorkbookNutricion(usuarioId) {
   agregarTablaPlanes(sheetPlanes, planes);
 
   const sheetPesajes = wb.addWorksheet('Pesajes');
-  sheetPesajes.columns = [{ width: 12 }, { width: 18 }, { width: 10 }];
+  sheetPesajes.columns = [{ width: 12 }, { width: 18 }, { width: 16 }, { width: 10 }, { width: 12 }];
 
   const filaTituloPesajes = sheetPesajes.addRow(['Historial de pesajes']);
   sheetPesajes.mergeCells(filaTituloPesajes.number, 1, filaTituloPesajes.number, COLUMNAS_PESAJES.length);
@@ -806,6 +806,8 @@ export function generarWorkbookNutricion(usuarioId) {
         new Date(`${p.fecha}T00:00:00`).toLocaleDateString('es-AR'),
         p.peso_corporal,
         p.porcentaje_graso_calculado ?? '',
+        p.porcentaje_graso ?? '',
+        p.porcentaje_muscular ?? '',
       ]);
       fila.eachCell((cell, colNumber) => {
         cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'right', vertical: 'middle' };

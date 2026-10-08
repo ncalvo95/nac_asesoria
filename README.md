@@ -1585,6 +1585,40 @@ cierre de microciclo → progreso → export a Excel):
   bug de duplicados); los mini-gráficos no tienen datos suficientes para
   aparecer con esta rutina de prueba (un solo microciclo cerrado), que es
   el comportamiento esperado con menos de 2 puntos.
+- **Seguimiento corporal general en Nutrición (peso diario + % graso/muscular
+  opcionales, promedio semanal y comparación contra la fase)**: antes el
+  registro de peso y su tendencia solo aparecían con el "Modo objetivo" de
+  Definición activo (una meta de kg declarada); ahora el bloque "Seguimiento
+  corporal" se ve siempre, en cualquier fase. "Registrar peso de hoy" suma
+  dos campos opcionales, % graso y % muscular (columnas nuevas
+  `porcentaje_graso`/`porcentaje_muscular` en `registro_antropometrico`,
+  separadas de `porcentaje_graso_calculado` que sale de la fórmula de
+  pliegues que carga el coach). Nueva función `seguimientoCorporal` en
+  `nutritionService.js`: agrupa los pesajes por semana (peso/%grasa/
+  %muscular promedio) y reusa `calcularTendenciaPeso` para la tendencia
+  suavizada; una función nueva del motor, `clasificarTendenciaSegunFase`,
+  compara el ritmo real contra lo que la FASE del plan espera -volumen
+  espera subir, definición espera bajar, mantenimiento espera estable,
+  con una banda de tolerancia en % del peso de tendencia
+  (`tendenciaPeso.bandaEstablePctSemana`)-, sin depender de que haya un
+  deficit en kcal declarado como el modo objetivo. Con modo objetivo activo
+  se sigue usando la comparación más precisa contra el déficit (ya existía)
+  en vez de la genérica por fase. La tabla de promedios semanales se
+  muestra con un mini-gráfico de tendencia (`Sparkline.jsx`, reusado de
+  Reportes) junto al valor de peso actual. El export a Excel de Nutrición
+  (hoja "Pesajes") ahora suma las columnas "% graso" y "% muscular"
+  autoreportadas, separadas de la de pliegues.
+  De paso, se encontró y arregló un bug latente en
+  `nutritionConfigService.js`: el relleno de valores de fábrica para una
+  config vieja en la base solo completaba secciones NUEVAS enteras, no un
+  campo nuevo agregado DENTRO de una sección ya existente (exactamente el
+  caso de `bandaEstablePctSemana` dentro de `tendenciaPeso`, que ya
+  existía) - se cambió a un relleno recursivo que nunca pisa un valor ya
+  presente. Probado en el navegador contra la base de dev: un cliente en
+  Definición sin objetivo declarado y otro en Mantenimiento, cargando
+  pesajes con los 3 campos y confirmando el badge correcto en cada fase
+  ("Coincide con tu objetivo" / "Estancado" / "Va en contra de tu
+  objetivo").
 
 Pendiente / simplificaciones conocidas:
 

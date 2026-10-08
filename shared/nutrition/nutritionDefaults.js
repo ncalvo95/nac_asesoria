@@ -159,5 +159,15 @@ export const nutritionDefaults = {
     // ritmo real se aleja de lo planeado - amplia a proposito, el peso
     // fluctua solo de una semana a la otra.
     toleranciaPct: 30,
+    // Seguimiento corporal general (cualquier fase, no solo el modo
+    // objetivo de Definicion): banda "estable" alrededor de la tendencia,
+    // en % del peso de tendencia por semana - por debajo de esto el ritmo
+    // real se considera ruido, no una subida/bajada real (ver
+    // clasificarTendenciaSegunFase).
+    bandaEstablePctSemana: 0.15,
+    // Cuantas semanas de historial trae el promedio semanal de peso/%grasa/
+    // %muscular para el usuario (separado de ventanaDias, que es la
+    // ventana corta de la regresion).
+    semanasHistorial: 12,
   },
 };

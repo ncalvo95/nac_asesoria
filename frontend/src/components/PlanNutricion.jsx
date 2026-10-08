@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api, API_BASE } from '../api/client.js';
 import { NIVELES, FASES, ENFOQUES } from '@shared/nutrition/nutritionEngine.js';
-import { LABEL_NIVEL, LABEL_ENFOQUE, LABEL_FASE, LABEL_FUENTE_REFERENCIA, LABEL_SEMAFORO, CLASE_SEMAFORO, LABEL_TENDENCIA, CLASE_TENDENCIA } from '../utils/nutricionLabels.js';
+import { LABEL_NIVEL, LABEL_ENFOQUE, LABEL_FASE, LABEL_FUENTE_REFERENCIA, LABEL_SEMAFORO, CLASE_SEMAFORO, LABEL_TENDENCIA, CLASE_TENDENCIA, LABEL_FASE_ESTADO, CLASE_FASE_ESTADO } from '../utils/nutricionLabels.js';
 import GraficoProyeccion from './GraficoProyeccion.jsx';
+import Sparkline from './Sparkline.jsx';
 
 function formatearFecha(iso) {
   return new Date(iso.replace(' ', 'T') + (iso.includes('Z') ? '' : 'Z')).toLocaleDateString('es-AR', {
@@ -195,7 +196,6 @@ function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, o
   const r = plan.resultado;
   const conObjetivo = Boolean(plan.goal_fat_kg);
   const [mostrarProgreso, setMostrarProgreso] = useState(false);
-  const [mostrarRegistroPeso, setMostrarRegistroPeso] = useState(false);
 
   return (
     <section className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3">
@@ -305,42 +305,7 @@ function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, o
         </div>
       )}
 
-      {conObjetivo && (
-        <div className="flex flex-col gap-2 border-t border-border pt-2.5">
-          <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">Tendencia real de peso</span>
-          {plan.tendenciaPeso ? (
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[13px] font-semibold">{plan.tendenciaPeso.pesoTendenciaKg} kg</span>
-                <span className="text-[11px] text-text-faint">
-                  {plan.tendenciaPeso.comparacion.ritmoRealKgSemana >= 0
-                    ? `Perdiendo ${plan.tendenciaPeso.comparacion.ritmoRealKgSemana} kg/semana (esperado ${plan.tendenciaPeso.comparacion.ritmoEsperadoKgSemana})`
-                    : `Subiendo ${Math.abs(plan.tendenciaPeso.comparacion.ritmoRealKgSemana)} kg/semana (esperado perder ${plan.tendenciaPeso.comparacion.ritmoEsperadoKgSemana})`}
-                  {' · '}{plan.tendenciaPeso.numeroPuntos} pesajes desde {formatearFecha(plan.tendenciaPeso.primeraFecha)}
-                </span>
-              </div>
-              <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${CLASE_TENDENCIA[plan.tendenciaPeso.comparacion.estado]}`}>
-                {LABEL_TENDENCIA[plan.tendenciaPeso.comparacion.estado]}
-              </span>
-            </div>
-          ) : (
-            <p className="text-[11.5px] text-text-faint">
-              Registrá tu peso en al menos {plan.tendenciaPesoProgreso.minPuntos} días distintos (vas {plan.tendenciaPesoProgreso.numeroPuntos}/{plan.tendenciaPesoProgreso.minPuntos}) de los últimos {plan.tendenciaPesoProgreso.ventanaDias} días para ver tu tendencia real.
-            </p>
-          )}
-          {!mostrarRegistroPeso ? (
-            <button onClick={() => setMostrarRegistroPeso(true)} className="text-[12px] font-semibold text-accent self-start">
-              Registrar peso de hoy
-            </button>
-          ) : (
-            <RegistroPeso
-              usuarioId={usuarioId}
-              onRegistrado={() => { onRecargarPlan(); setMostrarRegistroPeso(false); }}
-              onCancelar={() => setMostrarRegistroPeso(false)}
-            />
-          )}
-        </div>
-      )}
+      <SeguimientoCorporal plan={plan} usuarioId={usuarioId} onRecargarPlan={onRecargarPlan} />
 
       {conObjetivo && (
         <div className="border-t border-border pt-2.5">
@@ -420,12 +385,104 @@ function ActualizarProgreso({ usuarioId, pesoSugerido, onActualizado, onCancelar
   );
 }
 
+// Seguimiento corporal general: disponible en CUALQUIER fase (a diferencia
+// del viejo bloque que solo aparecia con Modo objetivo declarado), promedia
+// los pesajes por semana y compara el ritmo real contra lo que la fase
+// espera (volumen -> subir, definicion -> bajar, mantenimiento -> estable).
+// Con Modo objetivo activo, el badge usa la comparacion contra el deficit
+// en kcal (mas precisa, ya existia) en vez de la generica por fase.
+function SeguimientoCorporal({ plan, usuarioId, onRecargarPlan }) {
+  const [mostrarRegistroPeso, setMostrarRegistroPeso] = useState(false);
+  const sc = plan.seguimientoCorporal;
+  if (!sc) return null;
+
+  const comparacionDeficit = plan.goal_fat_kg ? plan.tendenciaPeso?.comparacion : null;
+  const estadoBadge = comparacionDeficit
+    ? { label: LABEL_TENDENCIA[comparacionDeficit.estado], clase: CLASE_TENDENCIA[comparacionDeficit.estado] }
+    : sc.comparacionFase
+      ? { label: LABEL_FASE_ESTADO[sc.comparacionFase.estado], clase: CLASE_FASE_ESTADO[sc.comparacionFase.estado] }
+      : null;
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-border pt-3">
+      <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">Seguimiento corporal</span>
+
+      {sc.tendencia ? (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[13px] font-semibold">{sc.tendencia.pesoTendenciaKg} kg</span>
+              <span className="text-[11px] text-text-faint">
+                {sc.tendencia.kgPorSemanaTendencia > 0 && `Subiendo ${sc.tendencia.kgPorSemanaTendencia} kg/semana`}
+                {sc.tendencia.kgPorSemanaTendencia < 0 && `Bajando ${Math.abs(sc.tendencia.kgPorSemanaTendencia)} kg/semana`}
+                {sc.tendencia.kgPorSemanaTendencia === 0 && 'Peso estable'}
+                {comparacionDeficit ? ` (esperado perder ${comparacionDeficit.ritmoEsperadoKgSemana})` : ''}
+                {' · '}{sc.progreso.numeroPuntos} pesajes desde {formatearFecha(sc.tendencia.primeraFecha)}
+              </span>
+            </div>
+            {sc.promedios.length > 1 && <Sparkline valores={sc.promedios.map((p) => p.pesoPromedioKg)} />}
+          </div>
+          {estadoBadge && (
+            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${estadoBadge.clase}`}>
+              {estadoBadge.label}
+            </span>
+          )}
+        </div>
+      ) : (
+        <p className="text-[11.5px] text-text-faint">
+          Registrá tu peso en al menos {sc.progreso.minPuntos} días distintos (vas {sc.progreso.numeroPuntos}/{sc.progreso.minPuntos}) de los últimos {sc.progreso.ventanaDias} días para ver tu tendencia.
+        </p>
+      )}
+
+      {sc.promedios.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11.5px]">
+            <thead>
+              <tr className="text-text-faint">
+                <th className="text-left font-normal pb-1">Semana</th>
+                <th className="text-right font-normal pb-1">Peso</th>
+                <th className="text-right font-normal pb-1">% graso</th>
+                <th className="text-right font-normal pb-1">% muscular</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sc.promedios.map((p) => (
+                <tr key={p.desde} className="border-t border-border">
+                  <td className="py-1">{formatearFecha(p.desde)}</td>
+                  <td className="text-right tabular">{p.pesoPromedioKg ?? '—'}</td>
+                  <td className="text-right tabular">{p.grasaPromedioPct ?? '—'}</td>
+                  <td className="text-right tabular">{p.muscularPromedioPct ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!mostrarRegistroPeso ? (
+        <button onClick={() => setMostrarRegistroPeso(true)} className="text-[12px] font-semibold text-accent self-start">
+          Registrar peso de hoy
+        </button>
+      ) : (
+        <RegistroPeso
+          usuarioId={usuarioId}
+          onRegistrado={() => { onRecargarPlan(); setMostrarRegistroPeso(false); }}
+          onCancelar={() => setMostrarRegistroPeso(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 // Pesaje suelto para alimentar la tendencia (registro_antropometrico) - a
 // diferencia de "Actualizar peso actual" (que re-basea el plan), esto solo
 // guarda un dato mas de la serie. Fecha siempre hoy, sin selector libre -
-// mismo criterio que PasosDiariosBoton en EntrenamientoPage.jsx.
+// mismo criterio que PasosDiariosBoton en EntrenamientoPage.jsx. % graso y
+// % muscular son opcionales (no todos tienen una balanza que los mida).
 function RegistroPeso({ usuarioId, onRegistrado, onCancelar }) {
   const [peso, setPeso] = useState('');
+  const [grasa, setGrasa] = useState('');
+  const [muscular, setMuscular] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -435,7 +492,11 @@ function RegistroPeso({ usuarioId, onRegistrado, onCancelar }) {
     if (!(Number(peso) > 0)) { setError('Ingresá tu peso de hoy en kg.'); return; }
     setEnviando(true);
     try {
-      await api.post(`/usuarios/${usuarioId}/antropometria`, { peso_corporal: Number(peso) });
+      await api.post(`/usuarios/${usuarioId}/antropometria`, {
+        peso_corporal: Number(peso),
+        porcentaje_graso: grasa ? Number(grasa) : null,
+        porcentaje_muscular: muscular ? Number(muscular) : null,
+      });
       onRegistrado();
     } catch (err) {
       setError(err.message);
@@ -446,10 +507,16 @@ function RegistroPeso({ usuarioId, onRegistrado, onCancelar }) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-2">
-      <p className="text-[11.5px] text-text-faint">Se guarda con la fecha de hoy.</p>
+      <p className="text-[11.5px] text-text-faint">Se guarda con la fecha de hoy. % graso y % muscular son opcionales.</p>
       <div className="flex gap-2">
-        <input type="number" step="0.1" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="Peso de hoy (kg)"
+        <input type="number" step="0.1" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="Peso (kg)"
           className="flex-1 h-9 rounded-lg border border-border bg-bg px-2.5 text-[13px] outline-none focus:border-accent" />
+        <input type="number" step="0.1" value={grasa} onChange={(e) => setGrasa(e.target.value)} placeholder="% graso"
+          className="flex-1 h-9 rounded-lg border border-border bg-bg px-2.5 text-[13px] outline-none focus:border-accent" />
+        <input type="number" step="0.1" value={muscular} onChange={(e) => setMuscular(e.target.value)} placeholder="% muscular"
+          className="flex-1 h-9 rounded-lg border border-border bg-bg px-2.5 text-[13px] outline-none focus:border-accent" />
+      </div>
+      <div className="flex gap-2 justify-end">
         <button type="button" onClick={onCancelar} className="h-9 px-3 rounded-lg border border-border text-text-muted text-[12.5px] font-semibold">
           Cancelar
         </button>

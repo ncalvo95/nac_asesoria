@@ -37,3 +37,17 @@ export const CLASE_TENDENCIA = {
   mas_lento: 'bg-warning-bg text-warning',
   subiendo: 'bg-danger-bg text-danger',
 };
+// Seguimiento corporal general (ver clasificarTendenciaSegunFase): si la
+// tendencia de peso coincide con lo que la FASE espera, sin depender de que
+// haya un Modo objetivo con kg declarados - por eso son estados propios,
+// no los mismos que LABEL_TENDENCIA (que compara contra un deficit puntual).
+export const LABEL_FASE_ESTADO = {
+  en_objetivo: 'Coincide con tu objetivo',
+  estancado: 'Estancado',
+  en_contra: 'Va en contra de tu objetivo',
+};
+export const CLASE_FASE_ESTADO = {
+  en_objetivo: 'bg-success-bg text-success',
+  estancado: 'bg-bg border border-border text-text-muted',
+  en_contra: 'bg-danger-bg text-danger',
+};

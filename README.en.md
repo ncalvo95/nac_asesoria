@@ -1310,6 +1310,38 @@ sessions → closing a microcycle → progress → Excel export):
   the sparklines don't have enough data to show up with this test routine
   (only one closed microciclo), which is the expected behavior with fewer
   than 2 points.
+- **General body tracking in Nutrition (daily weight + optional body fat/
+  muscle %, weekly averages, compared against the phase)**: weight logging
+  and its trend used to only show up with Definición's "goal mode" active
+  (a declared kg target); now the "Body tracking" block is always visible,
+  in any phase. "Log today's weight" gained two optional fields, body fat %
+  and muscle %, stored in new `porcentaje_graso`/`porcentaje_muscular`
+  columns on `registro_antropometrico`, separate from
+  `porcentaje_graso_calculado` (which comes from the skinfold formula the
+  coach enters). New `seguimientoCorporal` function in
+  `nutritionService.js`: groups weigh-ins by week (average weight/body fat/
+  muscle %) and reuses `calcularTendenciaPeso` for the smoothed trend; a new
+  engine function, `clasificarTendenciaSegunFase`, compares the real rate
+  against what the plan's PHASE expects - bulk expects gaining, cut expects
+  losing, maintenance expects staying stable, with a tolerance band in % of
+  the trend weight (`tendenciaPeso.bandaEstablePctSemana`) - without
+  depending on a declared kcal deficit like goal mode. With goal mode
+  active, the more precise deficit-based comparison (already existing) is
+  still used instead of the generic phase-based one. The weekly-average
+  table is shown with a trend sparkline (`Sparkline.jsx`, reused from
+  Reportes) next to the current trend weight. The Nutrition Excel export
+  ("Pesajes" sheet) now adds "% graso" and "% muscular" self-reported
+  columns, separate from the skinfold one.
+  Along the way, found and fixed a latent bug in
+  `nutritionConfigService.js`: the factory-value backfill for an old stored
+  config only completed entire NEW sections, not a new field added INSIDE
+  an already-existing section (exactly the case of `bandaEstablePctSemana`
+  inside the already-existing `tendenciaPeso`) - changed to a recursive
+  backfill that never overwrites a value already present. Tested in the
+  browser against the dev DB: one client in Definición with no declared
+  goal and another in Mantenimiento, logging weigh-ins with all 3 fields
+  and confirming the right badge for each phase ("Matches your goal" /
+  "Stalled" / "Working against your goal").
 
 Known limitations / accepted simplifications:
 

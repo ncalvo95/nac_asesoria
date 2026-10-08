@@ -97,7 +97,13 @@ CREATE TABLE IF NOT EXISTS registro_antropometrico (
   pliegues_json TEXT,
   circunferencias_json TEXT,
   diametros_oseos_json TEXT,
-  porcentaje_graso_calculado REAL
+  porcentaje_graso_calculado REAL,
+  -- % graso/muscular autoreportados (ej. balanza inteligente) del pesaje
+  -- diario del usuario - a diferencia de porcentaje_graso_calculado (que
+  -- sale de la formula de pliegues que carga el coach), estos son opcionales
+  -- y el usuario los carga el mismo junto al peso del dia.
+  porcentaje_graso REAL,
+  porcentaje_muscular REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_registro_antropometrico_usuario ON registro_antropometrico(usuario_id, fecha);

@@ -142,15 +142,20 @@ router.put('/:usuarioId/perfil-medico', (req, res) => {
 const insertAntropometria = db.prepare(`
   INSERT INTO registro_antropometrico (
     usuario_id, fecha, peso_corporal, formula_pliegues, pliegues_json,
-    circunferencias_json, diametros_oseos_json, porcentaje_graso_calculado
+    circunferencias_json, diametros_oseos_json, porcentaje_graso_calculado,
+    porcentaje_graso, porcentaje_muscular
   ) VALUES (@usuario_id, COALESCE(@fecha, date('now')), @peso_corporal, @formula_pliegues, @pliegues_json,
-    @circunferencias_json, @diametros_oseos_json, @porcentaje_graso_calculado)
+    @circunferencias_json, @diametros_oseos_json, @porcentaje_graso_calculado,
+    @porcentaje_graso, @porcentaje_muscular)
 `);
 
 router.post('/:usuarioId/antropometria', (req, res) => {
   const usuario_id = checkAcceso(req, res);
   if (usuario_id === null) return;
-  const { fecha, peso_corporal, formula_pliegues, pliegues, circunferencias, diametros_oseos, porcentaje_graso_calculado } = req.body || {};
+  const {
+    fecha, peso_corporal, formula_pliegues, pliegues, circunferencias, diametros_oseos,
+    porcentaje_graso_calculado, porcentaje_graso, porcentaje_muscular,
+  } = req.body || {};
   const info = insertAntropometria.run({
     usuario_id,
     fecha: fecha || null,
@@ -160,6 +165,8 @@ router.post('/:usuarioId/antropometria', (req, res) => {
     circunferencias_json: circunferencias ? JSON.stringify(circunferencias) : null,
     diametros_oseos_json: diametros_oseos ? JSON.stringify(diametros_oseos) : null,
     porcentaje_graso_calculado: porcentaje_graso_calculado ?? null,
+    porcentaje_graso: porcentaje_graso ?? null,
+    porcentaje_muscular: porcentaje_muscular ?? null,
   });
   res.status(201).json({ id: info.lastInsertRowid });
 });

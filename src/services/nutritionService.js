@@ -18,6 +18,7 @@ import {
   proyectarSemanaASemana,
   calcularTendenciaPeso,
   compararTendenciaConPlan,
+  clasificarTendenciaSegunFase,
   NIVELES,
 } from '../../shared/nutrition/nutritionEngine.js';
 import { obtenerConfigActiva, obtenerVersionConfig } from './nutritionConfigService.js';
@@ -118,6 +119,45 @@ export function tendenciaPesoReciente(usuarioId, config) {
     minPuntos: config.tendenciaPeso.minPuntos,
     ventanaDias: config.tendenciaPeso.ventanaDias,
   };
+}
+
+// Promedio semanal de peso/%grasa/%muscular (seguimiento corporal general,
+// disponible en cualquier fase - a diferencia de tendenciaPesoReciente que
+// solo mira la ventana corta de la regresion, esta trae varias semanas de
+// historial para mostrar como viene la cosa semana a semana). Agrupa por
+// strftime('%Y-%W', fecha): no es ISO 8601 exacto, pero alcanza para
+// agrupar "misma semana del año" de forma consistente en todo el dataset.
+const promedioSemanalStmt = db.prepare(`
+  SELECT strftime('%Y-%W', fecha) AS semana, MIN(fecha) AS desde, MAX(fecha) AS hasta,
+         COUNT(*) AS registros, AVG(peso_corporal) AS pesoPromedio,
+         AVG(porcentaje_graso) AS grasaPromedio, AVG(porcentaje_muscular) AS muscularPromedio
+  FROM registro_antropometrico
+  WHERE usuario_id = ? AND peso_corporal IS NOT NULL AND fecha >= date('now', '-' || ? || ' days')
+  GROUP BY semana ORDER BY semana
+`);
+
+// Seguimiento corporal del usuario para la pantalla de Nutricion: promedios
+// semanales + la tendencia de calcularTendenciaPeso + si esa tendencia
+// coincide con lo que la fase del plan espera (ver
+// clasificarTendenciaSegunFase). fase puede ser null (usuario sin plan
+// activo) - ahi se devuelven los promedios igual, sin comparacion.
+export function seguimientoCorporal(usuarioId, fase, config) {
+  const diasHistorial = config.tendenciaPeso.semanasHistorial * 7;
+  const promedios = promedioSemanalStmt.all(usuarioId, diasHistorial).map((f) => ({
+    desde: f.desde,
+    hasta: f.hasta,
+    registros: f.registros,
+    pesoPromedioKg: f.pesoPromedio != null ? round1(f.pesoPromedio) : null,
+    grasaPromedioPct: f.grasaPromedio != null ? round1(f.grasaPromedio) : null,
+    muscularPromedioPct: f.muscularPromedio != null ? round1(f.muscularPromedio) : null,
+  }));
+
+  const { tendencia, numeroPuntos, minPuntos, ventanaDias } = tendenciaPesoReciente(usuarioId, config);
+  const comparacionFase = tendencia && fase
+    ? clasificarTendenciaSegunFase({ kgPorSemanaTendencia: tendencia.kgPorSemanaTendencia, pesoTendenciaKg: tendencia.pesoTendenciaKg, fase }, config)
+    : null;
+
+  return { promedios, tendencia, comparacionFase, progreso: { numeroPuntos, minPuntos, ventanaDias } };
 }
 
 const getPlanActivo = db.prepare("SELECT * FROM nutrition_plans WHERE user_id = ? AND status = 'active'");
@@ -274,6 +314,7 @@ function construirRespuestaPlan(plan, usuario) {
     return {
       ...plan, ...objetivo,
       mifflin: mifflinInformativo(usuario, plan.reference_weight_kg, plan.activity_level, config),
+      seguimientoCorporal: seguimientoCorporal(plan.user_id, plan.phase, config),
     };
   }
   const { resultado, config } = calcularResultadoPlan(plan, usuario);
@@ -281,6 +322,7 @@ function construirRespuestaPlan(plan, usuario) {
     ...plan,
     resultado,
     mifflin: mifflinInformativo(usuario, plan.reference_weight_kg, plan.activity_level, config),
+    seguimientoCorporal: seguimientoCorporal(plan.user_id, plan.phase, config),
   };
 }
 

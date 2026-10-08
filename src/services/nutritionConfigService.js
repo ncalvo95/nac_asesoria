@@ -27,18 +27,31 @@ const listarVersiones = db.prepare(`
   ORDER BY nv.id DESC
 `);
 
+// Completa (en el lugar) las claves que falten en config con las de
+// nutritionDefaults, recursivamente - una seccion nueva agregada DESPUES de
+// que ya existian versiones guardadas (ej. tendenciaPeso en su momento), o
+// un campo nuevo sumado DENTRO de una seccion ya existente (ej.
+// tendenciaPeso.bandaEstablePctSemana), no estan en un config_json viejo -
+// se completan con los de fabrica en vez de romper al leerla. Nunca
+// pisa una clave que ya esta presente, asi que un admin que edito "base"
+// a mano no pierde sus valores - solo rellena lo que falta.
+function completarConDefaults(config, defaults) {
+  for (const clave of Object.keys(defaults)) {
+    const valorDefault = defaults[clave];
+    if (!(clave in config)) {
+      config[clave] = valorDefault;
+    } else if (
+      valorDefault && typeof valorDefault === 'object' && !Array.isArray(valorDefault) &&
+      config[clave] && typeof config[clave] === 'object' && !Array.isArray(config[clave])
+    ) {
+      completarConDefaults(config[clave], valorDefault);
+    }
+  }
+}
+
 function filaAObjeto(fila) {
   const config = JSON.parse(fila.config_json);
-  // Una seccion nueva agregada DESPUES de que ya existian versiones
-  // guardadas (ej. tendenciaPeso) no esta en un config_json viejo - se
-  // completa con la de fabrica en vez de romper al leerla (afecta tanto a
-  // la version activa vieja como a un plan archivado, o a "volver a esta
-  // version" desde el panel de admin). Solo nivel superior: alcanza para
-  // una seccion nueva entera, no para un campo nuevo DENTRO de una
-  // seccion ya existente.
-  for (const clave of Object.keys(nutritionDefaults)) {
-    if (!(clave in config)) config[clave] = nutritionDefaults[clave];
-  }
+  completarConDefaults(config, nutritionDefaults);
   return { id: fila.id, config, createdBy: fila.created_by, createdAt: fila.created_at, comment: fila.comment };
 }
 
