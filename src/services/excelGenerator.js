@@ -321,7 +321,56 @@ const COLOR_MEJORA_TEXTO = 'FF1E6B3A';
 const COLOR_EMPEORA_BG = 'FFF7DEDC';
 const COLOR_EMPEORA_TEXTO = 'FF9C3B33';
 
-const COLUMNAS_HISTORIAL = ['Ejercicio', 'Series', 'Repes', 'Peso (kg)', 'Descanso (min)', 'RIR', 'RE'];
+// Color de fondo por grupo muscular (toda la fila de un ejercicio, para
+// distinguir de un vistazo que musculo se trabaja sin tener que leer la
+// celda de Ejercicio). 18 musculos en el catalogo son demasiados matices
+// para distinguirse a simple vista (y la mayoria quedarian casi iguales en
+// un tono pastel) - se agrupan en 7 categorias por funcion/zona, el mismo
+// criterio con el que ya se arman los splits (empuje/traccion/piernas) en
+// routineBuilder.js. Tintes claros (~85% blanco) de una paleta categorica
+// de 7 matices bien diferenciables, con texto oscuro (COLOR_TEXTO) encima.
+const GRUPO_POR_MUSCULO = {
+  pecho: 'empuje', triceps: 'empuje', deltoides_anterior: 'empuje',
+  espalda: 'traccion', dorsales: 'traccion', biceps: 'traccion', deltoides_posterior: 'traccion', trapecio: 'traccion',
+  deltoides_lateral: 'hombro_lateral', deltoides: 'hombro_lateral', // "deltoides" a secas: musculo legado, ver migrarDeltoides en migrate.js
+  cuadriceps: 'cuadriceps_gluteos', gluteos: 'cuadriceps_gluteos',
+  isquiotibiales: 'isquios_cadera', abductores: 'isquios_cadera', aductores: 'isquios_cadera',
+  pantorrillas: 'pantorrillas',
+  abdominales: 'core', lumbares: 'core',
+};
+const COLOR_POR_GRUPO = {
+  empuje: 'FFDFEBF9', // azul
+  traccion: 'FFFCE8E1', // naranja
+  hombro_lateral: 'FFDDF3EB', // agua
+  cuadriceps_gluteos: 'FFFCF1D9', // amarillo
+  isquios_cadera: 'FFFCEBF1', // magenta
+  pantorrillas: 'FFD9ECD9', // verde
+  core: 'FFE4E1F2', // violeta
+};
+const COLOR_GRUPO_DEFAULT = COLOR_FILA_PAR; // musculo nuevo sin mapear todavia
+
+function colorDeMusculo(nombreMusculo) {
+  const grupo = GRUPO_POR_MUSCULO[nombreMusculo];
+  return COLOR_POR_GRUPO[grupo] || COLOR_GRUPO_DEFAULT;
+}
+
+// La cantidad de pares P/R (una por serie real) se arma a medida segun el
+// maximo de series reales de TODO lo que se este exportando (no por tabla
+// individual), para que todas las tablas del archivo tengan el mismo ancho
+// de columnas - una serie extra cargada a mano (#64) o un compuesto de
+// fuerza con tope de 6 (ver topeSeriesPara) puede necesitar mas de 4.
+function construirColumnasHistorial(maxSeriesReales) {
+  const columnas = ['Ejercicio', 'S'];
+  for (let i = 1; i <= maxSeriesReales; i++) columnas.push(`P${i}`, `R${i}`);
+  columnas.push('P-ds', 'R-ds', 'Descanso', 'RIR', 'RE');
+  return columnas;
+}
+function anchoColumnasHistorial(maxSeriesReales) {
+  const anchos = [{ width: 30 }, { width: 5 }];
+  for (let i = 1; i <= maxSeriesReales; i++) anchos.push({ width: 6 }, { width: 6 });
+  anchos.push({ width: 6 }, { width: 6 }, { width: 10 }, { width: 6 }, { width: 6 });
+  return anchos;
+}
 
 const getDiaDeSesion = db.prepare('SELECT dia_semana, musculos_trabajados_json FROM dia_rutina WHERE id = ?');
 const getMicrocicloInfo = db.prepare('SELECT numero, fecha_inicio FROM microciclo WHERE id = ?');
@@ -329,18 +378,19 @@ const getProgresoEjercicioMicrociclo = db.prepare(
   'SELECT peso_prescrito, piso_reps FROM progreso_ejercicio_microciclo WHERE ejercicio_asignado_id = ? AND microciclo_id = ?'
 );
 const getSeriesDeSesion = db.prepare(`
-  SELECT rs.*, ea.orden, ea.descanso_segundos, e.nombre AS ejercicio_nombre
+  SELECT rs.*, ea.orden, ea.descanso_segundos, e.nombre AS ejercicio_nombre, m.nombre AS musculo_nombre
   FROM registro_serie rs
   JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
   JOIN ejercicio e ON e.id = ea.ejercicio_id
+  JOIN musculo m ON m.id = ea.musculo_objetivo_id
   WHERE rs.registro_sesion_id = ?
   ORDER BY ea.orden, rs.numero_serie
 `);
 
-// Resume todas las series de UN ejercicio en una sesion a una sola fila
-// legible (en vez de una fila por serie) - "20-18-16-14" en vez de 4 filas
-// sueltas, que es justo lo que hacia ilegible el excel viejo para seguirlo
-// de corrido. El peso/reps del dropset se aclaran aparte si hubo alguno.
+// Arma una fila por ejercicio con las series reales en columnas P/R lado a
+// lado (P1/R1, P2/R2...) en vez de comprimidas en texto ("20-18-16-14") -
+// mas facil de leer/imprimir de un vistazo, igual que la planilla de papel
+// que se usaba a mano. El peso/reps del dropset van en su propia columna.
 //
 // `progreso` (peso_prescrito/piso_reps de progreso_ejercicio_microciclo,
 // o null si no hay - ej. semana de testeo) es "lo pactado" para ese
@@ -354,9 +404,6 @@ const getSeriesDeSesion = db.prepare(`
 function resumirEjercicioDeSesion(series, progreso) {
   const reales = series.filter((s) => !s.es_dropset);
   const dropsets = series.filter((s) => s.es_dropset);
-  const pesos = reales.map((s) => s.peso);
-  const pesoTexto = new Set(pesos).size <= 1 ? String(pesos[0] ?? '') : pesos.join('-');
-  const repsTexto = reales.map((s) => s.reps).join('-');
   const repsEfectivasTotal = series.reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) ?? 0), 0);
   const ultimaReal = reales[reales.length - 1];
 
@@ -374,10 +421,18 @@ function resumirEjercicioDeSesion(series, progreso) {
   }
 
   return {
-    nombre: series[0].ejercicio_nombre + (dropsets.length ? ' (+ dropset)' : ''),
+    nombre: series[0].ejercicio_nombre,
+    musculo: series[0].musculo_nombre,
     series: reales.length,
-    reps: dropsets.length ? `${repsTexto} + DS ${dropsets.map((d) => d.reps).join('-')}` : repsTexto,
-    peso: dropsets.length ? `${pesoTexto} (DS ${dropsets.map((d) => d.peso).join('-')})` : pesoTexto,
+    // Un par [peso, reps] por cada serie real, en orden - el caller rellena
+    // con celdas vacias las columnas que sobren si otro ejercicio de la
+    // misma tabla tuvo mas series.
+    sets: reales.map((s) => ({ peso: s.peso, reps: s.reps })),
+    // Multiples dropsets en el mismo ejercicio (raro, pero posible) se
+    // comprimen en una sola celda - a diferencia de las series reales, no
+    // tienen una columna propia por cada una.
+    dropsetPeso: dropsets.length ? dropsets.map((d) => d.peso).join('-') : '',
+    dropsetReps: dropsets.length ? dropsets.map((d) => d.reps).join('-') : '',
     descansoMin: Math.round(((series[0].descanso_segundos || 90) / 60) * 10) / 10,
     rir: ultimaReal?.rir ?? '',
     repsEfectivas: repsEfectivasTotal,
@@ -386,13 +441,13 @@ function resumirEjercicioDeSesion(series, progreso) {
   };
 }
 
-function estilarBanner(row, worksheet, color) {
+function estilarBanner(row, worksheet, color, numColumnas) {
   row.eachCell({ includeEmpty: true }, (cell) => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
     cell.font = { bold: true, color: { argb: COLOR_BLANCO }, size: 12 };
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   });
-  worksheet.mergeCells(row.number, 1, row.number, COLUMNAS_HISTORIAL.length);
+  worksheet.mergeCells(row.number, 1, row.number, numColumnas);
   // Altura fija para el banner de fecha (una linea); el de dia/musculos se
   // deja mas alto porque un dia con varios musculos entrenados (ej. "Lunes -
   // Pecho, Espalda, Biceps, Triceps...") puede necesitar 2 lineas para no
@@ -403,7 +458,7 @@ function estilarBanner(row, worksheet, color) {
 // Separador grueso entre bloques (microciclos): distinto de los banners de
 // sesion (bordo/ambar) para que se distinga de un vistazo donde termina un
 // microciclo y empieza el siguiente al scrollear una rutina larga.
-function agregarBannerMicrociclo(worksheet, numero, fechaInicio) {
+function agregarBannerMicrociclo(worksheet, numero, fechaInicio, numColumnas) {
   const inicio = new Date(`${fechaInicio}T00:00:00`);
   const fin = new Date(inicio);
   fin.setDate(fin.getDate() + 13);
@@ -414,24 +469,29 @@ function agregarBannerMicrociclo(worksheet, numero, fechaInicio) {
     cell.font = { bold: true, color: { argb: COLOR_BLANCO }, size: 13 };
     cell.alignment = { horizontal: 'center', vertical: 'middle' };
   });
-  worksheet.mergeCells(fila.number, 1, fila.number, COLUMNAS_HISTORIAL.length);
+  worksheet.mergeCells(fila.number, 1, fila.number, numColumnas);
   fila.height = 24;
 }
 
-function agregarSesionAlSheet(worksheet, sesion) {
+// `maxSeriesReales` viene de generarWorkbookHistorial (calculado sobre TODA
+// la exportacion, no solo esta sesion) para que todas las tablas del
+// archivo tengan el mismo ancho de columnas P/R.
+function agregarSesionAlSheet(worksheet, sesion, maxSeriesReales) {
+  const numColumnas = 2 + maxSeriesReales * 2 + 2 + 3; // Ejercicio+S, pares P/R, P-ds+R-ds, Descanso+RIR+RE
   const dia = getDiaDeSesion.get(sesion.dia_rutina_id);
   const musculos = JSON.parse(dia?.musculos_trabajados_json || '[]').map(formatearMusculo);
   const fechaFmt = new Date(`${sesion.fecha}T00:00:00`).toLocaleDateString('es-AR');
 
   const filaFecha = worksheet.addRow([`Fecha: ${fechaFmt}`]);
   const filaInicio = filaFecha.number;
-  estilarBanner(filaFecha, worksheet, COLOR_BORDO);
+  estilarBanner(filaFecha, worksheet, COLOR_BORDO, numColumnas);
 
   const tituloDia = `${CAPITALIZAR(dia?.dia_semana || '')} - ${musculos.map(CAPITALIZAR).join(', ')}`;
   const filaTitulo = worksheet.addRow([tituloDia]);
-  estilarBanner(filaTitulo, worksheet, COLOR_AMBAR);
+  estilarBanner(filaTitulo, worksheet, COLOR_AMBAR, numColumnas);
 
-  const filaHeader = worksheet.addRow(COLUMNAS_HISTORIAL);
+  const columnas = construirColumnasHistorial(maxSeriesReales);
+  const filaHeader = worksheet.addRow(columnas);
   filaHeader.eachCell((cell) => {
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_HEADER_TABLA } };
     cell.font = { bold: true, color: { argb: COLOR_TEXTO }, size: 11 };
@@ -445,33 +505,58 @@ function agregarSesionAlSheet(worksheet, sesion) {
     seriesPorEjercicio.get(s.ejercicio_asignado_id).push(s);
   }
 
-  let i = 0;
+  // Indices de columna (1-based) de cada bloque, para ubicar las celdas a
+  // resaltar sin tener que contarlas a mano cada vez.
+  const COL_EJERCICIO = 1;
+  const COL_SERIES = 2;
+  const COL_PRIMER_P = 3; // P1 esta en la 3, R1 en la 4, P2 en la 5...
+  const colPds = COL_PRIMER_P + maxSeriesReales * 2;
+  const colRds = colPds + 1;
+  const colDescanso = colRds + 1;
+  const colRir = colDescanso + 1;
+  const colRe = colRir + 1;
+
   for (const [ejercicioAsignadoId, series] of seriesPorEjercicio.entries()) {
     const progreso = getProgresoEjercicioMicrociclo.get(ejercicioAsignadoId, sesion.microciclo_id);
     const r = resumirEjercicioDeSesion(series, progreso);
-    const fila = worksheet.addRow([r.nombre, r.series, r.reps, r.peso, r.descansoMin, r.rir, r.repsEfectivas]);
-    fila.eachCell((cell, colNumber) => {
-      cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'center', vertical: 'middle' };
-      cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
-      if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
+
+    const valores = new Array(numColumnas).fill('');
+    valores[COL_EJERCICIO - 1] = r.nombre;
+    valores[COL_SERIES - 1] = r.series;
+    r.sets.forEach((set, idx) => {
+      valores[COL_PRIMER_P - 1 + idx * 2] = set.peso;
+      valores[COL_PRIMER_P + idx * 2] = set.reps;
     });
-    const celdaReps = fila.getCell(3);
-    if (r.repsColor === 'verde') {
-      celdaReps.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_MEJORA_BG } };
-      celdaReps.font = { color: { argb: COLOR_MEJORA_TEXTO }, bold: true };
-    } else if (r.repsColor === 'rojo') {
-      celdaReps.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_EMPEORA_BG } };
-      celdaReps.font = { color: { argb: COLOR_EMPEORA_TEXTO }, bold: true };
+    valores[colPds - 1] = r.dropsetPeso;
+    valores[colRds - 1] = r.dropsetReps;
+    valores[colDescanso - 1] = r.descansoMin;
+    valores[colRir - 1] = r.rir;
+    valores[colRe - 1] = r.repsEfectivas;
+
+    const fila = worksheet.addRow(valores);
+    const colorFila = colorDeMusculo(r.musculo);
+    fila.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.alignment = { horizontal: colNumber === COL_EJERCICIO ? 'left' : 'center', vertical: 'middle' };
+      cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colorFila } };
+    });
+
+    // El peso/reps que entran en la comparacion contra lo pactado son los
+    // de la PRIMERA serie real (peso) y la ULTIMA (reps) - ver el criterio
+    // completo en el comentario de resumirEjercicioDeSesion.
+    if (r.pesoColor === 'verde' || r.pesoColor === 'rojo') {
+      const celdaPeso = fila.getCell(COL_PRIMER_P);
+      const [bg, texto] = r.pesoColor === 'verde' ? [COLOR_MEJORA_BG, COLOR_MEJORA_TEXTO] : [COLOR_EMPEORA_BG, COLOR_EMPEORA_TEXTO];
+      celdaPeso.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      celdaPeso.font = { color: { argb: texto }, bold: true };
     }
-    const celdaPeso = fila.getCell(4);
-    if (r.pesoColor === 'verde') {
-      celdaPeso.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_MEJORA_BG } };
-      celdaPeso.font = { color: { argb: COLOR_MEJORA_TEXTO }, bold: true };
-    } else if (r.pesoColor === 'rojo') {
-      celdaPeso.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_EMPEORA_BG } };
-      celdaPeso.font = { color: { argb: COLOR_EMPEORA_TEXTO }, bold: true };
+    if (r.repsColor === 'verde' || r.repsColor === 'rojo') {
+      const colUltimaReps = COL_PRIMER_P + 1 + (r.sets.length - 1) * 2;
+      const celdaReps = fila.getCell(colUltimaReps);
+      const [bg, texto] = r.repsColor === 'verde' ? [COLOR_MEJORA_BG, COLOR_MEJORA_TEXTO] : [COLOR_EMPEORA_BG, COLOR_EMPEORA_TEXTO];
+      celdaReps.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      celdaReps.font = { color: { argb: texto }, bold: true };
     }
-    i += 1;
   }
 
   worksheet.addRow([]); // separador entre sesiones
@@ -504,6 +589,20 @@ export function generarWorkbookHistorial(usuarioId, { microcicloDesde = null, mi
   }
   if (sesiones.length === 0) throw new Error('No hay sesiones registradas para exportar en ese rango.');
 
+  // Cuanta series reales (sin dropset) tiene el ejercicio con MAS series de
+  // toda la exportacion, para que todas las tablas del archivo compartan el
+  // mismo ancho de columnas P/R (ver construirColumnasHistorial).
+  const placeholdersSesiones = sesiones.map(() => '?').join(',');
+  const { maxCnt } = db.prepare(`
+    SELECT MAX(cnt) AS maxCnt FROM (
+      SELECT COUNT(*) AS cnt FROM registro_serie
+      WHERE registro_sesion_id IN (${placeholdersSesiones}) AND es_dropset = 0
+      GROUP BY registro_sesion_id, ejercicio_asignado_id
+    )
+  `).get(...sesiones.map((s) => s.id));
+  const maxSeriesReales = maxCnt || 4; // 4 cubre el caso comun (hipertrofia); compuestos de fuerza llegan a 6.
+  const numColumnas = 2 + maxSeriesReales * 2 + 2 + 3;
+
   const wb = new ExcelJS.Workbook();
   wb.creator = 'nac_asesoria';
   wb.created = new Date();
@@ -517,18 +616,18 @@ export function generarWorkbookHistorial(usuarioId, { microcicloDesde = null, mi
   const indice = sesiones.length > 1 ? wb.addWorksheet('Indice') : null;
 
   const sheet = wb.addWorksheet('Historial');
-  sheet.columns = [{ width: 32 }, { width: 9 }, { width: 16 }, { width: 12 }, { width: 15 }, { width: 8 }, { width: 8 }];
+  sheet.columns = anchoColumnasHistorial(maxSeriesReales);
 
   const filaTitulo = sheet.addRow([`Historial de entrenamiento - ${usuario.nombre}`]);
-  sheet.mergeCells(filaTitulo.number, 1, filaTitulo.number, COLUMNAS_HISTORIAL.length);
+  sheet.mergeCells(filaTitulo.number, 1, filaTitulo.number, numColumnas);
   filaTitulo.getCell(1).font = { bold: true, size: 14, color: { argb: COLOR_BORDO } };
   filaTitulo.height = 26;
 
   const filaLeyenda = sheet.addRow([
-    'RIR: reps en reserva  ·  RE: reps efectivas  ·  DS: dropset (serie extra a menor peso)  ·  ' +
-      'Verde: mejoraste respecto a lo pactado  ·  Rojo: por debajo de lo pactado',
+    'S: series  ·  P/R: peso y reps de cada serie (P-ds/R-ds: dropset)  ·  RIR: reps en reserva  ·  RE: reps efectivas  ·  ' +
+      'Verde: mejoraste respecto a lo pactado  ·  Rojo: por debajo de lo pactado  ·  El color de fondo de cada fila indica el músculo trabajado',
   ]);
-  sheet.mergeCells(filaLeyenda.number, 1, filaLeyenda.number, COLUMNAS_HISTORIAL.length);
+  sheet.mergeCells(filaLeyenda.number, 1, filaLeyenda.number, numColumnas);
   filaLeyenda.getCell(1).font = { italic: true, size: 10, color: { argb: 'FF837F77' } };
   sheet.addRow([]);
 
@@ -548,11 +647,11 @@ export function generarWorkbookHistorial(usuarioId, { microcicloDesde = null, mi
   for (const sesion of sesiones) {
     const mc = getMicrocicloInfo.get(sesion.microciclo_id);
     if (mc && mc.numero !== microcicloAnterior) {
-      agregarBannerMicrociclo(sheet, mc.numero, mc.fecha_inicio);
+      agregarBannerMicrociclo(sheet, mc.numero, mc.fecha_inicio, numColumnas);
       microcicloAnterior = mc.numero;
     }
     contador += 1;
-    const { filaInicio, dia, musculos, cantEjercicios } = agregarSesionAlSheet(sheet, sesion);
+    const { filaInicio, dia, musculos, cantEjercicios } = agregarSesionAlSheet(sheet, sesion, maxSeriesReales);
     if (indice) {
       const fechaFmt = new Date(`${sesion.fecha}T00:00:00`).toLocaleDateString('es-AR');
       const filaIdx = indice.addRow([

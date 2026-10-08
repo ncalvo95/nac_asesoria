@@ -1500,6 +1500,33 @@ cierre de microciclo → progreso → export a Excel):
   plan objetivo, cargar 10 pesajes con una baja real de 0.7 kg/semana
   contra un plan que esperaba 0.5, confirmar que clasifica "más rápido de
   lo esperado") y visualmente en el navegador.
+- **Excel de Historial: una fila por ejercicio con columnas por serie, coloreada
+  por músculo**: el export de entrenamiento comprimía las series de un
+  ejercicio en una sola celda de texto ("20-18-16-14") - pedido del usuario:
+  que se parezca a la planilla de papel que se usaba a mano, con el peso y
+  las reps de cada serie en su propia columna (S, P1/R1, P2/R2...) y el
+  dropset en su propia columna (P-ds/R-ds) en vez de un sufijo de texto. La
+  cantidad de pares P/R se calcula sobre el MÁXIMO de series reales de toda
+  la exportación (no por tabla individual, para que todas las tablas del
+  archivo compartan el mismo ancho de columnas) - 4 cubre el caso común de
+  hipertrofia, pero un compuesto de fuerza (tope 6, ver `topeSeriesPara`) o
+  una serie agregada a mano suman las columnas que hagan falta solas.
+  Además, cada fila ahora tiene un color de fondo según el músculo principal
+  trabajado: 18 músculos en el catálogo son demasiados matices para
+  distinguirse de un vistazo (la mayoría quedarían casi iguales en un tono
+  pastel), así que se agrupan en 7 categorías por función/zona -el mismo
+  criterio con el que ya se arman los splits (empuje/tracción/piernas) en
+  `routineBuilder.js`- cada una con un tinte claro de una paleta categórica
+  de 7 matices bien diferenciables (texto oscuro encima). El resaltado
+  verde/rojo de "mejoraste/empeoraste respecto a lo pactado" se mantiene,
+  ahora aplicado a la celda de peso de la primera serie real y a la celda de
+  reps de la última (el criterio de comparación no cambió, ver
+  `resumirEjercicioDeSesion`). Probado end-to-end por script contra la base
+  de dev: una sesión con un ejercicio de 6 series (sin dropset) y uno con
+  dropset, varios músculos de grupos distintos en el mismo día (coincide con
+  el formato de referencia que pasó el usuario), exportación de toda la
+  rutina con 2 sesiones de distintos días (confirma que el ancho de columnas
+  es el global, no por sesión) y exportación filtrada a una sola sesión.
 
 Pendiente / simplificaciones conocidas:
 

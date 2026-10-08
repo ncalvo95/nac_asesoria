@@ -1229,6 +1229,32 @@ sessions → closing a microcycle → progress → Excel export):
   plan, log 10 weigh-ins with a real rate of 0.7 kg/week against a plan
   that expected 0.5, confirm it classifies as "faster than expected") and
   visually in the browser.
+- **Training history Excel: one row per exercise with per-set columns, colored
+  by muscle**: the training export used to compress an exercise's sets into
+  one text cell ("20-18-16-14") - the user asked for it to look like the
+  paper log they used to fill by hand, with each set's weight and reps in
+  its own column (S, P1/R1, P2/R2...) and the dropset in its own column
+  (P-ds/R-ds) instead of a text suffix. The number of P/R pairs is computed
+  from the MAXIMUM real-set count across the whole export (not per
+  individual table, so every table in the file shares the same column
+  width) - 4 covers the common hypertrophy case, but a strength compound
+  (cap of 6, see `topeSeriesPara`) or a manually added set just grows the
+  columns it needs. Each row also now gets a background color for the
+  primary muscle trained: 18 muscles in the catalog is too many shades to
+  tell apart at a glance (most would end up nearly identical as a pastel
+  tint), so they're grouped into 7 categories by function/area - the same
+  criterion already used to build splits (push/pull/legs) in
+  `routineBuilder.js` - each with a light tint from a 7-hue categorical
+  palette picked for distinguishability (dark text on top). The
+  green/red "beat/missed what was agreed" highlight still works, now
+  applied to the first real set's weight cell and the last set's reps cell
+  (the comparison logic itself didn't change, see
+  `resumirEjercicioDeSesion`). Tested end-to-end with a script against the
+  dev DB: a session with a 6-set exercise (no dropset) and one with a
+  dropset, several muscles from different groups in the same day (matches
+  the reference format the user shared), exporting the whole routine with 2
+  sessions from different days (confirms the column width is global, not
+  per-session), and exporting filtered to a single session.
 
 Known limitations / accepted simplifications:
 
