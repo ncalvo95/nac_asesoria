@@ -1289,6 +1289,27 @@ sessions → closing a microcycle → progress → Excel export):
   sheets handle the no-data case gracefully (empty muscle volume for this
   test user) - and separately with full synthetic data to validate the
   populated path across all 4 sheets.
+- **Reportes: headline numbers and trend sparklines (it used to be just text
+  with arrows, no chart at all)**: new row of stat tiles above each report
+  with the key numbers at a glance - exercises that gained weight, stalled
+  muscles, total effective reps for the period, and, when nutrition data
+  exists, body weight (never color-coded by direction: gaining weight can
+  be the goal in a bulk or the opposite in a cut, so it's the one number
+  that stays neutral). Each row in "Por ejercicio" and "Por músculo" now
+  also has a trend sparkline (`Sparkline.jsx`, new component, same
+  "hand-rolled SVG, no library" approach as `GraficoProyeccion.jsx`) with
+  weight/volume across microciclos - no axes or legend (the exact number is
+  already right there in text), just a visual reinforcement of "which way
+  it's going" at a glance. Deliberately avoided a single combined chart with
+  every exercise or every muscle together: mixing such different scales
+  (e.g. a 100kg squat with an 8kg lateral raise) on the same axis is
+  misleading, so each row gets its own small chart instead of competing for
+  one shared scale. Tested in the browser: the stat-tile row computes the
+  right numbers against real dev DB data (confirmed "32" exercises is
+  correct for a 4-day × 8-exercise routine, not a duplicate-counting bug);
+  the sparklines don't have enough data to show up with this test routine
+  (only one closed microciclo), which is the expected behavior with fewer
+  than 2 points.
 
 Known limitations / accepted simplifications:
 

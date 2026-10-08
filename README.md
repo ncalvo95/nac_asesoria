@@ -1563,6 +1563,28 @@ cierre de microciclo → progreso → export a Excel):
   los casos sin datos (volumen muscular vacío para este usuario de
   prueba)-, y por separado con datos sintéticos completos para validar el
   camino con información en las 4 hojas.
+- **Reportes: números clave y mini-gráficos de tendencia (antes era solo
+  texto con flechas, sin ningún gráfico)**: nueva fila de tarjetas arriba de
+  cada reporte con los números clave de un vistazo -ejercicios que subieron
+  de peso, músculos estancados, reps efectivas totales del período y, si
+  hay datos de nutrición, el peso corporal (sin colorear la dirección: subir
+  de peso puede ser el objetivo en volumen o lo contrario en definición, así
+  que es el único número que queda neutro)-. Cada fila de "Por ejercicio" y
+  "Por músculo" ahora tiene además un mini-gráfico de tendencia
+  (`Sparkline.jsx`, nuevo componente, mismo criterio "SVG a mano sin
+  librería" que `GraficoProyeccion.jsx`) con el peso/volumen a lo largo de
+  los microciclos - sin ejes ni leyenda (el número exacto ya está al lado en
+  texto), solo para reforzar visualmente "para dónde va" de un vistazo. Se
+  evitó a propósito un único gráfico con todos los ejercicios o todos los
+  músculos juntos: mezclar escalas tan distintas (ej. sentadilla a 100kg
+  con elevaciones laterales a 8kg) en el mismo eje es engañoso, así que cada
+  fila tiene su propio mini-gráfico en vez de competir por una sola escala
+  compartida. Probado en el navegador: la fila de tarjetas calcula bien los
+  números contra datos reales de la base de dev (confirmado que "32" de
+  ejercicios es correcto para una rutina de 4 días × 8 ejercicios, no un
+  bug de duplicados); los mini-gráficos no tienen datos suficientes para
+  aparecer con esta rutina de prueba (un solo microciclo cerrado), que es
+  el comportamiento esperado con menos de 2 puntos.
 
 Pendiente / simplificaciones conocidas:
 

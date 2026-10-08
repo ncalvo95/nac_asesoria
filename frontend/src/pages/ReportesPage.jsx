@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api, API_BASE } from '../api/client.js';
 import { formatearMusculo } from '../utils/musculo.js';
 import { LABEL_FASE, LABEL_ENFOQUE } from '../utils/nutricionLabels.js';
+import Sparkline from '../components/Sparkline.jsx';
 
 function formatearFecha(iso) {
   return new Date(iso.replace(' ', 'T') + (iso.includes('Z') ? '' : 'Z')).toLocaleDateString('es-AR');
@@ -102,8 +103,37 @@ export default function ReportesPage() {
   );
 }
 
+// Numeros clave de un vistazo, arriba de todo el detalle - antes el reporte
+// arrancaba directo en listas largas sin ningun resumen que dijera "a
+// grandes rasgos, como viene esto". Nunca colorea la direccion del peso
+// corporal (verde/rojo): "subir" puede ser el objetivo (volumen) o lo
+// contrario (definición), así que es el único número que se muestra neutro.
+function calcularKpis(datos) {
+  const ejerciciosQueMejoraron = datos.porEjercicio.filter((e) => e.peso_actual > e.peso_inicial).length;
+  const musculosEstancados = datos.porMusculo.filter((m) => m.historial.at(-1)?.estancado).length;
+  const repsEfectivasTotales = datos.porEjercicio.reduce(
+    (acc, e) => acc + e.historial.reduce((a, h) => a + (h.reps_efectivas || 0), 0), 0
+  );
+  const nutricionOrdenada = datos.nutricion?.length > 1 ? datos.nutricion : null;
+  const pesoCorporal = nutricionOrdenada
+    ? { inicial: nutricionOrdenada[0].reference_weight_kg, actual: nutricionOrdenada.at(-1).reference_weight_kg }
+    : null;
+  return { ejerciciosQueMejoraron, totalEjercicios: datos.porEjercicio.length, musculosEstancados, repsEfectivasTotales, pesoCorporal };
+}
+
+function StatTile({ label, value, sub }) {
+  return (
+    <div className="flex-1 min-w-[90px] bg-bg border border-border rounded-lg p-2.5 flex flex-col gap-0.5">
+      <span className="text-[10px] text-text-faint uppercase tracking-wide">{label}</span>
+      <span className="tabular text-[16px] font-bold leading-tight">{value}</span>
+      {sub && <span className="text-[10.5px] text-text-muted">{sub}</span>}
+    </div>
+  );
+}
+
 function DetalleReporte({ datos, usuarioId, reporteId }) {
   if (!datos) return null;
+  const kpis = calcularKpis(datos);
   return (
     <div className="border-t border-border p-3.5 flex flex-col gap-5">
       <a
@@ -112,6 +142,16 @@ function DetalleReporte({ datos, usuarioId, reporteId }) {
       >
         Exportar Excel
       </a>
+
+      <div className="flex gap-2 flex-wrap">
+        <StatTile label="Ejercicios en progreso" value={`${kpis.ejerciciosQueMejoraron}/${kpis.totalEjercicios}`} sub="subieron de peso" />
+        <StatTile label="Músculos estancados" value={kpis.musculosEstancados} sub={`de ${datos.porMusculo.length}`} />
+        <StatTile label="Reps efectivas" value={kpis.repsEfectivasTotales} sub="total del período" />
+        {kpis.pesoCorporal && (
+          <StatTile label="Peso corporal" value={`${kpis.pesoCorporal.actual} kg`} sub={`desde ${kpis.pesoCorporal.inicial} kg`} />
+        )}
+      </div>
+
       <section className="flex flex-col gap-2">
         <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">Por ejercicio</span>
         <div className="flex flex-col gap-2">
@@ -120,6 +160,7 @@ function DetalleReporte({ datos, usuarioId, reporteId }) {
             return (
               <div key={e.ejercicio_asignado_id} className="flex items-center justify-between gap-2">
                 <span className="text-[12.5px]">{e.ejercicio_nombre}</span>
+                <Sparkline valores={e.historial.map((h) => h.peso)} />
                 <div className="flex flex-col items-end">
                   <span className="tabular text-[12px] text-text-muted whitespace-nowrap">
                     {e.peso_inicial}kg×{e.reps_piso_inicial} → <span className="text-text font-semibold">{e.peso_actual}kg×{e.reps_techo_actual}</span>
@@ -137,6 +178,7 @@ function DetalleReporte({ datos, usuarioId, reporteId }) {
           {datos.porMusculo.map((m) => (
             <div key={m.musculo} className="flex items-center justify-between gap-2">
               <span className="text-[12.5px] capitalize">{formatearMusculo(m.musculo)}</span>
+              <Sparkline valores={m.historial.map((h) => h.volumen_directo)} color={m.historial.at(-1)?.estancado ? 'var(--color-danger)' : 'var(--color-accent)'} />
               <div className="flex flex-col items-end">
                 <span className="tabular text-[12px] text-text-muted">
                   {m.historial.map((h) => h.volumen_directo).join(' → ') || 'sin datos'}
