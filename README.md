@@ -1464,6 +1464,42 @@ cierre de microciclo → progreso → export a Excel):
   script: activar el toggle, crear un plan (queda pendiente, 202), verlo en
   la lista del coach, confirmar que todavía no hay plan activo, aprobarlo,
   confirmar que ahora sí lo hay con el `created_by` correcto.
+- **Tendencia real de peso (modo objetivo)**: hasta ahora `registro_antropometrico`
+  existía en el schema (con sus endpoints `POST`/`GET
+  /usuarios/:id/antropometria`) pero no lo usaba nada del frontend. Ahora
+  alimenta una recalibración de verdad: `calcularTendenciaPeso` (motor puro,
+  `shared/nutrition/nutritionEngine.js`) hace una regresión lineal por
+  mínimos cuadrados sobre los pesajes cargados en la ventana configurada
+  (`tendenciaPeso.ventanaDias`, 21 días por defecto) para sacar un "peso de
+  tendencia" suavizado - igual que el peso de tendencia de MacroFactor,
+  pensado para no reaccionar a la retención de líquidos de un solo día- y
+  compara el ritmo real (`compararTendenciaConPlan`) contra el que el
+  déficit del plan esperaba, con una banda de tolerancia
+  (`tendenciaPeso.toleranciaPct`) antes de avisar "más rápido" / "más
+  lento" / "el peso no está bajando". A diferencia del semáforo (que juzga
+  si el plan es realista ANTES de empezar), esto juzga qué está pasando en
+  la práctica - la recalibración de la que no había nada todavía. Con
+  menos de `tendenciaPeso.minPuntos` pesajes (3 por defecto) en la ventana,
+  no se muestra tendencia (ni se puede calcular una pendiente confiable) y
+  se indica cuántos pesajes faltan. Nuevo botón "Registrar peso de hoy" en
+  la pantalla de Nutrición (fecha siempre hoy, sin selector libre, mismo
+  criterio que los pasos diarios) que carga un pesaje suelto vía el
+  endpoint ya existente; y "Actualizar peso actual" ahora viene
+  pre-completado con el peso de tendencia (sigue siendo editable) en vez de
+  vacío, para que el check-in quincenal no dependa de que justo ese día no
+  haya una comida pesada o agua retenida de por medio. Nueva sección
+  "Tendencia de peso" en el panel de admin para los 3 parámetros. Al
+  agregar esta sección nueva a la config, una versión guardada ANTES de
+  este cambio (toda la config activa real, y cualquier plan archivado)
+  quedaba sin la clave `tendenciaPeso` y rompía con "Cannot read properties
+  of undefined" - se corrigió completando con los valores de fábrica
+  cualquier sección de nivel superior que falte al leer una versión
+  guardada (`filaAObjeto` en `nutritionConfigService.js`), en vez de migrar
+  cada fila una por una; probado explícitamente guardando y restaurando
+  una versión vieja sin la sección. Probado end-to-end por script (crear
+  plan objetivo, cargar 10 pesajes con una baja real de 0.7 kg/semana
+  contra un plan que esperaba 0.5, confirmar que clasifica "más rápido de
+  lo esperado") y visualmente en el navegador.
 
 Pendiente / simplificaciones conocidas:
 

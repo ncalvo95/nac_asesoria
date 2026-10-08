@@ -28,7 +28,18 @@ const listarVersiones = db.prepare(`
 `);
 
 function filaAObjeto(fila) {
-  return { id: fila.id, config: JSON.parse(fila.config_json), createdBy: fila.created_by, createdAt: fila.created_at, comment: fila.comment };
+  const config = JSON.parse(fila.config_json);
+  // Una seccion nueva agregada DESPUES de que ya existian versiones
+  // guardadas (ej. tendenciaPeso) no esta en un config_json viejo - se
+  // completa con la de fabrica en vez de romper al leerla (afecta tanto a
+  // la version activa vieja como a un plan archivado, o a "volver a esta
+  // version" desde el panel de admin). Solo nivel superior: alcanza para
+  // una seccion nueva entera, no para un campo nuevo DENTRO de una
+  // seccion ya existente.
+  for (const clave of Object.keys(nutritionDefaults)) {
+    if (!(clave in config)) config[clave] = nutritionDefaults[clave];
+  }
+  return { id: fila.id, config, createdBy: fila.created_by, createdAt: fila.created_at, comment: fila.comment };
 }
 
 // Siembra la primera version con los valores de fabrica si la base

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { NIVELES, FASES, ENFOQUES } from '@shared/nutrition/nutritionEngine.js';
-import { LABEL_NIVEL, LABEL_ENFOQUE, LABEL_FASE, LABEL_FUENTE_REFERENCIA, LABEL_SEMAFORO, CLASE_SEMAFORO } from '../utils/nutricionLabels.js';
+import { LABEL_NIVEL, LABEL_ENFOQUE, LABEL_FASE, LABEL_FUENTE_REFERENCIA, LABEL_SEMAFORO, CLASE_SEMAFORO, LABEL_TENDENCIA, CLASE_TENDENCIA } from '../utils/nutricionLabels.js';
 import GraficoProyeccion from './GraficoProyeccion.jsx';
 
 function formatearFecha(iso) {
@@ -42,6 +42,14 @@ export default function PlanNutricion({ usuarioId }) {
   }
 
   useEffect(() => { cargarTodo(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [usuarioId]);
+
+  async function recargarPlan() {
+    try {
+      setPlan(await api.get(`/nutricion/usuarios/${usuarioId}/plan`));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   async function cargarHistorial() {
     try {
@@ -85,6 +93,7 @@ export default function PlanNutricion({ usuarioId }) {
           onNuevoPlan={() => { setSemanasSugeridas(null); setMostrarForm(true); }}
           onAplicarPlazoSugerido={(semanas) => { setSemanasSugeridas(semanas); setMostrarForm(true); }}
           onProgresoActualizado={(p) => setPlan(p)}
+          onRecargarPlan={recargarPlan}
           onVerHistorial={toggleHistorial}
           mostrandoHistorial={mostrarHistorial}
         />
@@ -182,10 +191,11 @@ function DatosPersonalesForm({ usuarioId, datosPersonales, onGuardado }) {
   );
 }
 
-function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, onProgresoActualizado, onVerHistorial, mostrandoHistorial }) {
+function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, onProgresoActualizado, onRecargarPlan, onVerHistorial, mostrandoHistorial }) {
   const r = plan.resultado;
   const conObjetivo = Boolean(plan.goal_fat_kg);
   const [mostrarProgreso, setMostrarProgreso] = useState(false);
+  const [mostrarRegistroPeso, setMostrarRegistroPeso] = useState(false);
 
   return (
     <section className="bg-surface border border-border rounded-xl p-4 flex flex-col gap-3">
@@ -296,6 +306,43 @@ function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, o
       )}
 
       {conObjetivo && (
+        <div className="flex flex-col gap-2 border-t border-border pt-2.5">
+          <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wide">Tendencia real de peso</span>
+          {plan.tendenciaPeso ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[13px] font-semibold">{plan.tendenciaPeso.pesoTendenciaKg} kg</span>
+                <span className="text-[11px] text-text-faint">
+                  {plan.tendenciaPeso.comparacion.ritmoRealKgSemana >= 0
+                    ? `Perdiendo ${plan.tendenciaPeso.comparacion.ritmoRealKgSemana} kg/semana (esperado ${plan.tendenciaPeso.comparacion.ritmoEsperadoKgSemana})`
+                    : `Subiendo ${Math.abs(plan.tendenciaPeso.comparacion.ritmoRealKgSemana)} kg/semana (esperado perder ${plan.tendenciaPeso.comparacion.ritmoEsperadoKgSemana})`}
+                  {' · '}{plan.tendenciaPeso.numeroPuntos} pesajes desde {formatearFecha(plan.tendenciaPeso.primeraFecha)}
+                </span>
+              </div>
+              <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap ${CLASE_TENDENCIA[plan.tendenciaPeso.comparacion.estado]}`}>
+                {LABEL_TENDENCIA[plan.tendenciaPeso.comparacion.estado]}
+              </span>
+            </div>
+          ) : (
+            <p className="text-[11.5px] text-text-faint">
+              Registrá tu peso en al menos {plan.tendenciaPesoProgreso.minPuntos} días distintos (vas {plan.tendenciaPesoProgreso.numeroPuntos}/{plan.tendenciaPesoProgreso.minPuntos}) de los últimos {plan.tendenciaPesoProgreso.ventanaDias} días para ver tu tendencia real.
+            </p>
+          )}
+          {!mostrarRegistroPeso ? (
+            <button onClick={() => setMostrarRegistroPeso(true)} className="text-[12px] font-semibold text-accent self-start">
+              Registrar peso de hoy
+            </button>
+          ) : (
+            <RegistroPeso
+              usuarioId={usuarioId}
+              onRegistrado={() => { onRecargarPlan(); setMostrarRegistroPeso(false); }}
+              onCancelar={() => setMostrarRegistroPeso(false)}
+            />
+          )}
+        </div>
+      )}
+
+      {conObjetivo && (
         <div className="border-t border-border pt-2.5">
           {!mostrarProgreso ? (
             <button onClick={() => setMostrarProgreso(true)} className="text-[12px] font-semibold text-accent">
@@ -304,6 +351,7 @@ function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, o
           ) : (
             <ActualizarProgreso
               usuarioId={usuarioId}
+              pesoSugerido={plan.tendenciaPeso?.pesoTendenciaKg}
               onActualizado={(p) => { onProgresoActualizado(p); setMostrarProgreso(false); }}
               onCancelar={() => setMostrarProgreso(false)}
             />
@@ -321,8 +369,14 @@ function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, o
   );
 }
 
-function ActualizarProgreso({ usuarioId, onActualizado, onCancelar }) {
-  const [peso, setPeso] = useState('');
+function ActualizarProgreso({ usuarioId, pesoSugerido, onActualizado, onCancelar }) {
+  // Prellenado con el peso de TENDENCIA (suavizado, ver tendenciaPeso en
+  // nutritionService.js) en vez de dejarlo vacio - sigue siendo editable,
+  // pero asi el check-in no depende de que justo hoy no haya retencion de
+  // liquidos/una comida pesada de por medio como pasaria con un pesaje
+  // crudo. Si todavia no hay tendencia (pocos pesajes cargados), queda
+  // vacio como antes.
+  const [peso, setPeso] = useState(pesoSugerido?.toString() || '');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
 
@@ -348,6 +402,48 @@ function ActualizarProgreso({ usuarioId, onActualizado, onCancelar }) {
       </p>
       <div className="flex gap-2">
         <input type="number" step="0.1" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="Peso actual (kg)"
+          className="flex-1 h-9 rounded-lg border border-border bg-bg px-2.5 text-[13px] outline-none focus:border-accent" />
+        <button type="button" onClick={onCancelar} className="h-9 px-3 rounded-lg border border-border text-text-muted text-[12.5px] font-semibold">
+          Cancelar
+        </button>
+        <button type="submit" disabled={enviando} className="h-9 px-3 rounded-lg bg-accent text-accent-fg text-[12.5px] font-semibold disabled:opacity-60">
+          {enviando ? 'Guardando…' : 'Guardar'}
+        </button>
+      </div>
+      {error && <p className="text-[12px] text-danger">{error}</p>}
+    </form>
+  );
+}
+
+// Pesaje suelto para alimentar la tendencia (registro_antropometrico) - a
+// diferencia de "Actualizar peso actual" (que re-basea el plan), esto solo
+// guarda un dato mas de la serie. Fecha siempre hoy, sin selector libre -
+// mismo criterio que PasosDiariosBoton en EntrenamientoPage.jsx.
+function RegistroPeso({ usuarioId, onRegistrado, onCancelar }) {
+  const [peso, setPeso] = useState('');
+  const [error, setError] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    setError('');
+    if (!(Number(peso) > 0)) { setError('Ingresá tu peso de hoy en kg.'); return; }
+    setEnviando(true);
+    try {
+      await api.post(`/usuarios/${usuarioId}/antropometria`, { peso_corporal: Number(peso) });
+      onRegistrado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-2">
+      <p className="text-[11.5px] text-text-faint">Se guarda con la fecha de hoy.</p>
+      <div className="flex gap-2">
+        <input type="number" step="0.1" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="Peso de hoy (kg)"
           className="flex-1 h-9 rounded-lg border border-border bg-bg px-2.5 text-[13px] outline-none focus:border-accent" />
         <button type="button" onClick={onCancelar} className="h-9 px-3 rounded-lg border border-border text-text-muted text-[12.5px] font-semibold">
           Cancelar

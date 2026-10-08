@@ -22,3 +22,18 @@ export const CLASE_SEMAFORO = {
   agresivo: 'bg-warning-bg text-warning',
   no_recomendable: 'bg-danger-bg text-danger',
 };
+// Comparacion de la tendencia real de peso contra el ritmo esperado del
+// plan (ver compararTendenciaConPlan) - distinto del semaforo: esto juzga
+// lo que esta pasando en la practica, no si el plan es realista en teoria.
+export const LABEL_TENDENCIA = {
+  en_linea: 'En línea con lo esperado',
+  mas_rapido: 'Más rápido de lo esperado',
+  mas_lento: 'Más lento de lo esperado',
+  subiendo: 'El peso no está bajando',
+};
+export const CLASE_TENDENCIA = {
+  en_linea: 'bg-success-bg text-success',
+  mas_rapido: 'bg-bg border border-border text-text-muted',
+  mas_lento: 'bg-warning-bg text-warning',
+  subiendo: 'bg-danger-bg text-danger',
+};

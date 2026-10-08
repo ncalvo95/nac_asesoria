@@ -16,6 +16,8 @@ import {
   calcularSemaforo,
   calcularPlazoMinimoSugerido,
   proyectarSemanaASemana,
+  calcularTendenciaPeso,
+  compararTendenciaConPlan,
   NIVELES,
 } from '../../shared/nutrition/nutritionEngine.js';
 import { obtenerConfigActiva, obtenerVersionConfig } from './nutritionConfigService.js';
@@ -90,6 +92,32 @@ export function resolverNivelActividad(usuarioId, { diasEntrenamientoManual, niv
   const { pasosPromedioUltimos14, diasConPasosCargados } = pasosRecientes(usuarioId, config.actividad.pasosVentanaDias);
   const resultado = calcularNivelActividadAutomatico({ diasEntrenamiento, pasosPromedioUltimos14, diasConPasosCargados }, config);
   return { ...resultado, diasEntrenamiento };
+}
+
+// Pesajes reales del usuario (registro_antropometrico) dentro de la ventana
+// de la config - alimenta la tendencia de peso del modo objetivo (ver
+// calcularTendenciaPeso en el motor). Puede haber mas de un pesaje el
+// mismo dia (no se agregan), la regresion los toma a todos igual.
+const puntosAntropometricosStmt = db.prepare(`
+  SELECT fecha, peso_corporal AS pesoKg FROM registro_antropometrico
+  WHERE usuario_id = ? AND peso_corporal IS NOT NULL AND fecha >= date('now', '-' || ? || ' days')
+  ORDER BY fecha
+`);
+
+// Tendencia de peso real del modo objetivo: a diferencia de pasosRecientes
+// (que rellena huecos con un default), aca no hay "default" posible para
+// un pesaje que nunca se cargo - si hay menos del minimo de puntos, se
+// devuelve sin tendencia (null) pero igual se informa cuantos puntos hay,
+// para que el frontend pueda mostrar "te faltan N pesajes" en vez de nada.
+export function tendenciaPesoReciente(usuarioId, config) {
+  const filas = puntosAntropometricosStmt.all(usuarioId, config.tendenciaPeso.ventanaDias);
+  const tendencia = calcularTendenciaPeso(filas.map((f) => ({ fecha: f.fecha, pesoKg: f.pesoKg })), config);
+  return {
+    tendencia,
+    numeroPuntos: filas.length,
+    minPuntos: config.tendenciaPeso.minPuntos,
+    ventanaDias: config.tendenciaPeso.ventanaDias,
+  };
 }
 
 const getPlanActivo = db.prepare("SELECT * FROM nutrition_plans WHERE user_id = ? AND status = 'active'");
@@ -192,6 +220,16 @@ function calcularResultadoObjetivo(plan, usuario, config) {
     pesoActualKg, sexo, config,
   });
 
+  // Tendencia de peso real (independiente del Mifflin - solo necesita
+  // pesajes cargados en registro_antropometrico): compara el ritmo REAL
+  // contra el que el deficit del plan esperaba, la recalibracion de
+  // verdad en vez de la proyeccion teorica de mas abajo.
+  const { tendencia, numeroPuntos, minPuntos, ventanaDias } = tendenciaPesoReciente(plan.user_id, config);
+  const tendenciaPeso = tendencia
+    ? { ...tendencia, comparacion: compararTendenciaConPlan({ kgPorSemanaTendencia: tendencia.kgPorSemanaTendencia, deficitSemanalKcal: modoObjetivo.deficitSemanalKcal }, config) }
+    : null;
+  const tendenciaPesoProgreso = { numeroPuntos, minPuntos, ventanaDias };
+
   const mifflinDisponible = Boolean(usuario.fecha_nacimiento && usuario.altura_cm);
   let semaforo = null;
   let plazoMinimoSugeridoSemanas = null;
@@ -222,6 +260,7 @@ function calcularResultadoObjetivo(plan, usuario, config) {
   return {
     resultado: { ...modoObjetivo, excepciones: simple.excepciones },
     semaforo, plazoMinimoSugeridoSemanas, proyeccion, mifflinDisponible,
+    tendenciaPeso, tendenciaPesoProgreso,
   };
 }
 

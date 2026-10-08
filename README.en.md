@@ -1194,6 +1194,41 @@ sessions → closing a microcycle → progress → Excel export):
   toggle on, create a plan (stays pending, 202), see it in the coach's
   list, confirm there's still no active plan, approve it, confirm there
   now is one with the right `created_by`.
+- **Real weight trend (goal mode)**: `registro_antropometrico` existed in
+  the schema (with its `POST`/`GET /usuarios/:id/antropometria` endpoints)
+  but nothing in the frontend used it. It now feeds a real recalibration:
+  `calcularTendenciaPeso` (pure engine function,
+  `shared/nutrition/nutritionEngine.js`) runs a least-squares linear
+  regression over the weigh-ins logged within the configured window
+  (`tendenciaPeso.ventanaDias`, 21 days by default) to get a smoothed
+  "trend weight" - same idea as MacroFactor's trend weight, meant to not
+  react to a single day's water retention - and compares the real rate
+  (`compararTendenciaConPlan`) against the one the plan's deficit expected,
+  with a tolerance band (`tendenciaPeso.toleranciaPct`) before flagging
+  "faster" / "slower" / "weight isn't going down". Unlike the semáforo
+  (which judges whether the plan is realistic BEFORE starting), this judges
+  what's actually happening in practice - the recalibration that didn't
+  exist yet. With fewer than `tendenciaPeso.minPuntos` weigh-ins (3 by
+  default) in the window, no trend shows up (a slope from that few points
+  is unreliable anyway) and it tells you how many are missing. New
+  "Registrar peso de hoy" (Log today's weight) button on the Nutrition
+  screen (date always today, no free picker - same reasoning as daily
+  steps) that logs a loose weigh-in through the existing endpoint; and
+  "Actualizar peso actual" (Update current weight) now comes pre-filled
+  with the trend weight (still editable) instead of blank, so the
+  biweekly check-in doesn't depend on that exact day not having a heavy
+  meal or water retention. New "Tendencia de peso" section in the admin
+  panel for the 3 parameters. Adding this new section to the config meant
+  a version saved BEFORE this change (the real active config, and any
+  archived plan) was missing the `tendenciaPeso` key and would crash with
+  "Cannot read properties of undefined" - fixed by filling in any missing
+  top-level section with its factory default when reading a saved version
+  (`filaAObjeto` in `nutritionConfigService.js`), instead of migrating each
+  row one by one; explicitly tested by saving and restoring an old version
+  missing the section. Tested end-to-end with a script (create a goal-mode
+  plan, log 10 weigh-ins with a real rate of 0.7 kg/week against a plan
+  that expected 0.5, confirm it classifies as "faster than expected") and
+  visually in the browser.
 
 Known limitations / accepted simplifications:
 

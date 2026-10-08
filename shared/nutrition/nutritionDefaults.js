@@ -144,4 +144,20 @@ export const nutritionDefaults = {
     intermedio: 1.55,
     alto: 1.725,
   },
+
+  // Tendencia de peso real (modo objetivo): regresion lineal sobre los
+  // pesajes cargados en registro_antropometrico, para comparar el ritmo
+  // REAL de perdida contra el que el plan esperaba (a diferencia del
+  // semaforo, que solo juzga si el plan es realista ANTES de empezar).
+  tendenciaPeso: {
+    ventanaDias: 21,
+    // Con menos pesajes que esto en la ventana, un ajuste lineal es puro
+    // ruido (el peso fluctua varios cientos de gramos dia a dia por agua y
+    // comida) - no se muestra tendencia todavia.
+    minPuntos: 3,
+    // Banda de tolerancia (en % del ritmo esperado) antes de avisar que el
+    // ritmo real se aleja de lo planeado - amplia a proposito, el peso
+    // fluctua solo de una semana a la otra.
+    toleranciaPct: 30,
+  },
 };

@@ -384,6 +384,70 @@ export function proyectarSemanaASemana(
 }
 
 // ---------------------------------------------------------------------------
+// Tendencia de peso real (modo objetivo)
+// ---------------------------------------------------------------------------
+
+// puntos: [{fecha: 'YYYY-MM-DD', pesoKg}], ya filtrados a los que tienen
+// peso cargado (el service los saca de registro_antropometrico) - requiere
+// al menos config.tendenciaPeso.minPuntos, si no devuelve null (ver nota
+// en nutritionDefaults.js sobre por que). Regresion lineal por minimos
+// cuadrados sobre "dias desde el primer pesaje", para suavizar el ruido
+// dia a dia en vez de comparar 2 pesadas sueltas - mismo motivo por el que
+// apps de referencia como MacroFactor muestran un "peso de tendencia" en
+// vez del ultimo valor crudo.
+export function calcularTendenciaPeso(puntos, config) {
+  if (puntos.length < config.tendenciaPeso.minPuntos) return null;
+
+  const unDiaMs = 86400000;
+  const primerDiaMs = new Date(`${puntos[0].fecha}T00:00:00Z`).getTime();
+  const xs = puntos.map((p) => (new Date(`${p.fecha}T00:00:00Z`).getTime() - primerDiaMs) / unDiaMs);
+  const ys = puntos.map((p) => p.pesoKg);
+  const n = puntos.length;
+  const mediaX = xs.reduce((a, b) => a + b, 0) / n;
+  const mediaY = ys.reduce((a, b) => a + b, 0) / n;
+
+  let numerador = 0;
+  let denominador = 0;
+  for (let i = 0; i < n; i++) {
+    numerador += (xs[i] - mediaX) * (ys[i] - mediaY);
+    denominador += (xs[i] - mediaX) ** 2;
+  }
+  // Todos los pesajes el mismo dia: no hay pendiente calculable (division
+  // por cero), se devuelve el promedio como peso de tendencia sin ritmo.
+  const pendienteKgPorDia = denominador === 0 ? 0 : numerador / denominador;
+  const ordenada = mediaY - pendienteKgPorDia * mediaX;
+  const pesoTendenciaKg = round1(ordenada + pendienteKgPorDia * xs[n - 1]);
+
+  return {
+    pesoTendenciaKg,
+    kgPorSemanaTendencia: round2(pendienteKgPorDia * 7),
+    numeroPuntos: n,
+    primeraFecha: puntos[0].fecha,
+    ultimaFecha: puntos[n - 1].fecha,
+  };
+}
+
+// Compara el ritmo REAL (de calcularTendenciaPeso - negativo significa que
+// el peso de tendencia esta bajando) contra el ritmo que el deficit del
+// plan esperaba. A diferencia del semaforo (juzga si el plan es realista
+// ANTES de empezar), esto juzga si lo que esta pasando en la practica se
+// parece a lo planeado - la recalibracion real, no una proyeccion teorica.
+// Tolerancia amplia a proposito: no hace falta alarmar por una semana corta.
+export function compararTendenciaConPlan({ kgPorSemanaTendencia, deficitSemanalKcal }, config) {
+  const ritmoEsperadoKgSemana = deficitSemanalKcal / config.energia.kcalPorKgGrasa;
+  const perdidaRealKgSemana = -kgPorSemanaTendencia;
+  const tolerancia = ritmoEsperadoKgSemana * (config.tendenciaPeso.toleranciaPct / 100);
+
+  let estado;
+  if (perdidaRealKgSemana <= 0) estado = 'subiendo';
+  else if (perdidaRealKgSemana < ritmoEsperadoKgSemana - tolerancia) estado = 'mas_lento';
+  else if (perdidaRealKgSemana > ritmoEsperadoKgSemana + tolerancia) estado = 'mas_rapido';
+  else estado = 'en_linea';
+
+  return { estado, ritmoEsperadoKgSemana: round2(ritmoEsperadoKgSemana), ritmoRealKgSemana: round2(perdidaRealKgSemana) };
+}
+
+// ---------------------------------------------------------------------------
 // Validacion de la config (usada por Express al guardar una version nueva)
 // ---------------------------------------------------------------------------
 
@@ -471,6 +535,14 @@ export function validarConfig(config) {
         errores.push('excepciones.definicionLargaHombreUltimasSemanas debe ser un número mayor a 0.');
       }
       if (!esNumeroFinito(ex.definicionLargaHombreDeltaGrasa)) errores.push('excepciones.definicionLargaHombreDeltaGrasa debe ser un número.');
+    }
+
+    const tp = config.tendenciaPeso;
+    if (!tp) errores.push('Falta la sección "tendenciaPeso".');
+    else {
+      if (!esNumeroFinito(tp.ventanaDias) || tp.ventanaDias <= 0) errores.push('tendenciaPeso.ventanaDias debe ser un número mayor a 0.');
+      if (!esNumeroFinito(tp.minPuntos) || tp.minPuntos < 2) errores.push('tendenciaPeso.minPuntos debe ser un número mayor o igual a 2.');
+      if (!esNumeroFinito(tp.toleranciaPct) || tp.toleranciaPct < 0) errores.push('tendenciaPeso.toleranciaPct debe ser un número mayor o igual a 0.');
     }
   } catch (err) {
     errores.push(`Error inesperado validando la configuración: ${err.message}`);

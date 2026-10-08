@@ -172,6 +172,7 @@ export default function PanelAdminNutricion() {
             <SeccionExcepciones config={config} onCambiar={cambiar} />
             <SeccionActividad config={config} onCambiar={cambiar} />
             <SeccionObjetivo config={config} onCambiar={cambiar} />
+            <SeccionTendenciaPeso config={config} onCambiar={cambiar} />
             <SeccionOtros config={config} onCambiar={cambiar} />
             <VistaPrevia config={config} />
 
@@ -462,6 +463,18 @@ function SeccionObjetivo({ config, onCambiar }) {
           <Campo config={config} onCambiar={onCambiar} path={['objetivo', 'semaforo', 'advertenciaGrasaFinalMinMujer']} label="Advertencia: % graso final mín. (mujeres)" />
         </div>
       </div>
+    </Seccion>
+  );
+}
+
+function SeccionTendenciaPeso({ config, onCambiar }) {
+  return (
+    <Seccion titulo="Tendencia de peso (modo objetivo)" descripcion="Regresión sobre los pesajes cargados, para comparar el ritmo real de pérdida contra el esperado por el plan.">
+      <div className="grid grid-cols-2 gap-2.5">
+        <Campo config={config} onCambiar={onCambiar} path={['tendenciaPeso', 'ventanaDias']} label="Ventana (días)" step="1" />
+        <Campo config={config} onCambiar={onCambiar} path={['tendenciaPeso', 'minPuntos']} label="Mínimo de pesajes" step="1" />
+      </div>
+      <Campo config={config} onCambiar={onCambiar} path={['tendenciaPeso', 'toleranciaPct']} label="Tolerancia antes de avisar (% del ritmo esperado)" step="1" />
     </Seccion>
   );
 }

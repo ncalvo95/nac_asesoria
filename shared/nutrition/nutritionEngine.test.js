@@ -6,6 +6,7 @@ import {
   calcularMacrosFase, calcularNivelActividadAutomatico, resolverReferenciaDefinicion,
   calcularModoObjetivo, calcularSemaforo, calcularPlazoMinimoSugerido, proyectarSemanaASemana,
   calcularMifflinStJeor, calcularTdeeMifflin, calcularEdad, validarConfig,
+  calcularTendenciaPeso, compararTendenciaConPlan,
 } from './nutritionEngine.js';
 
 const config = nutritionDefaults;
@@ -406,6 +407,84 @@ describe('El motor usa la config recibida, nunca valores fijos', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Tendencia de peso real
+// ---------------------------------------------------------------------------
+
+describe('calcularTendenciaPeso', () => {
+  test('Con menos puntos que el mínimo, devuelve null', () => {
+    const puntos = [{ fecha: '2026-01-01', pesoKg: 80 }, { fecha: '2026-01-08', pesoKg: 79.5 }];
+    assert.equal(calcularTendenciaPeso(puntos, config), null);
+  });
+
+  test('Bajando de peso en línea recta: detecta el ritmo exacto', () => {
+    // -0.1 kg/dia durante 20 dias = -0.7 kg/semana, sin ruido.
+    const puntos = [];
+    for (let i = 0; i <= 20; i += 2) {
+      const fecha = new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10);
+      puntos.push({ fecha, pesoKg: 80 - i * 0.1 });
+    }
+    const r = calcularTendenciaPeso(puntos, config);
+    assert.ok(Math.abs(r.kgPorSemanaTendencia - -0.7) < 0.01);
+    assert.equal(r.numeroPuntos, puntos.length);
+    assert.equal(r.primeraFecha, puntos[0].fecha);
+    assert.equal(r.ultimaFecha, puntos[puntos.length - 1].fecha);
+    // El peso de tendencia del ultimo punto es el valor de la recta ahi,
+    // no el dato crudo (que en este caso coinciden porque no hay ruido).
+    assert.ok(Math.abs(r.pesoTendenciaKg - (80 - 20 * 0.1)) < 0.05);
+  });
+
+  test('Peso con ruido día a día: la tendencia suaviza, no sigue el último dato crudo', () => {
+    const base = 80;
+    const pendienteReal = -0.05; // kg/dia
+    const ruido = [0.3, -0.2, 0.4, -0.3, 0.1, -0.4, 0.2]; // promedio ~0, se cancela
+    const puntos = ruido.map((r, i) => ({
+      fecha: new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10),
+      pesoKg: round1Test(base + pendienteReal * i + r),
+    }));
+    const resultado = calcularTendenciaPeso(puntos, config);
+    // La pendiente estimada tiene que acercarse a la real (-0.05*7=-0.35/sem),
+    // mucho mas que comparar solo el primer y el ultimo dato crudo.
+    assert.ok(Math.abs(resultado.kgPorSemanaTendencia - -0.35) < 0.3);
+  });
+
+  test('Todos los pesajes el mismo día: pendiente 0, no explota', () => {
+    const puntos = [
+      { fecha: '2026-01-01', pesoKg: 80 },
+      { fecha: '2026-01-01', pesoKg: 80.2 },
+      { fecha: '2026-01-01', pesoKg: 79.8 },
+    ];
+    const r = calcularTendenciaPeso(puntos, config);
+    assert.equal(r.kgPorSemanaTendencia, 0);
+  });
+});
+function round1Test(n) { return Math.round(n * 10) / 10; }
+
+describe('compararTendenciaConPlan', () => {
+  test('Ritmo real igual al esperado → en_linea', () => {
+    // deficitSemanalKcal / 7700 = 0.5 kg/semana esperado.
+    const r = compararTendenciaConPlan({ kgPorSemanaTendencia: -0.5, deficitSemanalKcal: 3850 }, config);
+    assert.equal(r.estado, 'en_linea');
+    assert.equal(r.ritmoEsperadoKgSemana, 0.5);
+    assert.equal(r.ritmoRealKgSemana, 0.5);
+  });
+
+  test('Perdiendo mucho más rápido de lo esperado → mas_rapido', () => {
+    const r = compararTendenciaConPlan({ kgPorSemanaTendencia: -1.5, deficitSemanalKcal: 3850 }, config);
+    assert.equal(r.estado, 'mas_rapido');
+  });
+
+  test('Perdiendo mucho más lento de lo esperado → mas_lento', () => {
+    const r = compararTendenciaConPlan({ kgPorSemanaTendencia: -0.1, deficitSemanalKcal: 3850 }, config);
+    assert.equal(r.estado, 'mas_lento');
+  });
+
+  test('Peso de tendencia subiendo (pendiente positiva) → subiendo', () => {
+    const r = compararTendenciaConPlan({ kgPorSemanaTendencia: 0.2, deficitSemanalKcal: 3850 }, config);
+    assert.equal(r.estado, 'subiendo');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Validación de la config
 // ---------------------------------------------------------------------------
 
@@ -449,5 +528,13 @@ describe('validarConfig', () => {
   test('Acepta decrementos de Definición en negativo (son deltas a sumar)', () => {
     const r = validarConfig(config);
     assert.equal(r.valida, true);
+  });
+
+  test('Rechaza minPuntos menor a 2 en tendenciaPeso', () => {
+    const mala = JSON.parse(JSON.stringify(config));
+    mala.tendenciaPeso.minPuntos = 1;
+    const r = validarConfig(mala);
+    assert.equal(r.valida, false);
+    assert.ok(r.errores.some((e) => e.includes('tendenciaPeso.minPuntos')));
   });
 });
