@@ -2,6 +2,13 @@ import ExcelJS from 'exceljs';
 import db from '../db/index.js';
 import { armarRutina, topeSeriesPara } from './routineBuilder.js';
 import { repsEfectivas } from './progressionEngine.js';
+import { obtenerEvolucionNutricional } from './nutritionService.js';
+
+// Labels igual que frontend/src/utils/nutricionLabels.js, duplicados aca por
+// el mismo motivo que formatearMusculo (este archivo corre en el servidor).
+const LABEL_FASE = { mantenimiento: 'Mantenimiento', volumen: 'Volumen', definicion: 'Definición' };
+const LABEL_ENFOQUE = { estandar: 'Estándar', carbohidratos: 'Enfoque carbohidratos' };
+const LABEL_NIVEL = { sin_entrenar: 'Sin entrenar', bajo: 'Bajo', intermedio: 'Intermedio', alto: 'Alto' };
 
 // "deltoides_lateral" -> "deltoides lateral" (igual que formatearMusculo en
 // frontend/src/utils/musculo.js, pero este archivo corre en el servidor).
@@ -676,6 +683,129 @@ export function generarWorkbookHistorial(usuarioId, { microcicloDesde = null, mi
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
       });
     }
+  }
+
+  return { workbook: wb };
+}
+
+// ---------------------------------------------------------------------------
+// Export de nutricion: 2 hojas, "Planes" (historial completo, activo +
+// archivados - reusa obtenerEvolucionNutricional, que ya recalcula cada uno
+// con la config que le corresponde) y "Pesajes" (registro_antropometrico
+// crudo, que alimenta la tendencia de peso real del modo objetivo). No
+// existia ninguna exportacion de nutricion antes de esto.
+// ---------------------------------------------------------------------------
+
+const COLUMNAS_PLANES = ['Fecha', 'Estado', 'Fase', 'Enfoque', 'Nivel actividad', 'Peso referencia (kg)', 'Kcal', 'Proteína (g)', 'Grasa (g)', 'Carbohidratos (g)', 'Objetivo'];
+const COLUMNAS_PESAJES = ['Fecha', 'Peso corporal (kg)', '% graso'];
+
+function formatearFechaHistorial(iso) {
+  return new Date(`${iso.replace(' ', 'T')}${iso.includes('Z') ? '' : 'Z'}`).toLocaleDateString('es-AR');
+}
+
+function estilarHeaderTabla(row) {
+  row.eachCell((cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_HEADER_TABLA } };
+    cell.font = { bold: true, color: { argb: COLOR_TEXTO }, size: 11 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = { bottom: { style: 'thin', color: { argb: COLOR_BORDO } } };
+  });
+}
+
+export function generarWorkbookNutricion(usuarioId) {
+  const usuario = db.prepare('SELECT nombre FROM usuarios WHERE id = ?').get(usuarioId);
+  if (!usuario) throw new Error('Usuario no encontrado.');
+
+  const planes = obtenerEvolucionNutricional(usuarioId);
+  const pesajes = db.prepare(`
+    SELECT fecha, peso_corporal, porcentaje_graso_calculado
+    FROM registro_antropometrico WHERE usuario_id = ? AND peso_corporal IS NOT NULL
+    ORDER BY fecha
+  `).all(usuarioId);
+
+  if (planes.length === 0 && pesajes.length === 0) {
+    throw new Error('Todavía no hay ningún plan de nutrición ni pesaje cargado para exportar.');
+  }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'nac_asesoria';
+  wb.created = new Date();
+  wb.views = [{ activeTab: 0 }];
+
+  const sheetPlanes = wb.addWorksheet('Planes');
+  sheetPlanes.columns = [{ width: 12 }, { width: 11 }, { width: 14 }, { width: 18 }, { width: 14 }, { width: 18 }, { width: 8 }, { width: 12 }, { width: 10 }, { width: 16 }, { width: 28 }];
+
+  const filaTitulo = sheetPlanes.addRow([`Historial de nutrición - ${usuario.nombre}`]);
+  sheetPlanes.mergeCells(filaTitulo.number, 1, filaTitulo.number, COLUMNAS_PLANES.length);
+  filaTitulo.getCell(1).font = { bold: true, size: 14, color: { argb: COLOR_BORDO } };
+  filaTitulo.height = 26;
+  sheetPlanes.addRow([]);
+
+  if (planes.length === 0) {
+    sheetPlanes.addRow(['Todavía no armaste ningún plan de nutrición.']);
+  } else {
+    const filaHeader = sheetPlanes.addRow(COLUMNAS_PLANES);
+    estilarHeaderTabla(filaHeader);
+
+    planes.forEach((p, i) => {
+      const objetivo = p.goal_fat_kg ? `Perder ${p.goal_fat_kg} kg en ${p.weeks} semana${p.weeks === 1 ? '' : 's'}` : '';
+      const fila = sheetPlanes.addRow([
+        formatearFechaHistorial(p.created_at),
+        p.status === 'active' ? 'Activo' : 'Archivado',
+        LABEL_FASE[p.phase] || p.phase,
+        LABEL_ENFOQUE[p.focus] || p.focus,
+        LABEL_NIVEL[p.activity_level] || p.activity_level,
+        p.reference_weight_kg,
+        p.kcal,
+        p.proteinaG,
+        p.grasaG,
+        p.carbohidratosG,
+        objetivo,
+      ]);
+      fila.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: colNumber >= 6 && colNumber <= 10 ? 'right' : 'left', vertical: 'middle' };
+        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
+        if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
+      });
+      if (p.status === 'active') {
+        fila.getCell(2).font = { bold: true, color: { argb: COLOR_MEJORA_TEXTO } };
+      }
+    });
+  }
+
+  const sheetPesajes = wb.addWorksheet('Pesajes');
+  sheetPesajes.columns = [{ width: 12 }, { width: 18 }, { width: 10 }];
+
+  const filaTituloPesajes = sheetPesajes.addRow(['Historial de pesajes']);
+  sheetPesajes.mergeCells(filaTituloPesajes.number, 1, filaTituloPesajes.number, COLUMNAS_PESAJES.length);
+  filaTituloPesajes.getCell(1).font = { bold: true, size: 14, color: { argb: COLOR_BORDO } };
+  filaTituloPesajes.height = 26;
+
+  const filaLeyendaPesajes = sheetPesajes.addRow([
+    'Pesajes sueltos cargados desde "Registrar peso de hoy" en Nutrición - alimentan la tendencia de peso real del modo objetivo.',
+  ]);
+  sheetPesajes.mergeCells(filaLeyendaPesajes.number, 1, filaLeyendaPesajes.number, COLUMNAS_PESAJES.length);
+  filaLeyendaPesajes.getCell(1).font = { italic: true, size: 10, color: { argb: 'FF837F77' } };
+  sheetPesajes.addRow([]);
+
+  if (pesajes.length === 0) {
+    sheetPesajes.addRow(['Todavía no cargaste ningún pesaje.']);
+  } else {
+    const filaHeaderPesajes = sheetPesajes.addRow(COLUMNAS_PESAJES);
+    estilarHeaderTabla(filaHeaderPesajes);
+
+    pesajes.forEach((p, i) => {
+      const fila = sheetPesajes.addRow([
+        new Date(`${p.fecha}T00:00:00`).toLocaleDateString('es-AR'),
+        p.peso_corporal,
+        p.porcentaje_graso_calculado ?? '',
+      ]);
+      fila.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: colNumber === 1 ? 'left' : 'right', vertical: 'middle' };
+        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE4E2DC' } } };
+        if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FILA_PAR } };
+      });
+    });
   }
 
   return { workbook: wb };

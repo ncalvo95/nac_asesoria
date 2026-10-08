@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api/client.js';
+import { api, API_BASE } from '../api/client.js';
 import { NIVELES, FASES, ENFOQUES } from '@shared/nutrition/nutritionEngine.js';
 import { LABEL_NIVEL, LABEL_ENFOQUE, LABEL_FASE, LABEL_FUENTE_REFERENCIA, LABEL_SEMAFORO, CLASE_SEMAFORO, LABEL_TENDENCIA, CLASE_TENDENCIA } from '../utils/nutricionLabels.js';
 import GraficoProyeccion from './GraficoProyeccion.jsx';
@@ -361,9 +361,14 @@ function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, o
 
       <div className="flex items-center justify-between pt-1">
         <button onClick={onNuevoPlan} className="text-[12.5px] font-semibold text-accent">Nuevo plan</button>
-        <button onClick={onVerHistorial} className="text-[12.5px] font-semibold text-text-muted">
-          {mostrandoHistorial ? 'Ocultar historial' : 'Ver historial'}
-        </button>
+        <div className="flex items-center gap-3">
+          <a href={`${API_BASE}/nutricion/usuarios/${usuarioId}/export.xlsx`} className="text-[12.5px] font-semibold text-accent">
+            Exportar Excel
+          </a>
+          <button onClick={onVerHistorial} className="text-[12.5px] font-semibold text-text-muted">
+            {mostrandoHistorial ? 'Ocultar historial' : 'Ver historial'}
+          </button>
+        </div>
       </div>
     </section>
   );

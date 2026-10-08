@@ -448,6 +448,7 @@ export function obtenerEvolucionNutricional(usuarioId) {
       focus: plan.focus,
       status: plan.status,
       created_at: plan.created_at,
+      activity_level: plan.activity_level,
       reference_weight_kg: plan.reference_weight_kg,
       weeks: plan.weeks,
       goal_fat_kg: plan.goal_fat_kg,

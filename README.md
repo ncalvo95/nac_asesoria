@@ -1527,6 +1527,20 @@ cierre de microciclo → progreso → export a Excel):
   el formato de referencia que pasó el usuario), exportación de toda la
   rutina con 2 sesiones de distintos días (confirma que el ancho de columnas
   es el global, no por sesión) y exportación filtrada a una sola sesión.
+- **Exportación a Excel de Nutrición (nueva, antes no existía ninguna)**:
+  nuevo botón "Exportar Excel" en la pantalla de Nutrición
+  (`GET /nutricion/usuarios/:id/export.xlsx`, `generarWorkbookNutricion` en
+  `excelGenerator.js`), con 2 hojas. "Planes": el historial completo (activo
+  + archivados, reusa `obtenerEvolucionNutricional` que ya recalcula cada
+  uno con la config que le corresponde) con fecha, estado, fase, enfoque,
+  nivel de actividad, peso de referencia, kcal, macros y el objetivo del
+  modo avanzado si lo tenía. "Pesajes": el historial crudo de
+  `registro_antropometrico` (fecha, peso, % graso si está cargado) - los
+  mismos datos que alimentan la tendencia de peso real agregada antes. Si
+  el usuario no tiene ningún plan ni pesaje cargado, devuelve un error claro
+  en vez de un archivo vacío. Probado end-to-end por script: un usuario con
+  8 planes + pesajes (contenido completo en ambas hojas), y uno sin ningún
+  dato (error 400 con mensaje).
 
 Pendiente / simplificaciones conocidas:
 

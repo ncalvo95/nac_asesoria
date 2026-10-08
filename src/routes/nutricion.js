@@ -16,6 +16,7 @@ import {
   actualizarProgresoPlan,
 } from '../services/nutritionService.js';
 import { debeQuedarPendiente, crearSolicitudCambio } from '../services/solicitudCambio.js';
+import { generarWorkbookNutricion } from '../services/excelGenerator.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -52,6 +53,20 @@ router.get('/usuarios/:usuarioId/planes', (req, res) => {
   const usuarioId = checkAccesoUsuario(req, res);
   if (usuarioId === null) return;
   res.json(listarPlanesArchivados(usuarioId));
+});
+
+router.get('/usuarios/:usuarioId/export.xlsx', async (req, res) => {
+  const usuarioId = checkAccesoUsuario(req, res);
+  if (usuarioId === null) return;
+  try {
+    const { workbook } = generarWorkbookNutricion(usuarioId);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="historial-nutricion.xlsx"');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Crear (o reemplazar) un plan es una decision de estrategia -como

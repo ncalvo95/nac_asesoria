@@ -1255,6 +1255,19 @@ sessions → closing a microcycle → progress → Excel export):
   the reference format the user shared), exporting the whole routine with 2
   sessions from different days (confirms the column width is global, not
   per-session), and exporting filtered to a single session.
+- **Nutrition Excel export (new, none existed before)**: new "Exportar Excel"
+  button on the Nutrition screen (`GET /nutricion/usuarios/:id/export.xlsx`,
+  `generarWorkbookNutricion` in `excelGenerator.js`), with 2 sheets.
+  "Planes": the full history (active + archived, reuses
+  `obtenerEvolucionNutricional`, which already recalculates each one with
+  its own matching config) with date, status, phase, focus, activity level,
+  reference weight, kcal, macros, and the goal-mode target if it had one.
+  "Pesajes": the raw `registro_antropometrico` history (date, weight, %
+  body fat if logged) - the same data that already feeds the real weight
+  trend added earlier. If the user has no plan and no weigh-in at all, it
+  returns a clear error instead of an empty file. Tested end-to-end with a
+  script: a user with 8 plans plus weigh-ins (full content in both sheets),
+  and one with no data at all (400 error with a message).
 
 Known limitations / accepted simplifications:
 
