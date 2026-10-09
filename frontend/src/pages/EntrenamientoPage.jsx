@@ -10,6 +10,7 @@ import EditarSemana0Modal from '../components/EditarSemana0Modal.jsx';
 import ExportarExcelModal from '../components/ExportarExcelModal.jsx';
 import { useArrastreOrden } from '../hooks/useArrastreOrden.js';
 import { formatearMusculo } from '../utils/musculo.js';
+import PanelAdminEntrenamiento from '../components/PanelAdminEntrenamiento.jsx';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -98,6 +99,13 @@ function ExportarExcel({ rutinaId, usuarioId, microciclos }) {
 export default function EntrenamientoPage() {
   const { usuario: sesion } = useAuth();
   const { usuarioId: usuarioIdParam } = useParams();
+
+  // Mismo criterio que NutricionPage: la propia pantalla del admin (sin
+  // usuarioId en la URL) muestra el panel de configuración global en vez
+  // de una rutina personal - el admin es un rol de configuración acá, no
+  // un alumno.
+  if (!usuarioIdParam && sesion.rol === 'admin') return <PanelAdminEntrenamiento />;
+
   const usuario = usuarioIdParam ? { id: Number(usuarioIdParam) } : sesion;
   const [rutina, setRutina] = useState(null);
   const [progreso, setProgreso] = useState(null);

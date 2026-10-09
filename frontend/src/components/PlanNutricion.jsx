@@ -4,6 +4,7 @@ import { NIVELES, FASES, ENFOQUES } from '@shared/nutrition/nutritionEngine.js';
 import { LABEL_NIVEL, LABEL_ENFOQUE, LABEL_FASE, LABEL_FUENTE_REFERENCIA, LABEL_SEMAFORO, CLASE_SEMAFORO, LABEL_TENDENCIA, CLASE_TENDENCIA, LABEL_FASE_ESTADO, CLASE_FASE_ESTADO } from '../utils/nutricionLabels.js';
 import GraficoProyeccion from './GraficoProyeccion.jsx';
 import Sparkline from './Sparkline.jsx';
+import ParametrosProgresion from './ParametrosProgresion.jsx';
 
 function formatearFecha(iso) {
   return new Date(iso.replace(' ', 'T') + (iso.includes('Z') ? '' : 'Z')).toLocaleDateString('es-AR', {
@@ -86,6 +87,8 @@ export default function PlanNutricion({ usuarioId }) {
   return (
     <div className="p-4 flex flex-col gap-4 max-w-xl w-full mx-auto pb-10">
       <h1 className="text-[16px] font-bold">Nutrición</h1>
+
+      <ParametrosProgresion usuarioId={usuarioId} dominio="nutricion" titulo="Parámetros de recalibración" />
 
       {plan && !mostrarForm && (
         <ResultadoPlan

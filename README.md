@@ -1619,9 +1619,52 @@ cierre de microciclo → progreso → export a Excel):
   pesajes con los 3 campos y confirmando el badge correcto en cada fase
   ("Coincide con tu objetivo" / "Estancado" / "Va en contra de tu
   objetivo").
+- **Configuración de admin para el núcleo de progresión de entrenamiento +
+  personalización por usuario (entrenamiento y nutrición)**: hasta ahora
+  todo el motor de progresión (incremento de kg, rangos de reps por
+  objetivo, tope de series, umbrales de variación semana1/2, umbral de
+  reps efectivas, fórmula de la descarga) estaba hardcodeado en
+  `progressionEngine.js`/`routineBuilder.js`. Se agregó el mismo mecanismo
+  versionado que ya tenía nutrición (`shared/training/progressionDefaults.js`
+  + `training_config_versions` + `trainingConfigService.js`), con un panel
+  de admin nuevo (`PanelAdminEntrenamiento.jsx`, mostrado en `/entrenamiento`
+  cuando lo visita el propio admin, igual que ya pasaba con `/nutricion`).
+  Además, se agregó `parametro_override` + `parametroOverrideService.js`:
+  una tabla y un merge recursivo genéricos (override parcial, override
+  gana campo a campo, lo no tocado cae al global) que ahora usan TANTO
+  entrenamiento como nutrición, para que un coach pueda personalizar los
+  parámetros para sí mismo o para un alumno puntual sin tocar el global de
+  nadie más - y "copiar" el efectivo ya resuelto de un usuario (él mismo u
+  otro alumno) como override explícito de otro. En nutrición el alcance
+  del override queda acotado por whitelist (`tendenciaPeso`,
+  `objetivo.adaptacionMetabolica`, `objetivo.semaforo`,
+  `objetivo.ritmoSugeridoPctSemana`, `pisosCalorias`) - las tablas de g/kg
+  siguen siendo fijas, solo las edita el admin. El umbral de reps
+  efectivas queda deliberadamente sin override por usuario (es una métrica
+  de reportes/export, nunca alimenta la progresión en sí, así que tiene
+  que significar lo mismo para cualquier alumno que el coach esté
+  mirando). Nueva sección "Parámetros de progresión"/"Parámetros de
+  recalibración" (`ParametrosProgresion.jsx`, componente compartido entre
+  los 2 dominios) en "Mis rutinas" y en Nutrición, con el efectivo actual,
+  botón Personalizar, Volver al global y Copiar desde otro usuario -
+  visible solo para coach/admin, nunca para un cliente mirando su propia
+  ficha.
+  Probado de punta a punta: alta de rutina/cierre de microciclo con la
+  config resuelta correctamente; override parcial guardado y verificado
+  (otros usuarios sin tocar, campos no personalizados cayendo al global);
+  rechazo de un override fuera de la whitelist de nutrición; endpoints de
+  admin (leer, guardar versión, restaurar de fábrica); y en el navegador,
+  el panel de admin completo, personalizar/guardar/volver al global desde
+  la ficha de un alumno, con los 2 dominios.
 
 Pendiente / simplificaciones conocidas:
 
+- El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista
+  previa en vivo mientras se carga una serie) sigue hardcodeado en 3 en vez
+  de leer el valor global configurable - si el admin lo cambia, la
+  preview en vivo queda desactualizada hasta que se haga el trabajo de
+  traerlo por API (el dato que se GUARDA siempre usa el valor correcto del
+  backend, esto solo afecta el numerito que se ve mientras se tipea).
 - La sustitución de ejercicio no reubica sesiones ya registradas antes del
   cambio (quedan asociadas al `ejercicio_asignado_id`, que ahora apunta al
   ejercicio nuevo) - es un límite aceptado del MVP, documentado en el

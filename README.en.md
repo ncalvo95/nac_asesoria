@@ -1342,9 +1342,52 @@ sessions → closing a microcycle → progress → Excel export):
   goal and another in Mantenimiento, logging weigh-ins with all 3 fields
   and confirming the right badge for each phase ("Matches your goal" /
   "Stalled" / "Working against your goal").
+- **Admin config for the training progression core + per-user
+  personalization (training and nutrition)**: the whole progression engine
+  (kg increment, rep ranges by goal, series cap, week1/2 variation
+  thresholds, effective-reps threshold, deload formula) used to be
+  hardcoded in `progressionEngine.js`/`routineBuilder.js`. Added the same
+  versioned mechanism nutrition already had
+  (`shared/training/progressionDefaults.js` + `training_config_versions` +
+  `trainingConfigService.js`), with a new admin panel
+  (`PanelAdminEntrenamiento.jsx`, shown at `/entrenamiento` when the admin
+  themselves visits it, same as `/nutricion` already did). Also added
+  `parametro_override` + `parametroOverrideService.js`: a generic table
+  and recursive merge (partial override, override wins field by field,
+  anything untouched falls back to global) now used by BOTH training and
+  nutrition, so a coach can personalize the parameters for themselves or
+  for one particular client without touching anyone else's global - and
+  "copy" another user's already-resolved effective values (themselves or
+  another client) as an explicit override of a different one. In nutrition
+  the override's scope is capped by a whitelist (`tendenciaPeso`,
+  `objetivo.adaptacionMetabolica`, `objetivo.semaforo`,
+  `objetivo.ritmoSugeridoPctSemana`, `pisosCalorias`) - the g/kg tables
+  stay fixed, only the admin edits those. The effective-reps threshold is
+  deliberately left without a per-user override (it's a reporting/export
+  metric that never feeds back into the progression itself, so it has to
+  mean the same thing for whichever client the coach is looking at). New
+  "Parámetros de progresión"/"Parámetros de recalibración" section
+  (`ParametrosProgresion.jsx`, shared between both domains) on "Mis
+  rutinas" and on Nutrition, with the current effective values, a
+  Personalize button, Revert to global and Copy from another user -
+  visible only to a coach/admin, never to a client looking at their own
+  page.
+  Tested end to end: creating a routine/closing a microciclo with the
+  resolved config applied correctly; a partial override saved and verified
+  (other users untouched, un-personalized fields falling back to global);
+  a nutrition override outside the whitelist correctly rejected; the admin
+  endpoints (read, save a version, restore factory defaults); and in the
+  browser, the full admin panel, personalize/save/revert to global from a
+  client's page, across both domains.
 
 Known limitations / accepted simplifications:
 
+- `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live
+  preview while logging a set) still hardcodes 3 instead of reading the
+  configurable global value - if the admin changes it, the live preview
+  goes stale until the work of fetching it over the API gets done (the
+  number that actually gets SAVED always uses the backend's correct value,
+  this only affects the little number shown while typing).
 - Swapping an exercise doesn't relocate sessions logged before the
   change (they stay tied to `ejercicio_asignado_id`, which now points to
   the new exercise) - an accepted MVP limitation, documented in the code.

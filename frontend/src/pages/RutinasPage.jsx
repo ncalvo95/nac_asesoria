@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
+import ParametrosProgresion from '../components/ParametrosProgresion.jsx';
 
 function formatearFecha(fechaIso) {
   const f = new Date(`${fechaIso}T00:00:00`);
@@ -110,6 +111,8 @@ export default function RutinasPage() {
       </div>
 
       {error && <p className="text-[13px] text-danger px-1">{error}</p>}
+
+      <ParametrosProgresion usuarioId={usuario.id} dominio="entrenamiento" titulo="Parámetros de progresión" />
 
       {rutinas.length === 0 && (
         <p className="text-[13px] text-text-muted px-1">Todavía no generaste ninguna rutina.</p>
