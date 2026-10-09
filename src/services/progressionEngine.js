@@ -1,31 +1,33 @@
 import db from '../db/index.js';
-import { INCREMENTO_KG_DEFAULT, musculosSecundariosDe, SERIES_MINIMO, topeSeriesPara } from './routineBuilder.js';
-
-// Umbral para decidir "mejor marca" vs "promedio" al cerrar un bloque de 2
-// semanas (supuesto #1 del prompt original, configurable aca).
-const UMBRAL_VARIACION_PORCENTUAL = 0.2;
-const UMBRAL_VARIACION_REPS_ABS = 3;
-const UMBRAL_SERIE_LARGA = 12;
+import { musculosSecundariosDe, topeSeriesPara } from './routineBuilder.js';
+import { obtenerConfigActiva, resolverConfigEntrenamiento } from './trainingConfigService.js';
 
 // "Repeticiones efectivas": de las reps hechas en una serie, cuantas caen
-// dentro de la ventana de las ultimas REPS_EFECTIVAS_UMBRAL reps antes del
-// fallo (el resto son reps de "calentamiento" dentro de la propia serie,
-// que aportan poco estimulo). Si hiciste `reps` y terminaste a `rir` reps
-// del fallo, el fallo habria sido en la repeticion (reps + rir); las
+// dentro de la ventana de las ultimas config.repsEfectivasUmbral reps antes
+// del fallo (el resto son reps de "calentamiento" dentro de la propia
+// serie, que aportan poco estimulo). Si hiciste `reps` y terminaste a `rir`
+// reps del fallo, el fallo habria sido en la repeticion (reps + rir); las
 // efectivas son las que caen en [fallo - umbral + 1, fallo] Y ademas se
 // llegaron a hacer de verdad (<= reps). Sin RIR cargado (ej. series de
-// Semana 0, que no lo piden) no hay forma de calcularlo -> null.
-export const REPS_EFECTIVAS_UMBRAL = 3;
-export function repsEfectivas(reps, rir) {
+// Semana 0, que no lo piden) no hay forma de calcularlo -> null. Usa
+// siempre la config GLOBAL (nunca el override de un usuario puntual): es
+// una metrica comparativa de reportes/export, no alimenta la progresion en
+// si (cerrarMicrociclo no la usa), asi que tiene que significar lo mismo
+// para cualquier usuario que se este mirando a la vez.
+export function repsEfectivas(reps, rir, config) {
   if (reps == null || rir == null) return null;
-  return Math.max(0, Math.min(reps, REPS_EFECTIVAS_UMBRAL - rir));
+  return Math.max(0, Math.min(reps, config.repsEfectivasUmbral - rir));
 }
 
-function techoDesde(sem1, sem2) {
+// config: nucleo de progresion resuelto del usuario dueño de la rutina (ver
+// resolverConfigEntrenamiento) - umbrales de variacion para decidir el
+// techo de reps entre semana 1 y 2 al cerrar un microciclo.
+function techoDesde(sem1, sem2, config) {
   if (sem1 == null || sem2 == null) return null;
+  const { variacionPorcentual, serieLarga, variacionRepsAbs } = config.umbralesTecho;
   const max = Math.max(sem1, sem2);
   const diff = Math.abs(sem1 - sem2);
-  const muchaVariacion = diff >= UMBRAL_VARIACION_PORCENTUAL * max || (max > UMBRAL_SERIE_LARGA && diff >= UMBRAL_VARIACION_REPS_ABS);
+  const muchaVariacion = diff >= variacionPorcentual * max || (max > serieLarga && diff >= variacionRepsAbs);
   return muchaVariacion ? Math.round((sem1 + sem2) / 2) : max;
 }
 
@@ -125,6 +127,7 @@ const diaDeEjercicioAsignado = db.prepare(`
 // piso del microciclo siguiente (peso = peso testeado, piso_reps = la mas
 // alta de las 2 series).
 export const registrarSemana0 = db.transaction((rutinaId, usuarioId, resultados) => {
+  const config = resolverConfigEntrenamiento(usuarioId);
   const microcicloTesteo = getMicrocicloTesteoActual.get(rutinaId);
   if (!microcicloTesteo) throw new Error('La rutina no tiene una semana de testeo en curso.');
 
@@ -150,9 +153,9 @@ export const registrarSemana0 = db.transaction((rutinaId, usuarioId, resultados)
     // mal el peso y la serie 1 le sale mejor que la 2, o al reves).
     const pisoReferencia = Math.max(reps_serie1, reps_serie2);
     upsertProgresoEjercicio.run({
-      ejercicio_asignado_id, microciclo_id: siguiente.id, peso_prescrito: peso, piso_reps: pisoReferencia, series_prescritas: SERIES_MINIMO,
+      ejercicio_asignado_id, microciclo_id: siguiente.id, peso_prescrito: peso, piso_reps: pisoReferencia, series_prescritas: config.seriesMinimo,
     });
-    updateEjercicioAsignadoEstado.run(peso, SERIES_MINIMO, ejercicio_asignado_id);
+    updateEjercicioAsignadoEstado.run(peso, config.seriesMinimo, ejercicio_asignado_id);
   }
 
   cerrarMicrocicloRow.run(microcicloTesteo.id);
@@ -205,6 +208,7 @@ export function obtenerSemana0Editable(rutinaId) {
 // reps del microciclo en curso (mismo criterio que registrarSemana0),
 // asi las sugerencias que ve el usuario ahora tambien quedan al dia.
 export const editarResultadosSemana0 = db.transaction((rutinaId, resultados) => {
+  const config = resolverConfigEntrenamiento(getRutina.get(rutinaId).usuario_id);
   const testeo = getMicrocicloTesteoOrigenDelActual.get(rutinaId);
   if (!testeo) throw new Error('No hay una semana de testeo para corregir en este momento (el microciclo siguiente ya se cerró).');
   const actual = getMicrociclo.get(rutinaId, testeo.numero + 1);
@@ -231,7 +235,7 @@ export const editarResultadosSemana0 = db.transaction((rutinaId, resultados) => 
     // AjusteSeries), esta correccion no lo pisa - solo actualiza peso y
     // piso de reps, que es lo que la semana de testeo realmente fija.
     const progresoActual = getProgresoEjercicio.get(ejercicio_asignado_id, actual.id);
-    const seriesPrescritas = progresoActual?.series_prescritas ?? SERIES_MINIMO;
+    const seriesPrescritas = progresoActual?.series_prescritas ?? config.seriesMinimo;
 
     const pisoReferencia = Math.max(reps_serie1, reps_serie2);
     upsertProgresoEjercicio.run({
@@ -264,6 +268,7 @@ export const guardarBorradorSemana0 = db.transaction((rutinaId, valores) => {
 // primera sesion va a "superarlo", asi se establece la base organicamente
 // en el primer cierre en vez de compararse contra un testeo que no paso).
 export const saltearTesteo = db.transaction((rutinaId) => {
+  const config = resolverConfigEntrenamiento(getRutina.get(rutinaId).usuario_id);
   const microcicloTesteo = getMicrocicloTesteoActual.get(rutinaId);
   if (!microcicloTesteo) throw new Error('La rutina no tiene una semana de testeo en curso.');
 
@@ -277,9 +282,9 @@ export const saltearTesteo = db.transaction((rutinaId) => {
   const ejercicios = getEjerciciosDeRutina.all(rutinaId);
   for (const ej of ejercicios) {
     upsertProgresoEjercicio.run({
-      ejercicio_asignado_id: ej.id, microciclo_id: siguiente.id, peso_prescrito: 0, piso_reps: 0, series_prescritas: SERIES_MINIMO,
+      ejercicio_asignado_id: ej.id, microciclo_id: siguiente.id, peso_prescrito: 0, piso_reps: 0, series_prescritas: config.seriesMinimo,
     });
-    db.prepare('UPDATE ejercicio_asignado SET peso_actual = NULL, series_actuales = ? WHERE id = ?').run(SERIES_MINIMO, ej.id);
+    db.prepare('UPDATE ejercicio_asignado SET peso_actual = NULL, series_actuales = ? WHERE id = ?').run(config.seriesMinimo, ej.id);
   }
 
   cerrarMicrocicloRow.run(microcicloTesteo.id);
@@ -344,6 +349,7 @@ export function guardarBorradorDia(diaRutinaId, microcicloId, valores) {
 // crea el siguiente microciclo con los valores resultantes.
 export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
   const rutina = getRutina.get(rutinaId);
+  const config = resolverConfigEntrenamiento(rutina.usuario_id);
   const microciclo = getMicrociclo.get(rutinaId, numero);
   if (!microciclo) throw new Error(`No existe el microciclo ${numero} para esta rutina.`);
   if (microciclo.estado === 'cerrado') throw new Error('Ese microciclo ya esta cerrado.');
@@ -390,7 +396,7 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
 
     const sem1 = getUltimaSerieEnRango.get(ej.id, ...semana1)?.reps ?? null;
     const sem2 = getUltimaSerieEnRango.get(ej.id, ...semana2)?.reps ?? null;
-    const techo = techoDesde(sem1, sem2);
+    const techo = techoDesde(sem1, sem2, config);
     const mejoro = techo == null ? null : techo > progreso.piso_reps ? 1 : 0;
 
     resultadosPorEjercicio.push({ ejercicio: ej, progreso, sem1, sem2, techo, mejoro });
@@ -448,7 +454,7 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
   for (const r of resultadosPorEjercicio) {
     const { ejercicio: ej, progreso, sem1, sem2, techo, mejoro } = r;
     const musculo = ej.musculo_nombre;
-    const topeSeries = topeSeriesPara({ objetivo: objetivo?.tipo, esCompuestoPrincipalFuerza: Boolean(ej.es_compuesto_principal_fuerza) });
+    const topeSeries = topeSeriesPara({ objetivo: objetivo?.tipo, esCompuestoPrincipalFuerza: Boolean(ej.es_compuesto_principal_fuerza) }, config);
 
     let seriesSugeridas = progreso.series_prescritas;
     let serieAgregada = 0;
@@ -486,8 +492,8 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
 
     let pesoSugerido = progreso.peso_prescrito;
     if (ej.progreso_automatico && techo != null) {
-      if (techo > ej.rango_reps_max) pesoSugerido = progreso.peso_prescrito + INCREMENTO_KG_DEFAULT;
-      else if (techo < ej.rango_reps_min) pesoSugerido = progreso.peso_prescrito - INCREMENTO_KG_DEFAULT;
+      if (techo > ej.rango_reps_max) pesoSugerido = progreso.peso_prescrito + config.incrementoKg;
+      else if (techo < ej.rango_reps_min) pesoSugerido = progreso.peso_prescrito - config.incrementoKg;
     }
 
     updateProgresoResultado.run({
@@ -539,6 +545,7 @@ const getMicrocicloEnCursoNormal = db.prepare(
 // exactamente donde estaba, la descarga no cuenta para la progresion).
 export const marcarSemanaDescarga = db.transaction((rutinaId) => {
   const rutina = getRutina.get(rutinaId);
+  const config = resolverConfigEntrenamiento(rutina.usuario_id);
   const microciclo = getMicrocicloEnCursoNormal.get(rutinaId);
   if (!microciclo) throw new Error('No hay microciclo en curso para marcar como descarga.');
   if (microciclo.tipo === 'descarga') throw new Error('Esta semana ya es tu semana de descarga.');
@@ -550,9 +557,9 @@ export const marcarSemanaDescarga = db.transaction((rutinaId) => {
     const progreso = getProgresoEjercicio.get(ej.id, microciclo.id);
     if (!progreso) continue;
 
-    const seriesDeload = Math.max(2, Math.ceil(progreso.series_prescritas / 2));
+    const seriesDeload = Math.max(config.descarga.seriesMinimo, Math.ceil(progreso.series_prescritas * config.descarga.fraccionSeries));
     const pesoTopSet = progreso.peso_prescrito;
-    const pesoResto = Math.round(progreso.peso_prescrito * 0.75 * 2) / 2;
+    const pesoResto = Math.round(progreso.peso_prescrito * config.descarga.pesoRestoFraccion * 2) / 2;
 
     detalle.push({
       ejercicio_asignado_id: ej.id,

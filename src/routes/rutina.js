@@ -14,6 +14,7 @@ import {
 import { generarWorkbookHistorial, generarWorkbookUsuario } from '../services/excelGenerator.js';
 import { musculosSecundariosDe, tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
 import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
+import { obtenerConfigActiva } from '../services/trainingConfigService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -1143,12 +1144,13 @@ router.get('/rutinas/:rutinaId/progreso', (req, res) => {
     WHERE rses.microciclo_id = ?
   `).all(ultimoCerrado.id);
 
+  const configEntrenamiento = obtenerConfigActiva().config;
   const repsEfectivasPorMusculo = new Map();
   const repsEfectivasIndirectasPorMusculo = new Map();
   const repsEfectivasPorEjercicio = new Map();
   const dropsetEfectivasPorMusculo = new Map();
   for (const s of seriesDelBloque) {
-    const efectivas = repsEfectivas(s.reps, s.rir);
+    const efectivas = repsEfectivas(s.reps, s.rir, configEntrenamiento);
     if (efectivas == null) continue;
     if (s.es_dropset) {
       dropsetEfectivasPorMusculo.set(s.musculo_nombre, (dropsetEfectivasPorMusculo.get(s.musculo_nombre) || 0) + efectivas);

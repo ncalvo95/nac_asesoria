@@ -1,10 +1,11 @@
 import db from '../db/index.js';
 import {
   armarDia, armarRutina, armarSecuenciaDeDias, construirPrioridad, elegirEjercicioTop, ORDEN_DIAS,
-  rangoRepsPara, tagsDisponibles, topeSeriesPara, SERIES_MINIMO,
+  rangoRepsPara, tagsDisponibles, topeSeriesPara,
 } from './routineBuilder.js';
 import { aplicarDisponibilidad } from './perfilService.js';
 import { repsEfectivas } from './progressionEngine.js';
+import { obtenerConfigActiva, resolverConfigEntrenamiento } from './trainingConfigService.js';
 
 const getObjetivo = db.prepare('SELECT * FROM objetivo WHERE usuario_id = ?');
 const getDisponibilidad = db.prepare('SELECT * FROM disponibilidad WHERE usuario_id = ?');
@@ -57,7 +58,7 @@ const desactivarRutinasPrevias = db.prepare(
 // Persiste el resultado de armarRutina (dias + ejercicios) para una rutina
 // ya creada - compartido por crearRutina y crearRutinaConSplit, que solo
 // difieren en como arman "rutinaPorDia" (split fijo vs elegido a mano).
-function persistirDias(rutinaId, rutinaPorDia) {
+function persistirDias(rutinaId, rutinaPorDia, config) {
   for (const dia of rutinaPorDia) {
     // dia.musculos: solo lo trae el modo "diferir ejercicios" de
     // crearRutinaConSplit (dias sin ejercicios todavia) - el resto de los
@@ -77,7 +78,7 @@ function persistirDias(rutinaId, rutinaPorDia) {
         orden: ej.orden,
         es_top_de_musculo: ej.es_top_de_musculo ? 1 : 0,
         musculo_objetivo_id: getMusculoId.get(ej.musculo).id,
-        series_actuales: ej.series_iniciales ?? SERIES_MINIMO,
+        series_actuales: ej.series_iniciales ?? config.seriesMinimo,
         rango_reps_min: ej.rango_reps_min,
         rango_reps_max: ej.rango_reps_max,
       });
@@ -96,6 +97,7 @@ export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_low
     throw new Error('Falta completar objetivo, disponibilidad o equipamiento antes de generar la rutina.');
   }
 
+  const config = resolverConfigEntrenamiento(usuarioId);
   const diasEspecificos = JSON.parse(disponibilidad.dias_especificos_json);
   const exclusiones = getExclusiones.all(usuarioId).map((r) => r.ejercicio_id);
   const preferidos = getPreferidos.all(usuarioId).map((r) => r.ejercicio_id);
@@ -113,13 +115,14 @@ export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_low
     duracionPorDia: JSON.parse(disponibilidad.duracion_sesion_json),
     varianteSplit,
     musculosPrioritarios,
+    config,
   });
 
   desactivarRutinasPrevias.run(usuarioId);
 
   const splitNombre = describirSplit(diasEspecificos.length, rutinaPorDia);
   const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: splitNombre });
-  persistirDias(rutinaId, rutinaPorDia);
+  persistirDias(rutinaId, rutinaPorDia, config);
   insertMicrociclo.run(rutinaId, 0);
 
   return obtenerRutinaActiva(usuarioId);
@@ -152,6 +155,7 @@ export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEje
     throw new Error('Falta completar objetivo o equipamiento antes de generar la rutina.');
   }
 
+  const config = resolverConfigEntrenamiento(usuarioId);
   let rutinaPorDia;
   if (diferirEjercicios) {
     rutinaPorDia = dias.map((d, idx) => ({ numero_dia: idx + 1, dia_semana: d.dia_semana, musculos: d.musculos, ejercicios: [] }));
@@ -175,12 +179,13 @@ export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEje
       duracionPorDia,
       secuenciaPersonalizada,
       musculosPrioritarios,
+      config,
     });
   }
 
   desactivarRutinasPrevias.run(usuarioId);
   const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: 'Split personalizado' });
-  persistirDias(rutinaId, rutinaPorDia);
+  persistirDias(rutinaId, rutinaPorDia, config);
   insertMicrociclo.run(rutinaId, 0);
 
   return obtenerRutinaActiva(usuarioId);
@@ -199,6 +204,7 @@ export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
     throw new Error('Falta completar el objetivo antes de crear una rutina.');
   }
 
+  const config = resolverConfigEntrenamiento(usuarioId);
   desactivarRutinasPrevias.run(usuarioId);
   const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: 'Rutina personalizada' });
 
@@ -233,14 +239,14 @@ export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
         objetivo: objetivo.tipo,
         esCompuestoPrincipalFuerza: Boolean(catalogo.es_compuesto_principal_fuerza),
         region: catalogo.musculo_region,
-      });
+      }, config);
       insertEjercicioAsignado.run({
         dia_rutina_id: diaRutinaId,
         ejercicio_id: catalogo.id,
         orden: i + 1,
         es_top_de_musculo: topPorMusculo.get(catalogo.musculo_nombre) === catalogo ? 1 : 0,
         musculo_objetivo_id: catalogo.musculo_primario_id,
-        series_actuales: 2,
+        series_actuales: config.seriesMinimo,
         rango_reps_min: rango.min,
         rango_reps_max: rango.max,
       });
@@ -293,12 +299,13 @@ const seriesConMusculoDeSesionStmt = db.prepare(`
 // el resumen de la sesion de HOY se calcula en vivo en el propio frontend
 // desde lo que se esta tipeando, sin pasar por aca.
 function resumenMuscularDeSesion(registroSesionId) {
+  const config = obtenerConfigActiva().config;
   const porMusculo = new Map();
   for (const s of seriesConMusculoDeSesionStmt.all(registroSesionId)) {
     if (s.es_dropset) continue;
     const actual = porMusculo.get(s.musculo_nombre) || { musculo: s.musculo_nombre, series_directas: 0, reps_efectivas: 0 };
     actual.series_directas += 1;
-    const efectivas = repsEfectivas(s.reps, s.rir);
+    const efectivas = repsEfectivas(s.reps, s.rir, config);
     if (efectivas != null) actual.reps_efectivas += efectivas;
     porMusculo.set(s.musculo_nombre, actual);
   }
@@ -691,17 +698,18 @@ export const sustituirEjercicio = db.transaction(({ ejercicioAsignadoId, usuario
   if (!microciclo) throw new Error('No hay un microciclo en curso donde aplicar la sustitucion.');
 
   const objetivo = getObjetivo.get(usuarioId);
+  const config = resolverConfigEntrenamiento(usuarioId);
   const rango = rangoRepsPara({
     musculo: musculoNombre,
     objetivo: objetivo.tipo,
     esCompuestoPrincipalFuerza: Boolean(nuevo.es_compuesto_principal_fuerza),
     region: nuevo.musculo_region,
-  });
+  }, config);
 
   db.prepare('UPDATE ejercicio_asignado SET ejercicio_id = ?, rango_reps_min = ?, rango_reps_max = ?, peso_actual = ? WHERE id = ?')
     .run(destinoId, rango.min, rango.max, peso, ejercicioAsignadoId);
 
-  const seriesActuales = ea.series_actuales || SERIES_MINIMO;
+  const seriesActuales = ea.series_actuales || config.seriesMinimo;
   upsertProgresoEjercicioSustitucion.run({
     ejercicio_asignado_id: ejercicioAsignadoId, microciclo_id: microciclo.id,
     peso_prescrito: peso, piso_reps: reps, series_prescritas: seriesActuales,
@@ -729,12 +737,13 @@ export const sustituirEjercicioPreTesteo = db.transaction(({ ejercicioAsignadoId
   if (!microciclo0) throw new Error('Solo se puede cambiar el ejercicio antes de guardar los resultados de la semana de testeo.');
 
   const objetivo = getObjetivo.get(usuarioId);
+  const config = resolverConfigEntrenamiento(usuarioId);
   const rango = rangoRepsPara({
     musculo: musculoNombre,
     objetivo: objetivo.tipo,
     esCompuestoPrincipalFuerza: Boolean(nuevo.es_compuesto_principal_fuerza),
     region: nuevo.musculo_region,
-  });
+  }, config);
 
   db.prepare('UPDATE ejercicio_asignado SET ejercicio_id = ?, rango_reps_min = ?, rango_reps_max = ? WHERE id = ?')
     .run(destinoId, rango.min, rango.max, ejercicioAsignadoId);
@@ -828,8 +837,8 @@ const insertEjercicioAsignadoExtra = db.prepare(`
 // el entrenamiento- el nuevo ejercicio pasa a ser el top de ese musculo ahi
 // (y se suma al musculos_trabajados_json del dia, solo a fines
 // informativos/exportacion). En cualquier caso arranca con
-// series_actuales = SERIES_MINIMO y sin peso (a testear), como cualquier
-// ejercicio agregado a mitad de rutina.
+// series_actuales = config.seriesMinimo y sin peso (a testear), como
+// cualquier ejercicio agregado a mitad de rutina.
 function calcularTopYActualizarDia(diaRutinaId, musculoId, musculoNombre) {
   const yaPresente = hayEjercicioDelMusculoEnElDia.get(diaRutinaId, musculoId);
   if (!yaPresente) {
@@ -886,24 +895,25 @@ export const agregarEjercicioADia = db.transaction(({ diaRutinaId, usuarioId, mu
   }
 
   const objetivo = getObjetivo.get(usuarioId);
+  const config = resolverConfigEntrenamiento(usuarioId);
   const rango = rangoRepsPara({
     musculo: nuevo.musculo_nombre,
     objetivo: objetivo.tipo,
     esCompuestoPrincipalFuerza: Boolean(nuevo.es_compuesto_principal_fuerza),
     region: nuevo.musculo_region,
-  });
+  }, config);
 
   const esTop = calcularTopYActualizarDia(diaRutinaId, musculoId, nuevo.musculo_nombre);
   const { maxOrden } = getMaxOrdenDia.get(diaRutinaId);
   const info = insertEjercicioAsignadoExtra.run({
     dia_rutina_id: diaRutinaId, ejercicio_id: ejercicioId, orden: maxOrden + 1, es_top_de_musculo: esTop ? 1 : 0,
-    musculo_objetivo_id: musculoId, series_actuales: SERIES_MINIMO, rango_reps_min: rango.min, rango_reps_max: rango.max,
+    musculo_objetivo_id: musculoId, series_actuales: config.seriesMinimo, rango_reps_min: rango.min, rango_reps_max: rango.max,
   });
-  registrarReferenciaEjercicioNuevo({ ejercicioAsignadoId: info.lastInsertRowid, diaRutinaId, usuarioId, peso, reps, seriesActuales: SERIES_MINIMO });
+  registrarReferenciaEjercicioNuevo({ ejercicioAsignadoId: info.lastInsertRowid, diaRutinaId, usuarioId, peso, reps, seriesActuales: config.seriesMinimo });
   return {
     id: info.lastInsertRowid, ejercicio_id: ejercicioId, ejercicio_nombre: nuevo.nombre,
     musculo_objetivo_id: musculoId, rango_reps_min: rango.min, rango_reps_max: rango.max,
-    es_top_de_musculo: esTop, series_actuales: SERIES_MINIMO, peso_actual: peso, reps,
+    es_top_de_musculo: esTop, series_actuales: config.seriesMinimo, peso_actual: peso, reps,
   };
 });
 
@@ -916,24 +926,25 @@ export const agregarEjercicioPersonalizadoADia = db.transaction(({ diaRutinaId, 
   const nuevo = crearEjercicioPersonalizado(nombre, musculoId);
 
   const objetivo = getObjetivo.get(usuarioId);
+  const config = resolverConfigEntrenamiento(usuarioId);
   const rango = rangoRepsPara({
     musculo: nuevo.musculo_nombre,
     objetivo: objetivo.tipo,
     esCompuestoPrincipalFuerza: false,
     region: nuevo.musculo_region,
-  });
+  }, config);
 
   const esTop = calcularTopYActualizarDia(diaRutinaId, musculoId, nuevo.musculo_nombre);
   const { maxOrden } = getMaxOrdenDia.get(diaRutinaId);
   const info = insertEjercicioAsignadoExtra.run({
     dia_rutina_id: diaRutinaId, ejercicio_id: nuevo.id, orden: maxOrden + 1, es_top_de_musculo: esTop ? 1 : 0,
-    musculo_objetivo_id: musculoId, series_actuales: SERIES_MINIMO, rango_reps_min: rango.min, rango_reps_max: rango.max,
+    musculo_objetivo_id: musculoId, series_actuales: config.seriesMinimo, rango_reps_min: rango.min, rango_reps_max: rango.max,
   });
-  registrarReferenciaEjercicioNuevo({ ejercicioAsignadoId: info.lastInsertRowid, diaRutinaId, usuarioId, peso, reps, seriesActuales: SERIES_MINIMO });
+  registrarReferenciaEjercicioNuevo({ ejercicioAsignadoId: info.lastInsertRowid, diaRutinaId, usuarioId, peso, reps, seriesActuales: config.seriesMinimo });
   return {
     id: info.lastInsertRowid, ejercicio_id: nuevo.id, ejercicio_nombre: nuevo.nombre,
     musculo_objetivo_id: musculoId, rango_reps_min: rango.min, rango_reps_max: rango.max,
-    es_top_de_musculo: esTop, series_actuales: SERIES_MINIMO, peso_actual: peso, reps,
+    es_top_de_musculo: esTop, series_actuales: config.seriesMinimo, peso_actual: peso, reps,
   };
 });
 
@@ -972,9 +983,9 @@ const getUsuarioIdDeEjercicioAsignado = db.prepare(`
 
 // Ajuste manual de series (+1/-1) sin esperar al cierre de microciclo, que
 // solo las sube automaticamente cuando detecta estancamiento. Respeta el
-// mismo piso (SERIES_MINIMO) y tope (topeSeriesPara segun objetivo/tipo de
-// ejercicio) que ya usa el motor de progresion, para no quedar inconsistente
-// con lo que haria el cierre automatico.
+// mismo piso (config.seriesMinimo) y tope (topeSeriesPara segun objetivo/
+// tipo de ejercicio) que ya usa el motor de progresion, para no quedar
+// inconsistente con lo que haria el cierre automatico.
 const getMicrocicloEnCursoDeEjercicio = db.prepare(`
   SELECT m.id FROM microciclo m
   JOIN dia_rutina dr ON dr.rutina_id = m.rutina_id
@@ -988,11 +999,12 @@ export function ajustarSeriesManual(ejercicioAsignadoId, delta) {
 
   const { usuario_id: usuarioId } = getUsuarioIdDeEjercicioAsignado.get(ejercicioAsignadoId);
   const objetivo = getObjetivo.get(usuarioId);
-  const tope = topeSeriesPara({ objetivo: objetivo?.tipo, esCompuestoPrincipalFuerza: Boolean(ea.es_compuesto_principal_fuerza) });
+  const config = resolverConfigEntrenamiento(usuarioId);
+  const tope = topeSeriesPara({ objetivo: objetivo?.tipo, esCompuestoPrincipalFuerza: Boolean(ea.es_compuesto_principal_fuerza) }, config);
 
-  const actuales = ea.series_actuales || SERIES_MINIMO;
+  const actuales = ea.series_actuales || config.seriesMinimo;
   const nuevas = actuales + delta;
-  if (nuevas < SERIES_MINIMO) throw new Error(`No se puede bajar de ${SERIES_MINIMO} series.`);
+  if (nuevas < config.seriesMinimo) throw new Error(`No se puede bajar de ${config.seriesMinimo} series.`);
   if (nuevas > tope) throw new Error(`Este ejercicio ya esta en su tope de ${tope} series.`);
 
   db.prepare('UPDATE ejercicio_asignado SET series_actuales = ? WHERE id = ?').run(nuevas, ejercicioAsignadoId);
@@ -1096,7 +1108,7 @@ export function obtenerImpactoQuitarDia(diaRutinaId) {
 // split se borran (si nunca tuvieron una sesion registrada) o se desactivan
 // (si ya tienen historial, para no perderlo). Devuelve un
 // Map<dia_semana, dia_rutina_id> del resultado.
-function reorganizarRutina(rutinaId, nuevosDiasEspecificos, varianteSplit, { objetivo, equipamiento, exclusiones, preferidos = [] }) {
+function reorganizarRutina(rutinaId, nuevosDiasEspecificos, varianteSplit, { objetivo, equipamiento, exclusiones, preferidos = [], config }) {
   const nuevaSecuencia = armarSecuenciaDeDias(nuevosDiasEspecificos, varianteSplit);
   const diasActivos = getDiasActivosRutina.all(rutinaId);
   const diaPorSemana = new Map(diasActivos.map((d) => [d.dia_semana, d]));
@@ -1164,11 +1176,11 @@ function reorganizarRutina(rutinaId, nuevosDiasEspecificos, varianteSplit, { obj
         const rango = rangoRepsPara({
           musculo: musculoNombre, objetivo,
           esCompuestoPrincipalFuerza: Boolean(elegido.es_compuesto_principal_fuerza), region: elegido.musculo_region,
-        });
+        }, config);
         insertEjercicioAsignado.run({
           dia_rutina_id: diaRutinaId, ejercicio_id: elegido.id, orden: ++orden,
           es_top_de_musculo: 1, musculo_objetivo_id: musculoId,
-          series_actuales: SERIES_MINIMO, rango_reps_min: rango.min, rango_reps_max: rango.max,
+          series_actuales: config.seriesMinimo, rango_reps_min: rango.min, rango_reps_max: rango.max,
         });
       }
     }
@@ -1219,6 +1231,7 @@ export const agregarDiaRutina = db.transaction((usuarioId, { diaSemana, duracion
 
   const objetivo = getObjetivo.get(usuarioId);
   if (!objetivo) throw new Error('Falta completar el objetivo antes de agregar un dia.');
+  const config = resolverConfigEntrenamiento(usuarioId);
   const equipamiento = equipamientoPara(usuarioId);
   if (modo !== 'manual' && !equipamiento) {
     throw new Error('Falta completar el equipamiento antes de agregar un dia automatico.');
@@ -1249,16 +1262,16 @@ export const agregarDiaRutina = db.transaction((usuarioId, { diaSemana, duracion
       const rango = rangoRepsPara({
         musculo: catalogo.musculo_nombre, objetivo: objetivo.tipo,
         esCompuestoPrincipalFuerza: Boolean(catalogo.es_compuesto_principal_fuerza), region: catalogo.musculo_region,
-      });
+      }, config);
       insertEjercicioAsignado.run({
         dia_rutina_id: diaRutinaId, ejercicio_id: catalogo.id, orden: i + 1,
         es_top_de_musculo: topPorMusculo.get(catalogo.musculo_nombre) === catalogo ? 1 : 0,
         musculo_objetivo_id: getMusculoId.get(catalogo.musculo_nombre).id,
-        series_actuales: SERIES_MINIMO, rango_reps_min: rango.min, rango_reps_max: rango.max,
+        series_actuales: config.seriesMinimo, rango_reps_min: rango.min, rango_reps_max: rango.max,
       });
     });
   } else if (modo === 'auto_reorganizar') {
-    reorganizarRutina(rutina.id, nuevosDiasEspecificos, varianteSplit, { objetivo: objetivo.tipo, equipamiento, exclusiones, preferidos });
+    reorganizarRutina(rutina.id, nuevosDiasEspecificos, varianteSplit, { objetivo: objetivo.tipo, equipamiento, exclusiones, preferidos, config });
   } else {
     const secuencia = armarSecuenciaDeDias(nuevosDiasEspecificos, varianteSplit);
     const entry = secuencia.find((d) => d.dia_semana === diaSemana);
@@ -1269,7 +1282,7 @@ export const agregarDiaRutina = db.transaction((usuarioId, { diaSemana, duracion
     const prioridad = construirPrioridad({ musculosPrioritarios: [], cantidadDias: nuevosDiasEspecificos.length });
     const ejerciciosDia = armarDia({
       musculos: entry.musculos, objetivo: objetivo.tipo, equipamiento, exclusiones, preferidos,
-      minutosDisponibles: duracionMinutos || 60, prioridad,
+      minutosDisponibles: duracionMinutos || 60, prioridad, config,
     });
     const { lastInsertRowid: diaRutinaId } = insertDiaRutina.run({
       rutina_id: rutina.id, numero_dia: diasActivos.length + 1, dia_semana: diaSemana,
@@ -1279,7 +1292,7 @@ export const agregarDiaRutina = db.transaction((usuarioId, { diaSemana, duracion
       insertEjercicioAsignado.run({
         dia_rutina_id: diaRutinaId, ejercicio_id: ej.ejercicio_id, orden: ej.orden,
         es_top_de_musculo: ej.es_top_de_musculo ? 1 : 0, musculo_objetivo_id: getMusculoId.get(ej.musculo).id,
-        series_actuales: ej.series_iniciales ?? SERIES_MINIMO, rango_reps_min: ej.rango_reps_min, rango_reps_max: ej.rango_reps_max,
+        series_actuales: ej.series_iniciales ?? config.seriesMinimo, rango_reps_min: ej.rango_reps_min, rango_reps_max: ej.rango_reps_max,
       });
     });
   }
@@ -1315,6 +1328,7 @@ export const quitarDiaRutina = db.transaction((diaRutinaId, { redistribuir = fal
 
   if (redistribuir) {
     const objetivo = getObjetivo.get(usuarioId);
+    const config = resolverConfigEntrenamiento(usuarioId);
     const equipamiento = equipamientoPara(usuarioId);
     const exclusiones = getExclusiones.all(usuarioId).map((r) => r.ejercicio_id);
     const preferidos = getPreferidos.all(usuarioId).map((r) => r.ejercicio_id);
@@ -1329,12 +1343,12 @@ export const quitarDiaRutina = db.transaction((diaRutinaId, { redistribuir = fal
       const rango = rangoRepsPara({
         musculo: m.musculo_nombre, objetivo: objetivo?.tipo,
         esCompuestoPrincipalFuerza: Boolean(elegido.es_compuesto_principal_fuerza), region: elegido.musculo_region,
-      });
+      }, config);
       const { maxOrden } = getMaxOrdenDia.get(destino.id);
       insertEjercicioAsignado.run({
         dia_rutina_id: destino.id, ejercicio_id: elegido.id, orden: maxOrden + 1,
         es_top_de_musculo: 1, musculo_objetivo_id: m.musculo_id,
-        series_actuales: SERIES_MINIMO, rango_reps_min: rango.min, rango_reps_max: rango.max,
+        series_actuales: config.seriesMinimo, rango_reps_min: rango.min, rango_reps_max: rango.max,
       });
       const musculosDestino = new Set(JSON.parse(destino.musculos_trabajados_json));
       musculosDestino.add(m.musculo_nombre);

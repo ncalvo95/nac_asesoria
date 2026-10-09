@@ -501,3 +501,36 @@ CREATE INDEX IF NOT EXISTS idx_nutrition_plans_usuario ON nutrition_plans(user_i
 -- aplicacion) - el service que activa un plan nuevo primero archiva el
 -- que estuviera activo, en la misma transaccion.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_nutrition_plans_un_activo ON nutrition_plans(user_id) WHERE status = 'active';
+
+-- Historial versionado del "nucleo de progresion" de entrenamiento -
+-- incremento de kg, rangos de reps, tope de series, umbrales de variacion
+-- del techo, umbral de reps efectivas, formula de la descarga. Mismo
+-- criterio que nutrition_config_versions: cada guardado inserta una fila
+-- nueva (nunca edita una existente), la de id mas alto es la activa. Ver
+-- shared/training/progressionDefaults.js para la forma exacta y los
+-- valores de fabrica, y trainingConfigService.js para como se lee/escribe.
+CREATE TABLE IF NOT EXISTS training_config_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  config_json TEXT NOT NULL,
+  created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  comment TEXT
+);
+
+-- Override por usuario del nucleo de progresion de entrenamiento y/o de
+-- recalibracion de nutricion, por encima del global del admin - el mismo
+-- mecanismo para los 2 dominios (ver parametroOverrideService.js). Lo pone
+-- el propio coach, para si mismo o para un alumno suyo (nunca el admin
+-- global, eso se edita en *_config_versions); config_json es PARCIAL, solo
+-- los campos que se decidio tocar - el resto cae al valor global via merge
+-- (ver resolverParametrosEfectivos). Una sola fila vigente por
+-- (usuario_id, dominio), sin historial: es una preferencia actual, no un
+-- registro que necesite auditoria como el global.
+CREATE TABLE IF NOT EXISTS parametro_override (
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  dominio TEXT NOT NULL CHECK (dominio IN ('entrenamiento', 'nutricion')),
+  config_json TEXT NOT NULL,
+  updated_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (usuario_id, dominio)
+);

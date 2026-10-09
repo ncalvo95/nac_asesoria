@@ -4,6 +4,7 @@ import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import { repsEfectivas } from '../services/progressionEngine.js';
 import { obtenerEvolucionNutricional } from '../services/nutritionService.js';
 import { generarWorkbookReporte } from '../services/excelGenerator.js';
+import { obtenerConfigActiva } from '../services/trainingConfigService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -64,9 +65,10 @@ const getSeriesMusculo = db.prepare(`
 // Suma repsEfectivas(reps, rir) de "series", agrupado por numero de
 // microciclo -> Map<numero, total>.
 function repsEfectivasPorMicrociclo(series) {
+  const config = obtenerConfigActiva().config;
   const porNumero = new Map();
   for (const s of series) {
-    const efectivas = repsEfectivas(s.reps, s.rir);
+    const efectivas = repsEfectivas(s.reps, s.rir, config);
     if (efectivas == null) continue;
     porNumero.set(s.numero, (porNumero.get(s.numero) || 0) + efectivas);
   }

@@ -138,18 +138,21 @@ export function tagsDisponibles({ tipo, checklist, musculo, musculosUbicacion })
   return base;
 }
 
-export function rangoRepsPara({ musculo, objetivo, esCompuestoPrincipalFuerza, region }) {
-  if (objetivo === 'rendimiento' && region === 'pierna') return { min: 8, max: 18 };
-  if (objetivo === 'fuerza' && esCompuestoPrincipalFuerza) return { min: 6, max: 10 };
-  return { min: 8, max: 16 };
+// config: nucleo de progresion resuelto para el usuario dueño de esta
+// rutina (global del admin + su propio override, ver
+// trainingConfigService.resolverConfigEntrenamiento) - min/max de reps,
+// tope de series e incremento de kg varian de usuario a usuario, el resto
+// del armado de rutina (como se reparten los ejercicios, tiempos
+// estimados) sigue fijo a proposito (ver discusion en progressionDefaults.js).
+export function rangoRepsPara({ musculo, objetivo, esCompuestoPrincipalFuerza, region }, config) {
+  if (objetivo === 'rendimiento' && region === 'pierna') return config.rangoReps.rendimientoPierna;
+  if (objetivo === 'fuerza' && esCompuestoPrincipalFuerza) return config.rangoReps.fuerzaCompuesto;
+  return config.rangoReps.default;
 }
 
-export function topeSeriesPara({ objetivo, esCompuestoPrincipalFuerza }) {
-  return objetivo === 'fuerza' && esCompuestoPrincipalFuerza ? 6 : 4;
+export function topeSeriesPara({ objetivo, esCompuestoPrincipalFuerza }, config) {
+  return objetivo === 'fuerza' && esCompuestoPrincipalFuerza ? config.topeSeries.fuerzaCompuesto : config.topeSeries.default;
 }
-
-export const SERIES_MINIMO = 2;
-export const INCREMENTO_KG_DEFAULT = 2.5;
 
 const getEjerciciosPorMusculo = db.prepare(`
   SELECT e.*, m.nombre AS musculo_nombre, m.region AS musculo_region
@@ -162,8 +165,8 @@ const getEjerciciosPorMusculo = db.prepare(`
 // siempre uno solo sin importar cuantos minutos declaro el usuario:
 // 30s de trabajo por cada serie + el descanso entre series (no despues de
 // la ultima) + 5 minutos fijos de transicion (cambiar de maquina/estacion,
-// cargar y descargar discos). Arranca siempre en SERIES_MINIMO porque es el
-// estado con el que se crea cualquier ejercicio nuevo (a testear en la
+// cargar y descargar discos). Arranca siempre en config.seriesMinimo porque
+// es el estado con el que se crea cualquier ejercicio nuevo (a testear en la
 // Semana 0) - no se recalcula mas adelante si la progresion le suma series
 // (ver duracionEstimadaDia en EntrenamientoPage.jsx para el calculo en vivo
 // con las series/descansos reales de una rutina ya en curso).
@@ -177,7 +180,11 @@ function descansoSegundosPara(ejercicio) {
   return ejercicio.es_unilateral || /unilateral/i.test(ejercicio.nombre) ? 60 : 90;
 }
 
-export function segundosEstimadosEjercicio(ejercicio, series = SERIES_MINIMO) {
+// El "2" de fallback es solo para esta estimacion de tiempo (armado de
+// rutina, fuera del nucleo de progresion configurable) - en la practica
+// todos los llamadores pasan `series` explicito, este default nunca se
+// ejercita de verdad.
+export function segundosEstimadosEjercicio(ejercicio, series = 2) {
   return SEGUNDOS_POR_SERIE * series + descansoSegundosPara(ejercicio) * (series - 1) + SEGUNDOS_TRANSICION;
 }
 
@@ -192,8 +199,8 @@ export function segundosEstimadosEjercicio(ejercicio, series = SERIES_MINIMO) {
 // - Por defecto (el usuario no eligio nada): jerarquia fija pensada para
 //   torso y piernas por separado (nunca se mezclan en un mismo dia, asi que
 //   no hace falta distinguir "grupo" - alcanza con mirar que musculos
-//   comparten el dia). Solo series = SERIES_MINIMO en este modo, la ventaja
-//   es unicamente en cantidad de ejercicios.
+//   comparten el dia). Solo series = config.seriesMinimo en este modo, la
+//   ventaja es unicamente en cantidad de ejercicios.
 //
 // En ambos casos, nunca aplica a rutinas de menos de 4 dias/semana: con tan
 // poco tiempo repartido entre pocos dias no alcanza para priorizar nada.
@@ -286,7 +293,7 @@ export function elegirEjercicioTop({ musculo, equipamiento, exclusiones = [], pr
 // explicito, las series iniciales de los musculos priorizados-. Sin
 // prioridad, el comportamiento es exactamente el de antes (el musculo con
 // menos ejercicios gana el empate).
-export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], preferidos = [], minutosDisponibles = 60, prioridad = null }) {
+export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], preferidos = [], minutosDisponibles = 60, prioridad = null, config }) {
   const excluidos = new Set(exclusiones);
   const preferidosSet = new Set(preferidos);
   const usadosEnElDia = new Set();
@@ -294,7 +301,7 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], p
   const restantesPorMusculo = new Map();
 
   function seriesInicialesDe(musculo) {
-    return prioridad?.explicita && prioridad.tierDe(musculo) === 'prioritario' ? 3 : SERIES_MINIMO;
+    return prioridad?.explicita && prioridad.tierDe(musculo) === 'prioritario' ? 3 : config.seriesMinimo;
   }
 
   for (const musculo of musculos) {
@@ -386,7 +393,7 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], p
         objetivo,
         esCompuestoPrincipalFuerza: Boolean(ejercicio.es_compuesto_principal_fuerza),
         region: ejercicio.musculo_region,
-      });
+      }, config);
       ejercicios.push({
         orden: ejercicios.length + 1,
         ejercicio_id: ejercicio.id,
@@ -395,7 +402,7 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], p
         es_top_de_musculo: esTop,
         rango_reps_min: rango.min,
         rango_reps_max: rango.max,
-        tope_series: topeSeriesPara({ objetivo, esCompuestoPrincipalFuerza: Boolean(ejercicio.es_compuesto_principal_fuerza) }),
+        tope_series: topeSeriesPara({ objetivo, esCompuestoPrincipalFuerza: Boolean(ejercicio.es_compuesto_principal_fuerza) }, config),
         series_iniciales: seriesInicialesDe(musculo),
       });
     }
@@ -410,7 +417,7 @@ export function armarDia({ musculos, objetivo, equipamiento, exclusiones = [], p
 // sin importar de donde salio la secuencia.
 export function armarRutina({
   diasEspecificos, objetivo, equipamiento, exclusiones = [], preferidos = [], duracionPorDia = {},
-  secuenciaPersonalizada = null, varianteSplit = 'upper_lower', musculosPrioritarios = [],
+  secuenciaPersonalizada = null, varianteSplit = 'upper_lower', musculosPrioritarios = [], config,
 }) {
   const secuencia = secuenciaPersonalizada
     ? secuenciaPersonalizada.map((d) => ({ dia_semana: d.dia_semana, nombre: 'Personalizado', musculos: d.musculos }))
@@ -430,6 +437,7 @@ export function armarRutina({
       preferidos,
       minutosDisponibles: duracionPorDia[diaInfo.dia_semana] || 60,
       prioridad,
+      config,
     }),
   }));
 }

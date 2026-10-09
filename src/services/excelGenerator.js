@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { armarRutina, topeSeriesPara } from './routineBuilder.js';
 import { repsEfectivas } from './progressionEngine.js';
 import { obtenerEvolucionNutricional } from './nutritionService.js';
+import { obtenerConfigActiva, resolverConfigEntrenamiento } from './trainingConfigService.js';
 
 // Labels igual que frontend/src/utils/nutricionLabels.js, duplicados aca por
 // el mismo motivo que formatearMusculo (este archivo corre en el servidor).
@@ -15,7 +16,6 @@ const LABEL_NIVEL = { sin_entrenar: 'Sin entrenar', bajo: 'Bajo', intermedio: 'I
 const formatearMusculo = (nombre) => (nombre || '').replace(/_/g, ' ');
 
 const NUM_MICROCICLOS_DEFAULT = 13; // 13 bloques de 2 semanas = 26 semanas ~ 6 meses
-const INCREMENTO_KG_DEFAULT = 2.5;
 
 const TODOS_MUSCULOS = [
   'pecho', 'espalda', 'dorsales', 'deltoides', 'biceps', 'triceps',
@@ -49,7 +49,7 @@ function construirWorkbook({ filas, meta, numMicrociclos = NUM_MICROCICLOS_DEFAU
   // ---- Config ----
   const config = wb.addWorksheet('Config');
   config.addRow(['Parametro', 'Valor']);
-  config.addRow(['Incremento minimo de peso (kg)', INCREMENTO_KG_DEFAULT]);
+  config.addRow(['Incremento minimo de peso (kg)', meta.incrementoKg]);
   config.getColumn(1).width = 32;
 
   // ---- Info ----
@@ -204,12 +204,16 @@ function deduplicarDiasPorTipo(rutinaPorDia) {
 
 export function generarWorkbookInvitado(payload) {
   const { nombre, objetivo, equipamiento, dias_especificos, exclusiones } = payload;
+  // Un invitado no tiene cuenta (ni usuario_id), asi que no puede tener
+  // override propio - siempre arma con la config global vigente.
+  const config = obtenerConfigActiva().config;
 
   const rutinaPorDia = armarRutina({
     diasEspecificos: dias_especificos,
     objetivo: objetivo.tipo,
     equipamiento: { ...equipamiento, musculosUbicacion: equipamiento.musculos_ubicacion },
     exclusiones,
+    config,
   });
   const diasUnicos = deduplicarDiasPorTipo(rutinaPorDia);
   const filas = diasUnicos.flatMap((dia) =>
@@ -218,7 +222,7 @@ export function generarWorkbookInvitado(payload) {
 
   const workbook = construirWorkbook({
     filas,
-    meta: { titulo: 'Plan de entrenamiento - 6 meses', nombre, objetivo, dias_especificos },
+    meta: { titulo: 'Plan de entrenamiento - 6 meses', nombre, objetivo, dias_especificos, incrementoKg: config.incrementoKg },
   });
   return { workbook };
 }
@@ -238,6 +242,7 @@ export function generarWorkbookUsuario(usuarioId) {
   const objetivo = db.prepare('SELECT * FROM objetivo WHERE usuario_id = ?').get(usuarioId);
   const disponibilidad = db.prepare('SELECT * FROM disponibilidad WHERE usuario_id = ?').get(usuarioId);
   const diasEspecificos = JSON.parse(disponibilidad.dias_especificos_json);
+  const config = resolverConfigEntrenamiento(usuarioId);
 
   const dias = db.prepare('SELECT * FROM dia_rutina WHERE rutina_id = ? AND activo = 1 ORDER BY numero_dia').all(rutina.id);
   const ejStmt = db.prepare(`
@@ -261,7 +266,7 @@ export function generarWorkbookUsuario(usuarioId) {
         es_top_de_musculo: Boolean(ea.es_top_de_musculo),
         rango_reps_min: ea.rango_reps_min,
         rango_reps_max: ea.rango_reps_max,
-        tope_series: topeSeriesPara({ objetivo: objetivo.tipo, esCompuestoPrincipalFuerza: Boolean(ea.es_compuesto_principal_fuerza) }),
+        tope_series: topeSeriesPara({ objetivo: objetivo.tipo, esCompuestoPrincipalFuerza: Boolean(ea.es_compuesto_principal_fuerza) }, config),
       });
     }
   }
@@ -299,7 +304,7 @@ export function generarWorkbookUsuario(usuarioId) {
 
   const workbook = construirWorkbook({
     filas,
-    meta: { titulo: `Plan de entrenamiento - ${usuario.nombre}`, nombre: usuario.nombre, objetivo, dias_especificos: diasEspecificos },
+    meta: { titulo: `Plan de entrenamiento - ${usuario.nombre}`, nombre: usuario.nombre, objetivo, dias_especificos: diasEspecificos, incrementoKg: config.incrementoKg },
     numMicrociclos,
     semana0Datos,
     progresionDatos,
@@ -411,7 +416,8 @@ const getSeriesDeSesion = db.prepare(`
 function resumirEjercicioDeSesion(series, progreso) {
   const reales = series.filter((s) => !s.es_dropset);
   const dropsets = series.filter((s) => s.es_dropset);
-  const repsEfectivasTotal = series.reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) ?? 0), 0);
+  const configEntrenamiento = obtenerConfigActiva().config;
+  const repsEfectivasTotal = series.reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir, configEntrenamiento) ?? 0), 0);
   const ultimaReal = reales[reales.length - 1];
 
   let pesoColor = null;
