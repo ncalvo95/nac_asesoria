@@ -7,7 +7,9 @@ import {
   guardarNuevaVersionConfig,
   restaurarVersionConfig,
   restaurarValoresDeFabrica,
+  resolverConfigNutricion,
 } from '../services/nutritionConfigService.js';
+import { validarConfig } from '../../shared/nutrition/nutritionEngine.js';
 import {
   obtenerPlanActivo,
   listarPlanesArchivados,
@@ -17,6 +19,10 @@ import {
 } from '../services/nutritionService.js';
 import { debeQuedarPendiente, crearSolicitudCambio } from '../services/solicitudCambio.js';
 import { generarWorkbookNutricion } from '../services/excelGenerator.js';
+import {
+  verificarPermisoOverride, obtenerOverrideCrudo, guardarOverride, borrarOverride,
+  copiarParametrosEfectivos, resolverConMerge,
+} from '../services/parametroOverrideService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -113,6 +119,106 @@ router.delete('/usuarios/:usuarioId/plan', (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Override por usuario del "nucleo de recalibracion" de nutricion -
+// deliberadamente mas chico que el override de entrenamiento: solo
+// tendenciaPeso, objetivo.adaptacionMetabolica, objetivo.semaforo,
+// objetivo.ritmoSugeridoPctSemana y pisosCalorias. Las tablas de g/kg
+// (base, incrementosCarbohidratos, excepciones, etc.) son el estandar
+// nutricional en si, nunca personalizables por coach/alumno - ver la
+// discusion en la sesion que agrego esto.
+// ---------------------------------------------------------------------------
+const ALCANCE_OVERRIDE_NUTRICION = {
+  tendenciaPeso: null, // seccion entera permitida
+  pisosCalorias: null, // seccion entera permitida
+  objetivo: ['adaptacionMetabolica', 'semaforo', 'ritmoSugeridoPctSemana'],
+};
+
+// Rechaza cualquier clave (de primer o segundo nivel, ver
+// ALCANCE_OVERRIDE_NUTRICION) fuera del nucleo de recalibracion - a
+// diferencia de validarConfig (que valida NUMEROS), esto valida ALCANCE:
+// que campos se permite tocar en un override, nunca en el global del admin.
+function validarAlcanceOverrideNutricion(config) {
+  for (const clave of Object.keys(config)) {
+    if (!(clave in ALCANCE_OVERRIDE_NUTRICION)) {
+      return `No se puede personalizar "${clave}" - solo tendenciaPeso, objetivo (adaptación metabólica/semáforo/ritmo sugerido) y pisosCalorias.`;
+    }
+    const subclaves = ALCANCE_OVERRIDE_NUTRICION[clave];
+    if (subclaves && config[clave] && typeof config[clave] === 'object') {
+      for (const sub of Object.keys(config[clave])) {
+        if (!subclaves.includes(sub)) {
+          return `No se puede personalizar "${clave}.${sub}" - dentro de "${clave}" solo: ${subclaves.join(', ')}.`;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+router.get('/usuarios/:usuarioId/config', (req, res) => {
+  const usuarioId = checkAccesoUsuario(req, res);
+  if (usuarioId === null) return;
+  const override = obtenerOverrideCrudo(usuarioId, 'nutricion');
+  res.json({
+    efectivo: resolverConfigNutricion(usuarioId),
+    override: override?.config ?? null,
+    personalizado: Boolean(override),
+  });
+});
+
+router.put('/usuarios/:usuarioId/config', (req, res) => {
+  const usuarioId = Number(req.params.usuarioId);
+  try {
+    verificarPermisoOverride(req.usuario, usuarioId);
+  } catch (err) {
+    return res.status(403).json({ error: err.message });
+  }
+  const { config } = req.body || {};
+  if (!config || typeof config !== 'object') {
+    return res.status(400).json({ error: 'config es obligatorio.' });
+  }
+  const errorAlcance = validarAlcanceOverrideNutricion(config);
+  if (errorAlcance) return res.status(400).json({ error: errorAlcance });
+
+  const global = obtenerConfigActiva().config;
+  const { valida, errores } = validarConfig(resolverConMerge(global, config));
+  if (!valida) return res.status(400).json({ error: 'La configuración resultante no es válida.', errores });
+
+  guardarOverride({ usuarioId, dominio: 'nutricion', config, updatedBy: req.usuario.id });
+  res.json({ efectivo: resolverConfigNutricion(usuarioId), override: config, personalizado: true });
+});
+
+router.delete('/usuarios/:usuarioId/config', (req, res) => {
+  const usuarioId = Number(req.params.usuarioId);
+  try {
+    verificarPermisoOverride(req.usuario, usuarioId);
+  } catch (err) {
+    return res.status(403).json({ error: err.message });
+  }
+  borrarOverride(usuarioId, 'nutricion');
+  res.json({ efectivo: resolverConfigNutricion(usuarioId), override: null, personalizado: false });
+});
+
+router.post('/usuarios/:usuarioId/config/copiar', (req, res) => {
+  const usuarioId = Number(req.params.usuarioId);
+  const { usuarioOrigenId } = req.body || {};
+  if (!usuarioOrigenId) return res.status(400).json({ error: 'usuarioOrigenId es obligatorio.' });
+  try {
+    verificarPermisoOverride(req.usuario, usuarioId);
+    verificarPermisoOverride(req.usuario, Number(usuarioOrigenId));
+  } catch (err) {
+    return res.status(403).json({ error: err.message });
+  }
+  // Copia solo el "nucleo de recalibracion" del efectivo de origen (no
+  // todo nutritionDefaults - el resto de las secciones del efectivo son el
+  // global, no tiene sentido guardarlas como override).
+  const efectivoOrigen = resolverConfigNutricion(Number(usuarioOrigenId));
+  const recorte = {};
+  for (const clave of Object.keys(ALCANCE_OVERRIDE_NUTRICION)) recorte[clave] = efectivoOrigen[clave];
+  copiarParametrosEfectivos({ efectivoOrigen: recorte, usuarioDestinoId: usuarioId, dominio: 'nutricion', updatedBy: req.usuario.id });
+  res.json({ efectivo: resolverConfigNutricion(usuarioId), override: recorte, personalizado: true });
 });
 
 // Todo lo demas (historial, guardar, restaurar) es exclusivo del admin -

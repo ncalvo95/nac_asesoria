@@ -21,7 +21,7 @@ import {
   clasificarTendenciaSegunFase,
   NIVELES,
 } from '../../shared/nutrition/nutritionEngine.js';
-import { obtenerConfigActiva, obtenerVersionConfig } from './nutritionConfigService.js';
+import { obtenerConfigActiva, obtenerVersionConfig, resolverConfigNutricion } from './nutritionConfigService.js';
 
 const getUsuario = db.prepare('SELECT id, sexo_biologico, fecha_nacimiento, altura_cm FROM usuarios WHERE id = ?');
 
@@ -190,8 +190,14 @@ const actualizarProgreso = db.prepare(`
   WHERE id = ?
 `);
 
+// Solo el plan ACTIVO se recalcula con el override del usuario por encima
+// del global vigente (ver resolverConfigNutricion) - uno archivado sigue
+// leyendo exactamente la version congelada con la que se armo, sin
+// override: es una preferencia ACTUAL, no algo que deba reescribir en
+// silencio como se veia un plan viejo (mismo criterio que ya aplica al
+// global vigente vs. congelado).
 function resolverConfigDePlan(plan) {
-  return plan.status === 'active' ? obtenerConfigActiva().config : obtenerVersionConfig(plan.config_version_id).config;
+  return plan.status === 'active' ? resolverConfigNutricion(plan.user_id) : obtenerVersionConfig(plan.config_version_id).config;
 }
 
 // Semana actual de un plan (1-indexada) segun cuanto paso desde start_date -
@@ -378,8 +384,13 @@ export const crearPlan = db.transaction((usuarioId, datos, creadoPor) => {
     }
   }
 
+  // config_version_id queda SIEMPRE atado a la version GLOBAL (activa.id,
+  // para el mecanismo de congelado de planes archivados) aunque los
+  // numeros de este plan se calculen con el efectivo (global + override
+  // del propio usuario, si personalizo algo) - mismo criterio que
+  // resolverConfigDePlan.
   const activa = obtenerConfigActiva();
-  const config = activa.config;
+  const config = resolverConfigNutricion(usuarioId);
 
   const nivelResuelto = resolverNivelActividad(usuarioId, { diasEntrenamientoManual, nivelManual }, config);
 

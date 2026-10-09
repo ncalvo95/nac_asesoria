@@ -12,6 +12,7 @@
 import db from '../db/index.js';
 import { validarConfig } from '../../shared/nutrition/nutritionEngine.js';
 import { nutritionDefaults } from '../../shared/nutrition/nutritionDefaults.js';
+import { obtenerOverrideCrudo, resolverConMerge } from './parametroOverrideService.js';
 
 let cacheActiva = null; // { id, config, created_by, created_at, comment }
 
@@ -116,4 +117,16 @@ export function restaurarValoresDeFabrica({ createdBy, comment }) {
     createdBy,
     comment: comment || 'Restaurados los valores de fábrica',
   });
+}
+
+// Config efectiva de un usuario puntual: global VIGENTE + su propio
+// override (si personalizo algo) - mismo mecanismo que
+// trainingConfigService.resolverConfigEntrenamiento, pero solo tiene
+// sentido contra la config vigente (un plan archivado sigue leyendo su
+// propia version congelada tal cual, sin override - ver
+// resolverConfigDePlan en nutritionService.js).
+export function resolverConfigNutricion(usuarioId) {
+  const global = obtenerConfigActiva().config;
+  const override = obtenerOverrideCrudo(usuarioId, 'nutricion');
+  return resolverConMerge(global, override?.config);
 }
