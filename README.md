@@ -1657,6 +1657,17 @@ cierre de microciclo → progreso → export a Excel):
   el panel de admin completo, personalizar/guardar/volver al global desde
   la ficha de un alumno, con los 2 dominios.
 
+- **Nutrición: total semanal y reparto de macros por día (ciclado)**: en el
+  plan activo, "Ver total semanal y repartir por día" muestra los totales de
+  la semana (macros y kcal del plan x 7) y una tabla de 7 días editable
+  (proteína/grasa/carbohidratos por día, con kcal calculadas). Debajo, por
+  cada macro, cuánto SOBRA o FALTA contra el total semanal (en vivo, al
+  cambiar un día), con un botón "repartir" que distribuye la diferencia en
+  partes iguales entre los 7 días. No obliga a cuadrar al gramo: se guarda
+  igual. Nueva columna `nutrition_plans.distribucion_semanal_json` y
+  `PUT /nutricion/usuarios/:id/plan/distribucion` (`null` vuelve a parejo);
+  un plan nuevo arranca parejo.
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

@@ -216,6 +216,8 @@ function ResultadoPlan({ plan, usuarioId, onNuevoPlan, onAplicarPlazoSugerido, o
         )}
       </div>
 
+      <DistribucionSemanal plan={plan} usuarioId={usuarioId} onGuardado={onProgresoActualizado} />
+
       <div className="flex gap-4 text-[13px]">
         <div className="flex flex-col">
           <span className="text-text-faint text-[11px]">Proteína</span>
@@ -385,6 +387,151 @@ function ActualizarProgreso({ usuarioId, pesoSugerido, onActualizado, onCancelar
       </div>
       {error && <p className="text-[12px] text-danger">{error}</p>}
     </form>
+  );
+}
+
+const DIAS_REPARTO = [
+  ['lunes', 'Lun'], ['martes', 'Mar'], ['miercoles', 'Mié'], ['jueves', 'Jue'],
+  ['viernes', 'Vie'], ['sabado', 'Sáb'], ['domingo', 'Dom'],
+];
+const MACROS_REPARTO = [
+  { key: 'proteinaG', label: 'Prot.' },
+  { key: 'grasaG', label: 'Grasa' },
+  { key: 'carbohidratosG', label: 'Carbs' },
+];
+const kcalDeDia = (d) => Math.round((Number(d.proteinaG) || 0) * 4 + (Number(d.carbohidratosG) || 0) * 4 + (Number(d.grasaG) || 0) * 9);
+
+// Totales de la semana (macros del plan x 7) y reparto dia por dia para
+// ciclar (ej. hidratos altos/bajos): cada macro muestra cuanto sobra o falta
+// respecto del total semanal, y se puede repartir la diferencia en partes
+// iguales entre los 7 dias. No obliga a cuadrar al gramo - se guarda igual.
+function DistribucionSemanal({ plan, usuarioId, onGuardado }) {
+  const r = plan.resultado;
+  const objetivoDia = { proteinaG: r.proteinaG, grasaG: r.grasaG, carbohidratosG: r.carbohidratosG };
+  const parejo = () => DIAS_REPARTO.map(([dia]) => ({ dia, ...objetivoDia }));
+  const [abierto, setAbierto] = useState(false);
+  const [dias, setDias] = useState(plan.distribucionSemanal || parejo());
+  const [error, setError] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  const total = (k) => Math.round(r[k] * 7 * 10) / 10;
+  const asignado = (k) => Math.round(dias.reduce((a, d) => a + (Number(d[k]) || 0), 0) * 10) / 10;
+  const kcalSemana = Math.round(r.kcal * 7);
+  const kcalAsignadas = dias.reduce((a, d) => a + kcalDeDia(d), 0);
+
+  function cambiar(i, key, valor) {
+    setDias((prev) => prev.map((d, idx) => (idx === i ? { ...d, [key]: valor === '' ? '' : Number(valor) } : d)));
+  }
+
+  function repartirDiferencia(key) {
+    const porDia = (total(key) - asignado(key)) / 7;
+    setDias((prev) => prev.map((d) => ({ ...d, [key]: Math.max(0, Math.round(((Number(d[key]) || 0) + porDia) * 10) / 10) })));
+  }
+
+  async function guardar(valor) {
+    setGuardando(true);
+    setError('');
+    try {
+      const actualizado = await api.put(`/nutricion/usuarios/${usuarioId}/plan/distribucion`, { dias: valor });
+      onGuardado(actualizado);
+      setDias(actualizado.distribucionSemanal || parejo());
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const etiquetaDif = (dif, unidad) => {
+    if (Math.abs(dif) < 0.5) return <span className="text-success">cuadra</span>;
+    return dif > 0
+      ? <span className="text-warning">faltan {Math.round(dif)} {unidad}</span>
+      : <span className="text-danger">sobran {Math.round(-dif)} {unidad}</span>;
+  };
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-b border-border py-2.5">
+      <button type="button" onClick={() => setAbierto((v) => !v)} className="text-[12px] font-semibold text-accent self-start">
+        {abierto ? 'Ocultar reparto semanal' : 'Ver total semanal y repartir por día'}
+      </button>
+      {!abierto && (
+        <p className="text-[11.5px] text-text-faint">
+          Semana: {kcalSemana} kcal · P {total('proteinaG')} g · G {total('grasaG')} g · C {total('carbohidratosG')} g
+          {plan.distribucionSemanal ? ' · reparto personalizado' : ''}
+        </p>
+      )}
+      {abierto && (
+        <div className="flex flex-col gap-2">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[11.5px]">
+              <thead>
+                <tr className="text-text-faint">
+                  <th className="text-left font-normal pb-1">Día</th>
+                  {MACROS_REPARTO.map((m) => <th key={m.key} className="font-normal pb-1">{m.label} (g)</th>)}
+                  <th className="text-right font-normal pb-1">kcal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dias.map((d, i) => (
+                  <tr key={d.dia} className="border-t border-border">
+                    <td className="py-1">{DIAS_REPARTO[i][1]}</td>
+                    {MACROS_REPARTO.map((m) => (
+                      <td key={m.key} className="px-0.5 py-0.5">
+                        <input type="number" step="1" value={d[m.key]} onChange={(e) => cambiar(i, m.key, e.target.value)}
+                          className="w-full h-8 rounded-md border border-border bg-bg px-1.5 text-[12px] text-center outline-none focus:border-accent" />
+                      </td>
+                    ))}
+                    <td className="text-right tabular">{kcalDeDia(d)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border font-semibold">
+                  <td className="py-1">Asignado</td>
+                  {MACROS_REPARTO.map((m) => <td key={m.key} className="text-center tabular">{asignado(m.key)}</td>)}
+                  <td className="text-right tabular">{kcalAsignadas}</td>
+                </tr>
+                <tr className="text-text-faint">
+                  <td className="py-1">Objetivo semanal</td>
+                  {MACROS_REPARTO.map((m) => <td key={m.key} className="text-center tabular">{total(m.key)}</td>)}
+                  <td className="text-right tabular">{kcalSemana}</td>
+                </tr>
+                <tr>
+                  <td className="py-1">Diferencia</td>
+                  {MACROS_REPARTO.map((m) => (
+                    <td key={m.key} className="text-center">
+                      {etiquetaDif(total(m.key) - asignado(m.key), 'g')}
+                      {Math.abs(total(m.key) - asignado(m.key)) >= 0.5 && (
+                        <button type="button" onClick={() => repartirDiferencia(m.key)} className="block mx-auto text-[10.5px] font-semibold text-accent">
+                          repartir
+                        </button>
+                      )}
+                    </td>
+                  ))}
+                  <td className="text-right">{etiquetaDif(kcalSemana - kcalAsignadas, 'kcal')}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <button type="button" onClick={() => { setDias(parejo()); setError(''); }} className="text-[12px] font-semibold text-text-muted">
+              Parejo todos los días
+            </button>
+            <div className="flex gap-2">
+              {plan.distribucionSemanal && (
+                <button type="button" disabled={guardando} onClick={() => guardar(null)} className="h-9 px-3 rounded-lg border border-border text-text-muted text-[12.5px] font-semibold disabled:opacity-60">
+                  Quitar reparto
+                </button>
+              )}
+              <button type="button" disabled={guardando} onClick={() => guardar(dias)} className="h-9 px-3 rounded-lg bg-accent text-accent-fg text-[12.5px] font-semibold disabled:opacity-60">
+                {guardando ? 'Guardando…' : 'Guardar reparto'}
+              </button>
+            </div>
+          </div>
+          {error && <p className="text-[12px] text-danger">{error}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -314,6 +314,14 @@ function calcularResultadoObjetivo(plan, usuario, config) {
 // (activo o uno del historial): el resultado de macros (o del modo
 // objetivo, si el plan tiene goal_fat_kg) + el Mifflin informativo.
 function construirRespuestaPlan(plan, usuario) {
+  const respuesta = construirRespuestaPlanBase(plan, usuario);
+  return {
+    ...respuesta,
+    distribucionSemanal: plan.distribucion_semanal_json ? JSON.parse(plan.distribucion_semanal_json) : null,
+  };
+}
+
+function construirRespuestaPlanBase(plan, usuario) {
   if (plan.phase === 'definicion' && plan.goal_fat_kg) {
     const config = resolverConfigDePlan(plan);
     const objetivo = calcularResultadoObjetivo(plan, usuario, config);
@@ -469,6 +477,35 @@ export const actualizarProgresoPlan = db.transaction((usuarioId, pesoActualKg) =
 
   const usuario = getUsuario.get(usuarioId);
   return construirRespuestaPlan(getPlanPorId.get(plan.id), usuario);
+});
+
+const DIAS_SEMANA_PLAN = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+const guardarDistribucion = db.prepare('UPDATE nutrition_plans SET distribucion_semanal_json = ? WHERE id = ?');
+
+// Reparto de los macros semanales por dia (ciclado de hidratos, dias altos/
+// bajos, etc.) del plan activo. No obliga a que la suma cuadre con el total
+// semanal del plan: el frontend muestra cuanto sobra/falta de cada macro y
+// el usuario lo ajusta como le convenga. null borra el reparto (vuelve a
+// parejo).
+export const guardarDistribucionSemanal = db.transaction((usuarioId, dias) => {
+  const plan = getPlanActivo.get(usuarioId);
+  if (!plan) throw new Error('No hay un plan activo.');
+  let limpio = null;
+  if (dias != null) {
+    if (!Array.isArray(dias) || dias.length !== 7) throw new Error('La distribución tiene que tener los 7 días de la semana.');
+    limpio = DIAS_SEMANA_PLAN.map((dia, i) => {
+      const d = dias[i] || {};
+      const macros = {};
+      for (const campo of ['proteinaG', 'grasaG', 'carbohidratosG']) {
+        const v = Number(d[campo]);
+        if (!Number.isFinite(v) || v < 0) throw new Error(`${campo} inválido en ${dia}.`);
+        macros[campo] = round1(v);
+      }
+      return { dia, ...macros };
+    });
+  }
+  guardarDistribucion.run(limpio ? JSON.stringify(limpio) : null, plan.id);
+  return construirRespuestaPlan(getPlanPorId.get(plan.id), getUsuario.get(usuarioId));
 });
 
 function round1(n) {

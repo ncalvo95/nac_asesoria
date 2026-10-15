@@ -40,6 +40,7 @@ const columnasNuevas = [
   { tabla: 'usuarios', columna: 'pasos_por_defecto', definicion: 'INTEGER' },
   { tabla: 'registro_antropometrico', columna: 'porcentaje_graso', definicion: 'REAL' },
   { tabla: 'registro_antropometrico', columna: 'porcentaje_muscular', definicion: 'REAL' },
+  { tabla: 'nutrition_plans', columna: 'distribucion_semanal_json', definicion: 'TEXT' },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

@@ -16,6 +16,7 @@ import {
   crearPlan,
   archivarPlanActivo,
   actualizarProgresoPlan,
+  guardarDistribucionSemanal,
 } from '../services/nutritionService.js';
 import { debeQuedarPendiente, crearSolicitudCambio } from '../services/solicitudCambio.js';
 import { generarWorkbookNutricion } from '../services/excelGenerator.js';
@@ -106,6 +107,18 @@ router.patch('/usuarios/:usuarioId/plan/progreso', (req, res) => {
   const { pesoActualKg } = req.body || {};
   try {
     res.json(actualizarProgresoPlan(usuarioId, pesoActualKg));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Reparto de los macros de la semana por dia (ciclado) - como el
+// seguimiento, es ajustar un plan YA aprobado, no una estrategia nueva.
+router.put('/usuarios/:usuarioId/plan/distribucion', (req, res) => {
+  const usuarioId = checkAccesoUsuario(req, res);
+  if (usuarioId === null) return;
+  try {
+    res.json(guardarDistribucionSemanal(usuarioId, req.body?.dias ?? null));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

@@ -1380,6 +1380,17 @@ sessions → closing a microcycle → progress → Excel export):
   browser, the full admin panel, personalize/save/revert to global from a
   client's page, across both domains.
 
+- **Nutrition: weekly totals and per-day macro split (cycling)**: on the
+  active plan, "Ver total semanal y repartir por día" shows the week's
+  totals (plan macros and kcal x 7) and an editable 7-day table
+  (protein/fat/carbs per day, with computed kcal). Below, for each macro,
+  how much is OVER or UNDER the weekly total (live, as a day changes), with
+  a "repartir" button that spreads the difference evenly across the 7 days.
+  It doesn't force it to match to the gram: it saves anyway. New
+  `nutrition_plans.distribucion_semanal_json` column and
+  `PUT /nutricion/usuarios/:id/plan/distribucion` (`null` reverts to even);
+  a new plan starts even.
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live

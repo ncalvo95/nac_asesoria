@@ -492,6 +492,9 @@ CREATE TABLE IF NOT EXISTS nutrition_plans (
   goal_fat_kg REAL,
   config_version_id INTEGER NOT NULL REFERENCES nutrition_config_versions(id),
   params_json TEXT NOT NULL DEFAULT '{}',
+  -- Reparto de los macros de la semana por dia (ciclado de hidratos, etc.):
+  -- [{dia, proteinaG, grasaG, carbohidratosG} x7]. NULL = parejo todos los dias.
+  distribucion_semanal_json TEXT,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
