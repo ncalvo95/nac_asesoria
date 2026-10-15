@@ -479,10 +479,22 @@ function SeguimientoCorporal({ plan, usuarioId, onRecargarPlan }) {
 
 // Pesaje suelto para alimentar la tendencia (registro_antropometrico) - a
 // diferencia de "Actualizar peso actual" (que re-basea el plan), esto solo
-// guarda un dato mas de la serie. Fecha siempre hoy, sin selector libre -
-// mismo criterio que PasosDiariosBoton en EntrenamientoPage.jsx. % graso y
-// % muscular son opcionales (no todos tienen una balanza que los mida).
+// guarda un dato mas de la serie. Por defecto es hoy, pero se puede cargar un
+// dia anterior (hasta DIAS_ATRAS_PESAJE dias para atras) por si un dia no se
+// pudo registrar. % graso y % muscular son opcionales (no todos tienen una
+// balanza que los mida).
+const DIAS_ATRAS_PESAJE = 7;
+
+function fechaLocalIso(offsetDias = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDias);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function RegistroPeso({ usuarioId, onRegistrado, onCancelar }) {
+  const hoy = fechaLocalIso();
+  const minima = fechaLocalIso(-DIAS_ATRAS_PESAJE);
+  const [fecha, setFecha] = useState(hoy);
   const [peso, setPeso] = useState('');
   const [grasa, setGrasa] = useState('');
   const [muscular, setMuscular] = useState('');
@@ -492,10 +504,15 @@ function RegistroPeso({ usuarioId, onRegistrado, onCancelar }) {
   async function onSubmit(e) {
     e.preventDefault();
     setError('');
-    if (!(Number(peso) > 0)) { setError('Ingresá tu peso de hoy en kg.'); return; }
+    if (!(Number(peso) > 0)) { setError('Ingresá tu peso en kg.'); return; }
+    if (!fecha || fecha > hoy || fecha < minima) {
+      setError(`La fecha tiene que ser de los últimos ${DIAS_ATRAS_PESAJE} días (hasta hoy).`);
+      return;
+    }
     setEnviando(true);
     try {
       await api.post(`/usuarios/${usuarioId}/antropometria`, {
+        fecha,
         peso_corporal: Number(peso),
         porcentaje_graso: grasa ? Number(grasa) : null,
         porcentaje_muscular: muscular ? Number(muscular) : null,
@@ -510,7 +527,11 @@ function RegistroPeso({ usuarioId, onRegistrado, onCancelar }) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-2">
-      <p className="text-[11.5px] text-text-faint">Se guarda con la fecha de hoy. % graso y % muscular son opcionales.</p>
+      <p className="text-[11.5px] text-text-faint">
+        Podés cargar un día anterior (hasta {DIAS_ATRAS_PESAJE} días atrás). % graso y % muscular son opcionales.
+      </p>
+      <input type="date" value={fecha} min={minima} max={hoy} onChange={(e) => setFecha(e.target.value)}
+        className="h-9 rounded-lg border border-border bg-bg px-2.5 text-[13px] outline-none focus:border-accent" />
       <div className="flex gap-2">
         <input type="number" step="0.1" value={peso} onChange={(e) => setPeso(e.target.value)} placeholder="Peso (kg)"
           className="flex-1 h-9 rounded-lg border border-border bg-bg px-2.5 text-[13px] outline-none focus:border-accent" />
