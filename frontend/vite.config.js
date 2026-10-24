@@ -25,6 +25,7 @@ export default defineConfig({
       // frontend/) para que backend y frontend llamen exactamente al mismo
       // codigo puro - ver shared/nutrition/nutritionEngine.js.
       '@shared/nutrition': path.resolve(__dirname, '../shared/nutrition'),
+      '@shared/training': path.resolve(__dirname, '../shared/training'),
     },
   },
   server: {

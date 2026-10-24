@@ -1668,6 +1668,31 @@ cierre de microciclo → progreso → export a Excel):
   `PUT /nutricion/usuarios/:id/plan/distribucion` (`null` vuelve a parejo);
   un plan nuevo arranca parejo.
 
+- **Entrenar: descanso real, objetivo explicado y pantalla más limpia** (ideas
+  tomadas de revisar otros proyectos de entrenamiento; solo patrones de
+  diseño, sin copiar código):
+  - **Temporizador de descanso**: cada serie tiene un tilde "hecha"; al
+    tildarla (con peso/reps vacíos usa la sugerencia gris, un toque y listo)
+    arranca una cuenta regresiva con el `descanso_segundos` del ejercicio
+    (60s en modo express). Barra fija con -15/+15, saltar y un botón para
+    silenciar; al llegar a cero suena (3 pitidos WebAudio) y vibra. Se
+    calcula contra el reloj real, así que sobrevive a bloquear la pantalla.
+    Al tildar la última serie del día el descanso se cancela solo. Código en
+    `hooks/useTemporizadorDescanso.js` y `components/TemporizadorDescanso.jsx`.
+  - **"Objetivo de hoy" con su porqué**: bajo cada ejercicio una línea
+    ("Subís a 62.5 kg", "Mismo peso: superá 13 reps", "+1 serie"...) que,
+    al tocarla, explica con los números del bloque anterior por qué es ese
+    objetivo. Lee lo que decidió `cerrarMicrociclo`; no recalcula nada.
+    Función pura `shared/training/objetivoMotivo.js` (con tests) y alias
+    `@shared/training` en Vite.
+  - **Filas de serie más fáciles de tocar**: botones -/+ en kg (paso 2.5) y
+    reps (si el campo está vacío parten de la sugerencia), RIR como botón
+    coloreado que se cicla con un toque (0 rojo ... 3-4 neutro) con una
+    leyenda "RIR ⓘ", y contador "n/m hechas" por ejercicio. La columna RE
+    sigue visible en pantallas anchas; en el celular queda el total debajo.
+    El tilde se guarda en el borrador y vuelve marcado al reabrir una sesión
+    ya registrada.
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

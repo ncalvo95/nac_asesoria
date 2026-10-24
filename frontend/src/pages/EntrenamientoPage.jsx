@@ -11,6 +11,10 @@ import ExportarExcelModal from '../components/ExportarExcelModal.jsx';
 import { useArrastreOrden } from '../hooks/useArrastreOrden.js';
 import { formatearMusculo } from '../utils/musculo.js';
 import PanelAdminEntrenamiento from '../components/PanelAdminEntrenamiento.jsx';
+import TemporizadorDescanso from '../components/TemporizadorDescanso.jsx';
+import { CampoNumerico, BotonRIR, BotonSerieHecha, EncabezadoRIR, TextoLeyendaRIR } from '../components/ControlesSerie.jsx';
+import { useTemporizadorDescanso } from '../hooks/useTemporizadorDescanso.js';
+import { explicarObjetivo } from '@shared/training/objetivoMotivo.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -1406,6 +1410,16 @@ function colorVsPactado(series, ej) {
   return { pesoColor, repsColores };
 }
 
+// Paso del boton +/- del peso. Es el incremento de fabrica del motor de
+// progresion; no se lee de la config porque aca solo es un atajo de tipeo
+// (el valor siempre se puede escribir a mano).
+const PASO_KG = 2.5;
+// Columnas de cada fila de serie: S | KG | REPS | RIR | (RE desde pantallas
+// anchas) | HECHA. Clases completas a proposito: Tailwind no detecta las que
+// se arman concatenando.
+const COLUMNAS_SERIE =
+  'grid-cols-[18px_minmax(0,1fr)_minmax(0,1fr)_32px_34px] sm:grid-cols-[18px_minmax(0,1fr)_minmax(0,1fr)_32px_28px_34px]';
+
 function colorClase(color) {
   if (color === 'verde') return 'text-success font-semibold';
   if (color === 'rojo') return 'text-danger font-semibold';
@@ -1502,7 +1516,7 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
       : (semanaActual === 2 && dia.registros_semana?.[1] && !dia.registros_semana[1].salteada
         ? dia.registros_semana[1]
         : null);
-    if (registroBase) mezclarSesionEnBase(base, registroBase);
+    if (registroBase) mezclarSesionEnBase(base, registroBase, undefined, registroBase === dia.sesion_actual);
 
     // Ejercicios con el progreso automático apagado (ver toggle "Progreso
     // automático" en el menú "⋯") al abrir un microciclo NUEVO sin nada
@@ -1541,6 +1555,16 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
   const [confirmarCambioModo, setConfirmarCambioModo] = useState(null); // 'activar' | 'desactivar' | null
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [borradorGuardado, setBorradorGuardado] = useState(false);
+  const temporizador = useTemporizadorDescanso();
+  const [leyendaRirAbierta, setLeyendaRirAbierta] = useState(false);
+  // "ejercicio:serie" de la fila a la que le faltaba peso/reps al tildarla -
+  // se resalta un instante para que se vea cual es sin mostrar un cartel.
+  const [filaIncompleta, setFilaIncompleta] = useState(null);
+  useEffect(() => {
+    if (!filaIncompleta) return undefined;
+    const id = setTimeout(() => setFilaIncompleta(null), 1800);
+    return () => clearTimeout(id);
+  }, [filaIncompleta]);
 
   // Cuantas series tenia cada ejercicio al abrir esta pantalla - se
   // captura una sola vez (el inicializador de useState no vuelve a correr
@@ -1769,6 +1793,42 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
     });
   }
 
+  // Tilde de "serie hecha": si faltaba peso o reps, los completa con la
+  // sugerencia gris (el mismo criterio que "Autocompletar"), asi con un solo
+  // toque queda cargada tal cual estaba prevista; y al tildarla arranca el
+  // descanso del ejercicio. Destildar solo desmarca (no frena un descanso en
+  // curso: se saltea desde la barra).
+  function alternarSerieHecha(ej, idx) {
+    const filas = seriesPorEjercicio[ej.id];
+    const fila = filas[idx];
+    if (fila.hecha) {
+      actualizarSerie(ej.id, idx, 'hecha', false);
+      return;
+    }
+    const peso = fila.peso !== '' ? fila.peso : (!fila.esDropset && ej.peso_actual != null ? String(ej.peso_actual) : '');
+    const reps = fila.reps !== '' ? fila.reps : (calcularSugerenciaReps(ej, filas, idx) ?? '');
+    if (peso === '' || reps === '') {
+      setFilaIncompleta(`${ej.id}:${idx}`);
+      return;
+    }
+    setSeries((prev) => {
+      const actual = prev[ej.id] ?? seriesPorEjercicio[ej.id];
+      const copia = { ...prev, [ej.id]: [...actual] };
+      copia[ej.id][idx] = { ...copia[ej.id][idx], peso, reps, hecha: true };
+      return copia;
+    });
+    const esUltimaDelDia = ej.id === ejerciciosMostrados[ejerciciosMostrados.length - 1]?.id && idx === filas.length - 1;
+    if (esUltimaDelDia) {
+      // Ultima serie del dia: no queda nada para lo que descansar.
+      temporizador.saltar();
+    } else if (!fila.esDropset && !filas[idx + 1]?.esDropset) {
+      temporizador.iniciar(
+        modoExpress ? 60 : (ej.descanso_segundos ?? 90),
+        `${ej.ejercicio_nombre} · serie ${idx + 1}`
+      );
+    }
+  }
+
   // Completa el peso de referencia (el mismo que ya se ve como placeholder
   // gris) y la baja de reps esperada en cada serie, para no tener que
   // tipearlos serie por serie. Solo llena lo que todavia esta VACIO - si ya
@@ -1984,6 +2044,11 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
                   </span>
                   <span className="text-[12px] text-text-faint whitespace-nowrap">
                     {ej.rango_reps_min}–{ej.rango_reps_max} reps · Descanso {ej.descanso_segundos}s
+                    {seriesPorEjercicio[ej.id].some((s) => s.hecha) && (
+                      <> · <span className="text-success font-semibold">
+                        {seriesPorEjercicio[ej.id].filter((s) => s.hecha).length}/{seriesPorEjercicio[ej.id].length} hechas
+                      </span></>
+                    )}
                   </span>
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
@@ -2022,42 +2087,51 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
                 <ComentarioRecordatorio comentario={ej.comentario} />
               )}
 
-              <div className="grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 text-[10px] font-semibold text-text-faint tracking-wide px-0.5">
-                <span className="text-center">S</span><span className="text-center">KG</span><span className="text-center">REPS</span><span className="text-center">RIR</span><span title="Reps efectivas" className="text-center">RE</span>
+              {ej.variante_activa_id == null && (
+                <MotivoObjetivo motivo={explicarObjetivo(ej, nota)} />
+              )}
+
+              <div className={`grid ${COLUMNAS_SERIE} gap-1.5 text-[10px] font-semibold text-text-faint tracking-wide px-0.5`}>
+                <span className="text-center">S</span><span className="text-center">KG</span><span className="text-center">REPS</span>
+                <EncabezadoRIR abierta={leyendaRirAbierta} onToggle={() => setLeyendaRirAbierta((v) => !v)} />
+                <span title="Reps efectivas" className="hidden sm:block text-center">RE</span>
+                <span className="text-center">HECHA</span>
               </div>
+              {leyendaRirAbierta && <TextoLeyendaRIR />}
               {seriesPorEjercicio[ej.id].map((s, idx) => {
                 const efectivas = repsEfectivas(s.reps, s.rir);
                 const sugerenciaReps = calcularSugerenciaReps(ej, seriesPorEjercicio[ej.id], idx);
+                const faltaDato = filaIncompleta === `${ej.id}:${idx}`;
                 return (
                   <div
                     key={idx}
-                    className={`grid grid-cols-[24px_1fr_1fr_1fr_34px] gap-2 items-center ${s.esDropset ? 'opacity-90' : ''}`}
+                    className={`grid ${COLUMNAS_SERIE} gap-1.5 items-center rounded-lg ${s.esDropset ? 'opacity-90' : ''} ${
+                      faltaDato ? 'ring-2 ring-danger' : ''
+                    }`}
                   >
                     <span className="tabular text-[11px] font-semibold text-text-muted text-center">
                       {s.esDropset ? 'DS' : idx + 1}
                     </span>
-                    <input
-                      type="number" inputMode="decimal" value={s.peso}
+                    <CampoNumerico
+                      value={s.peso}
                       placeholder={s.esDropset ? undefined : (ej.peso_actual != null ? String(ej.peso_actual) : undefined)}
-                      onChange={(e) => actualizarSerie(ej.id, idx, 'peso', e.target.value)}
-                      className={`w-full min-w-0 h-9 rounded-lg border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint ${
-                        !s.esDropset && s.peso !== '' && s.peso != null ? colorClaseInput(pesoColor) : 'border-border'
-                      }`}
+                      onChange={(v) => actualizarSerie(ej.id, idx, 'peso', v)}
+                      paso={PASO_KG}
+                      decimal
+                      etiqueta={`kg de la serie ${idx + 1}`}
+                      claseBorde={!s.esDropset && s.peso !== '' && s.peso != null ? colorClaseInput(pesoColor) : 'border-border'}
                     />
-                    <input
-                      type="number" inputMode="numeric" value={s.reps}
+                    <CampoNumerico
+                      value={s.reps}
                       placeholder={sugerenciaReps}
-                      onChange={(e) => actualizarSerie(ej.id, idx, 'reps', e.target.value)}
-                      className={`w-full min-w-0 h-9 rounded-lg border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent placeholder:text-text-faint ${
-                        !s.esDropset ? colorClaseInput(repsColores[idx]) : 'border-border'
-                      }`}
+                      onChange={(v) => actualizarSerie(ej.id, idx, 'reps', v)}
+                      paso={1}
+                      etiqueta={`reps de la serie ${idx + 1}`}
+                      claseBorde={!s.esDropset ? colorClaseInput(repsColores[idx]) : 'border-border'}
                     />
-                    <input
-                      type="number" inputMode="numeric" min={0} max={4} value={s.rir}
-                      onChange={(e) => actualizarSerie(ej.id, idx, 'rir', e.target.value)}
-                      className="w-full min-w-0 h-9 rounded-lg border border-border bg-bg px-2 tabular text-[13.5px] text-center outline-none focus:border-accent"
-                    />
-                    <span className="tabular text-[12.5px] text-text-faint text-center">{efectivas ?? '—'}</span>
+                    <BotonRIR value={s.rir} onChange={(v) => actualizarSerie(ej.id, idx, 'rir', v)} />
+                    <span title="Reps efectivas" className="hidden sm:block tabular text-[12.5px] text-text-faint text-center">{efectivas ?? '—'}</span>
+                    <BotonSerieHecha hecha={Boolean(s.hecha)} numero={s.esDropset ? 'de dropset' : idx + 1} onClick={() => alternarSerieHecha(ej, idx)} />
                   </div>
                 );
               })}
@@ -2129,7 +2203,38 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
           Borrador guardado - ya lo podés ver desde otro dispositivo.
         </p>
       )}
+      {/* Reserva el alto de la barra del descanso (fija abajo) para que no tape
+          "Registrar sesion" al llegar al final de la pantalla. */}
+      {temporizador.activo && <div aria-hidden="true" className="h-24 shrink-0" />}
+      <TemporizadorDescanso temporizador={temporizador} />
     </>
+  );
+}
+
+// Una linea con el "por que" del objetivo de hoy (ver explicarObjetivo en
+// shared/training/objetivoMotivo.js); tocarla despliega el detalle.
+function MotivoObjetivo({ motivo }) {
+  const [abierto, setAbierto] = useState(false);
+  if (!motivo) return null;
+  const CLASE = {
+    sube: 'bg-success-bg text-success',
+    baja: 'bg-warning-bg text-warning',
+    serie: 'bg-warning-bg text-warning',
+    igual: 'bg-bg border border-border text-text-muted',
+    congelado: 'bg-bg border border-border text-text-faint',
+    sin_datos: 'bg-bg border border-border text-text-faint',
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => setAbierto((v) => !v)}
+      aria-expanded={abierto}
+      className={`text-left rounded-lg px-2.5 py-1.5 text-[12px] leading-snug ${CLASE[motivo.tipo]}`}
+    >
+      <span className="font-semibold">Objetivo de hoy: {motivo.resumen}</span>
+      <span aria-hidden="true" className="ml-1 opacity-70">{abierto ? '▴' : 'ⓘ'}</span>
+      {abierto && <span className="block mt-1 font-normal">{motivo.detalle}</span>}
+    </button>
   );
 }
 
@@ -3501,7 +3606,7 @@ function construirEstadoInicial(dia) {
 // (opcional, un Set de ejercicio_asignado_id) limita el mezclado a esos
 // ejercicios puntuales - sin filtro, se aplica a todos los que aparezcan
 // en `sesion.series`.
-function mezclarSesionEnBase(base, sesion, filtroEjId) {
+function mezclarSesionEnBase(base, sesion, filtroEjId, marcarHechas = false) {
   const porEjercicio = new Map();
   for (const s of sesion.series) {
     if (filtroEjId && !filtroEjId.has(s.ejercicio_asignado_id)) continue;
@@ -3513,9 +3618,9 @@ function mezclarSesionEnBase(base, sesion, filtroEjId) {
     const reales = sets.filter((s) => !s.es_dropset).sort((a, b) => a.numero_serie - b.numero_serie);
     const dropsets = sets.filter((s) => s.es_dropset);
     const nuevasReales = base[ejId].map((row, idx) => (reales[idx]
-      ? { peso: String(reales[idx].peso), reps: String(reales[idx].reps), rir: reales[idx].rir ?? 1, esDropset: false }
+      ? { peso: String(reales[idx].peso), reps: String(reales[idx].reps), rir: reales[idx].rir ?? 1, esDropset: false, hecha: marcarHechas }
       : row));
-    base[ejId] = [...nuevasReales, ...dropsets.map((d) => ({ peso: String(d.peso), reps: String(d.reps), rir: d.rir ?? 1, esDropset: true }))];
+    base[ejId] = [...nuevasReales, ...dropsets.map((d) => ({ peso: String(d.peso), reps: String(d.reps), rir: d.rir ?? 1, esDropset: true, hecha: marcarHechas }))];
   }
 }
 

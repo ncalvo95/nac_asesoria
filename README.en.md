@@ -1391,6 +1391,28 @@ sessions → closing a microcycle → progress → Excel export):
   `PUT /nutricion/usuarios/:id/plan/distribucion` (`null` reverts to even);
   a new plan starts even.
 
+- **Training: real rest timer, explained targets and a cleaner set row**
+  (ideas from reviewing other workout projects; design patterns only, no code
+  copied):
+  - **Rest timer**: every set has a "done" tick; ticking it (empty weight/reps
+    fall back to the grey suggestion) starts a countdown with the exercise's
+    `descanso_segundos` (60s in express mode). Fixed bar with -15/+15, skip
+    and a mute toggle; at zero it beeps (3 WebAudio tones) and vibrates. It is
+    computed against the wall clock, so it survives a locked screen. Ticking
+    the last set of the day cancels it. See `hooks/useTemporizadorDescanso.js`
+    and `components/TemporizadorDescanso.jsx`.
+  - **"Today's target" with its reason**: a line under each exercise ("Subís
+    a 62.5 kg", "Mismo peso: superá 13 reps", "+1 serie"...) that expands to
+    explain, with last block's numbers, why. It reads what `cerrarMicrociclo`
+    decided; it recomputes nothing. Pure `shared/training/objetivoMotivo.js`
+    (tested) and a `@shared/training` Vite alias.
+  - **Easier set rows**: -/+ buttons on kg (step 2.5) and reps (an empty field
+    starts from the suggestion), RIR as a colour-coded tap-to-cycle button
+    (0 red ... 3-4 neutral) with an "RIR ⓘ" legend, and an "n/m done" counter
+    per exercise. The RE column stays on wide screens; on phones the total
+    line below remains. The tick is stored in the draft and comes back marked
+    when reopening an already-logged session.
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live
