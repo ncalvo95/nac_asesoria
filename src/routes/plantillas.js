@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth, requireRole } from '../middleware/auth.js';
-import { crearDesdeRutina, listar, obtener, actualizar, eliminar, aplicar, PlantillaError } from '../services/plantillaService.js';
+import { crearDesdeRutina, crearDesdeCero, listar, obtener, actualizar, eliminar, aplicar, PlantillaError } from '../services/plantillaService.js';
 
 // Plantillas de rutina: solo coach y admin (el alumno no las ve). Privadas de
 // quien las crea; el admin puede ver y aplicar las de cualquiera.
@@ -34,6 +34,12 @@ router.post('/plantillas', soCoach, conManejoDeErrores((req, res) => {
   if (!rutina) return res.status(404).json({ error: 'Rutina no encontrada.' });
   if (!puedeAccederAUsuario(req.usuario, rutina.usuario_id)) return res.status(403).json({ error: 'No autorizado.' });
   res.status(201).json(crearDesdeRutina(req.usuario.id, rutina_id, { nombre, descripcion }));
+}));
+
+// Plantilla armada a mano desde el catalogo (ver crearDesdeCero).
+router.post('/plantillas/desde-cero', soCoach, conManejoDeErrores((req, res) => {
+  const { nombre, descripcion, dias } = req.body || {};
+  res.status(201).json(crearDesdeCero(req.usuario.id, { nombre, descripcion, dias }));
 }));
 
 router.patch('/plantillas/:id', soCoach, conManejoDeErrores((req, res) => {

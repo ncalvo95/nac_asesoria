@@ -1802,6 +1802,15 @@ cierre de microciclo → progreso → export a Excel):
     que traía el ejercicio (nunca menos que el mínimo); un retesteo posterior
     sigue volviendo al mínimo.
 
+- **Plantillas desde cero**: en "Plantillas de rutina", "+ Nueva plantilla
+  desde cero" arma una plantilla eligiendo días y ejercicios del catálogo (el
+  mismo armado manual de las rutinas), sin partir de la rutina de un alumno.
+  Cada ejercicio arranca con las series mínimas, el rango de reps estándar y su
+  descanso habitual (60s si es unilateral, 90s si no), y se marca como "top" de
+  su músculo el compuesto si hay (si no, el primero elegido). `POST
+  /plantillas/desde-cero`; mismos límites que el resto (hasta 7 días, sin
+  días ni ejercicios repetidos).
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

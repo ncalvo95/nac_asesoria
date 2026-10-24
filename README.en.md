@@ -1516,6 +1516,15 @@ sessions → closing a microcycle → progress → Excel export):
     them with the minimum: it keeps the ones the exercise already had (never
     below the minimum); a later retest still goes back to the minimum.
 
+- **Templates from scratch**: in "Plantillas de rutina", "+ Nueva plantilla
+  desde cero" builds a template by picking days and catalogue exercises (the
+  same manual builder routines use), without starting from a student's
+  routine. Each exercise starts with the minimum sets, the standard rep range
+  and its usual rest (60s if unilateral, 90s otherwise), and the compound (or
+  else the first chosen) becomes its muscle's "top" exercise. `POST
+  /plantillas/desde-cero`; same limits as the rest (up to 7 days, no repeated
+  days or exercises).
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live

@@ -2,17 +2,94 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client.js';
 import { formatearMusculo } from '../utils/musculo.js';
+import ArmadoManualRutina from '../components/ArmadoManualRutina.jsx';
 
 const NOMBRE_DIA = { lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo' };
 
 // Plantillas de rutina del coach: ver, renombrar y borrar. Se crean desde la
 // rutina de un alumno ("Guardar como plantilla") y se aplican desde Rutinas.
+// Arma una plantilla eligiendo días y ejercicios del catálogo, sin partir de la
+// rutina de un alumno. Series, reps y descanso arrancan con los valores
+// estándar (se ajustan en la rutina de cada alumno).
+function NuevaPlantilla({ onCancelar, onCreada }) {
+  const [nombre, setNombre] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [dias, setDias] = useState([]);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState('');
+
+  const incompleto = !nombre.trim() || dias.length === 0 || dias.some((d) => d.ejercicios.length === 0);
+
+  async function guardar() {
+    setEnviando(true);
+    setError('');
+    try {
+      await api.post('/plantillas/desde-cero', {
+        nombre,
+        descripcion,
+        dias: dias.map((d) => ({ dia_semana: d.dia_semana, ejercicios: d.ejercicios.map((e) => e.id) })),
+      });
+      await onCreada();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="bg-surface border border-accent rounded-[14px] p-4 flex flex-col gap-3">
+      <span className="text-[14px] font-semibold">Nueva plantilla</span>
+      <label className="flex flex-col gap-1 text-[12.5px] font-semibold">
+        Nombre
+        <input
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          maxLength={80}
+          className="h-10 rounded-lg border border-border bg-bg px-3 text-[14px] font-normal outline-none focus:border-accent"
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-[12.5px] font-semibold">
+        Descripción (opcional)
+        <textarea
+          value={descripcion}
+          onChange={(e) => setDescripcion(e.target.value)}
+          maxLength={300}
+          rows={2}
+          className="rounded-lg border border-border bg-bg px-3 py-2 text-[13.5px] font-normal outline-none focus:border-accent"
+        />
+      </label>
+      <span className="text-[12.5px] font-semibold">Días y ejercicios</span>
+      <ArmadoManualRutina dias={dias} onChange={setDias} />
+      <p className="text-[11.5px] text-text-faint leading-relaxed">
+        Cada ejercicio arranca con las series mínimas, el rango de reps estándar y su descanso habitual; los pesos se sacan en la Semana 0 de cada alumno.
+        Los días de la semana son solo una referencia: al aplicarla podés elegir otros.
+      </p>
+      {error && <p className="text-[12.5px] text-danger">{error}</p>}
+      <div className="flex gap-2">
+        <button type="button" onClick={onCancelar} disabled={enviando} className="flex-1 h-10 rounded-lg border border-border bg-bg text-text-muted text-[13px] font-semibold">
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={guardar}
+          disabled={enviando || incompleto}
+          className="flex-[2] h-10 rounded-lg bg-accent text-accent-fg text-[13px] font-semibold disabled:opacity-60"
+        >
+          {enviando ? 'Guardando…' : 'Guardar plantilla'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function PlantillasPage() {
   const [plantillas, setPlantillas] = useState(null);
   const [error, setError] = useState('');
   const [abierta, setAbierta] = useState(null); // { id, detalle }
   const [editando, setEditando] = useState(null); // { id, nombre, descripcion }
   const [ocupada, setOcupada] = useState(null);
+  const [creando, setCreando] = useState(false);
 
   async function cargar() {
     try {
@@ -70,10 +147,27 @@ export default function PlantillasPage() {
       </header>
       <div className="p-4 flex flex-col gap-3 max-w-xl w-full mx-auto">
         <p className="text-[13px] text-text-muted leading-relaxed">
-          Una plantilla es la estructura de una rutina (días, ejercicios, series, reps y descanso) para aplicarla a varios alumnos. Para crear una,
-          entrá a la pantalla <strong>Rutinas</strong> de un alumno y tocá “Guardar como plantilla”; para usarla, “Usar plantilla” en ese mismo lugar.
+          Una plantilla es la estructura de una rutina (días, ejercicios, series, reps y descanso) para aplicarla a varios alumnos. La podés armar
+          desde cero acá o guardar la rutina de un alumno con “Guardar como plantilla” en su pantalla <strong>Rutinas</strong>; para usarla,
+          “Usar plantilla” en ese mismo lugar.
         </p>
         {error && <p className="text-[13px] text-danger">{error}</p>}
+
+        {creando ? (
+          <NuevaPlantilla
+            onCancelar={() => setCreando(false)}
+            onCreada={async () => { setCreando(false); await cargar(); }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setCreando(true)}
+            className="self-start h-10 px-4 rounded-[10px] bg-accent text-accent-fg text-[13.5px] font-semibold"
+          >
+            + Nueva plantilla desde cero
+          </button>
+        )}
+
         {plantillas === null && <p className="text-[13px] text-text-muted">Cargando…</p>}
         {plantillas?.length === 0 && !error && <p className="text-[13px] text-text-muted">Todavía no guardaste ninguna plantilla.</p>}
 

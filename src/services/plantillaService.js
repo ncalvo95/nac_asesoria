@@ -1,5 +1,6 @@
 import db from '../db/index.js';
 import { crearRutinaDesdePlantilla } from './rutinaService.js';
+import { obtenerConfigActiva } from './trainingConfigService.js';
 
 // Plantillas de rutina (ver plantilla_rutina en schema.sql): la estructura de
 // una rutina para aplicarla a varios alumnos.
@@ -76,6 +77,62 @@ export function crearDesdeRutina(ownerId, rutinaId, { nombre, descripcion }) {
   const { lastInsertRowid } = db.prepare(
     'INSERT INTO plantilla_rutina (owner_id, nombre, descripcion, dias_json) VALUES (?, ?, ?, ?)'
   ).run(ownerId, limpiarTexto(nombre, 80, true, 'El nombre'), limpiarTexto(descripcion, 300, false) || null, JSON.stringify(dias));
+  return obtener(ownerId, lastInsertRowid, 'admin');
+}
+
+const catalogoStmt = db.prepare(`
+  SELECT e.*, m.nombre AS musculo_nombre
+  FROM ejercicio e JOIN musculo m ON m.id = e.musculo_primario_id
+  WHERE e.id = ? AND e.activo = 1
+`);
+
+// Plantilla armada a mano desde el catalogo (sin partir de una rutina de un
+// alumno). `dias`: [{ dia_semana, ejercicios: [ejercicio_id, ...] }]. Los
+// valores arrancan como en una rutina manual nueva - series minimas, rango de
+// reps estandar y descanso de 90s (60s si es unilateral); se ajustan despues en
+// la rutina de cada alumno.
+export function crearDesdeCero(ownerId, { nombre, descripcion, dias }) {
+  if (!Array.isArray(dias) || dias.length < 1 || dias.length > 7) throw new PlantillaError('La plantilla necesita entre 1 y 7 días.');
+  const config = obtenerConfigActiva().config;
+  const vistos = new Set();
+  const estructura = dias.map((dia) => {
+    if (!dia || !DIAS_VALIDOS.includes(dia.dia_semana)) throw new PlantillaError(`Día inválido: ${dia?.dia_semana}.`);
+    if (vistos.has(dia.dia_semana)) throw new PlantillaError(`El ${dia.dia_semana} está repetido.`);
+    vistos.add(dia.dia_semana);
+    if (!Array.isArray(dia.ejercicios) || dia.ejercicios.length === 0) throw new PlantillaError(`El ${dia.dia_semana} necesita al menos un ejercicio.`);
+    if (new Set(dia.ejercicios).size !== dia.ejercicios.length) throw new PlantillaError(`El ${dia.dia_semana} tiene un ejercicio repetido.`);
+
+    const catalogos = dia.ejercicios.map((id) => {
+      const c = catalogoStmt.get(Number(id));
+      if (!c) throw new PlantillaError(`Ejercicio ${id} no encontrado en el catálogo.`);
+      return c;
+    });
+    // El "top" de cada musculo (el que suma la serie extra al estancarse): el
+    // compuesto si hay, si no el primero elegido - igual que una rutina manual.
+    const topPorMusculo = new Map();
+    for (const c of catalogos) {
+      const actual = topPorMusculo.get(c.musculo_nombre);
+      if (!actual || (c.tipo === 'compuesto' && actual.tipo !== 'compuesto')) topPorMusculo.set(c.musculo_nombre, c);
+    }
+    return {
+      dia_semana: dia.dia_semana,
+      ejercicios: catalogos.map((c) => ({
+        ejercicio_id: c.id,
+        ejercicio_nombre: c.nombre,
+        musculo_nombre: c.musculo_nombre,
+        musculo_objetivo_id: c.musculo_primario_id,
+        es_top_de_musculo: topPorMusculo.get(c.musculo_nombre) === c ? 1 : 0,
+        series: config.seriesMinimo,
+        rango_reps_min: config.rangoReps.default.min,
+        rango_reps_max: config.rangoReps.default.max,
+        descanso_segundos: c.es_unilateral || /unilateral/i.test(c.nombre) ? 60 : 90,
+        musculos_secundarios: [],
+      })),
+    };
+  });
+  const { lastInsertRowid } = db.prepare(
+    'INSERT INTO plantilla_rutina (owner_id, nombre, descripcion, dias_json) VALUES (?, ?, ?, ?)'
+  ).run(ownerId, limpiarTexto(nombre, 80, true, 'El nombre'), limpiarTexto(descripcion, 300, false) || null, JSON.stringify(estructura));
   return obtener(ownerId, lastInsertRowid, 'admin');
 }
 
