@@ -340,6 +340,24 @@ CREATE TABLE IF NOT EXISTS progreso_ejercicio_microciclo (
   UNIQUE (ejercicio_asignado_id, microciclo_id)
 );
 
+-- Plantillas de rutina: la ESTRUCTURA de una rutina (dias, ejercicios en orden,
+-- series, rango de reps, descanso, musculos secundarios) guardada para
+-- aplicarla a varios alumnos. No guarda pesos, reps de referencia, historial ni
+-- progreso: eso es de cada persona. Privadas de quien las crea (coach o admin);
+-- aplicarla crea una rutina nueva independiente (editar la plantilla despues no
+-- toca rutinas ya creadas).
+CREATE TABLE IF NOT EXISTS plantilla_rutina (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  descripcion TEXT,
+  dias_json TEXT NOT NULL,
+  creado_en TEXT NOT NULL DEFAULT (datetime('now')),
+  actualizado_en TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_plantilla_rutina_owner ON plantilla_rutina(owner_id);
+
 -- Pausas del progreso de una rutina (vacaciones, viaje, lesion...). Mientras hay
 -- una abierta (hasta IS NULL) no se puede anotar ni cerrar nada, y los dias
 -- pausados NO cuentan para las 2 semanas de un bloque (ver rangosDeBloque en

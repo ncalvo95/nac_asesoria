@@ -1495,6 +1495,27 @@ sessions → closing a microcycle → progress → Excel export):
     after a mid-week pause a label can show a paused day (labels only: what
     gets logged uses the real date).
 
+- **Routine templates (coach)**: the structure of a routine (days, exercises
+  in order, sets, rep range, rest and secondary muscles; **no weights or
+  history**) saved to apply to several students.
+  - **Create**: in Routines, "Guardar como plantilla" on any student's routine
+    (or your own). **Use**: in a student's Routines, "Usar plantilla" → pick the
+    template and which weekday each template day goes on (they line up on the
+    days the student declared when the count matches; no repeated days). The
+    active routine becomes finished and the new one starts in test Week 0.
+    Exercises no longer in the catalogue are skipped with a notice; if a muscle
+    loses its "top" exercise, its first one becomes it.
+  - **Manage**: "Plantillas de rutina" screen (coach home): view details, edit
+    name/description and delete. They are **private** to their creator (admin
+    sees and applies anyone's); students don't see them. Applying a template
+    creates an independent routine: editing or deleting the template later
+    doesn't touch routines already created.
+  - Table `plantilla_rutina` (structure as JSON), `GET/POST /plantillas`,
+    `GET/PATCH/DELETE /plantillas/:id` and `POST /usuarios/:id/rutina/plantilla`.
+    So the template's sets survive, the initial Week 0 no longer overwrites
+    them with the minimum: it keeps the ones the exercise already had (never
+    below the minimum); a later retest still goes back to the minimum.
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live

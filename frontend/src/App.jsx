@@ -14,6 +14,7 @@ import EntrenamientoPage from './pages/EntrenamientoPage.jsx';
 import RutinasPage from './pages/RutinasPage.jsx';
 import ProgresoPage from './pages/ProgresoPage.jsx';
 import CoachPage from './pages/CoachPage.jsx';
+import PlantillasPage from './pages/PlantillasPage.jsx';
 import CatalogoPage from './pages/CatalogoPage.jsx';
 import ReportesPage from './pages/ReportesPage.jsx';
 import PreferenciasPage from './pages/PreferenciasPage.jsx';
@@ -42,6 +43,7 @@ export default function App() {
               </Route>
               <Route path="/coach" element={<ProtectedRoute><CoachPage /></ProtectedRoute>} />
               <Route path="/catalogo" element={<ProtectedRoute><CatalogoPage /></ProtectedRoute>} />
+              <Route path="/coach/plantillas" element={<ProtectedRoute><PlantillasPage /></ProtectedRoute>} />
               <Route path="/coach/clientes/:usuarioId" element={<ProtectedRoute><CoachClientLayout /></ProtectedRoute>}>
                 <Route path="entrenamiento" element={<EntrenamientoPage />} />
                 <Route path="rutinas" element={<RutinasPage />} />

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api } from '../api/client.js';
 import ParametrosProgresion from '../components/ParametrosProgresion.jsx';
 import AccionesBloque from '../components/AccionesBloque.jsx';
+import { GuardarPlantillaModal, AplicarPlantillaModal } from '../components/PlantillasModales.jsx';
 
 function formatearFecha(fechaIso) {
   const f = new Date(`${fechaIso}T00:00:00`);
@@ -30,6 +31,10 @@ export default function RutinasPage() {
   const [aBorrar, setABorrar] = useState(null); // rutina completa o null
   const [editandoId, setEditandoId] = useState(null);
   const [nombreDraft, setNombreDraft] = useState('');
+  const [aGuardarPlantilla, setAGuardarPlantilla] = useState(null); // rutina o null
+  const [aplicandoPlantilla, setAplicandoPlantilla] = useState(false);
+  const [aviso, setAviso] = useState('');
+  const esCoach = sesion.rol === 'coach' || sesion.rol === 'admin';
 
   const linkNuevaRutina = usuarioIdParam ? `/coach/clientes/${usuarioIdParam}/onboarding` : '/onboarding';
   const linkEntrenamiento = usuarioIdParam ? `/coach/clientes/${usuarioIdParam}/entrenamiento` : '/entrenamiento';
@@ -102,14 +107,27 @@ export default function RutinasPage() {
             Solo una rutina puede estar activa a la vez. Las anteriores quedan acá - podés retomar una vieja o borrarla.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate(linkNuevaRutina)}
-          className="flex-none text-[12.5px] font-semibold text-accent border border-accent rounded-lg px-3 py-1.5 whitespace-nowrap"
-        >
-          + Nueva rutina
-        </button>
+        <div className="flex-none flex flex-col gap-1.5 items-end">
+          <button
+            type="button"
+            onClick={() => navigate(linkNuevaRutina)}
+            className="text-[12.5px] font-semibold text-accent border border-accent rounded-lg px-3 py-1.5 whitespace-nowrap"
+          >
+            + Nueva rutina
+          </button>
+          {esCoach && (
+            <button
+              type="button"
+              onClick={() => { setAviso(''); setAplicandoPlantilla(true); }}
+              className="text-[12.5px] font-semibold text-text-muted border border-border rounded-lg px-3 py-1.5 whitespace-nowrap"
+            >
+              Usar plantilla
+            </button>
+          )}
+        </div>
       </div>
+
+      {aviso && <p className="text-[13px] text-success bg-success-bg rounded-lg px-3 py-2">{aviso}</p>}
 
       {error && <p className="text-[13px] text-danger px-1">{error}</p>}
 
@@ -205,6 +223,15 @@ export default function RutinasPage() {
                     {ocupada === r.id ? 'Reactivando…' : 'Reactivar'}
                   </button>
                 )}
+                {esCoach && (
+                  <button
+                    type="button"
+                    onClick={() => { setAviso(''); setAGuardarPlantilla(r); }}
+                    className="flex-1 h-9 rounded-lg border border-border bg-bg text-text-muted text-[12.5px] font-semibold"
+                  >
+                    Guardar como plantilla
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setABorrar(r)}
@@ -218,6 +245,29 @@ export default function RutinasPage() {
           );
         })}
       </div>
+
+      {aGuardarPlantilla && (
+        <GuardarPlantillaModal
+          rutina={aGuardarPlantilla}
+          onCerrar={() => setAGuardarPlantilla(null)}
+          onGuardada={(p) => { setAGuardarPlantilla(null); setAviso(`Plantilla "${p.nombre}" guardada. La encontrás en Plantillas de rutina (inicio de coach).`); }}
+        />
+      )}
+
+      {aplicandoPlantilla && (
+        <AplicarPlantillaModal
+          usuarioId={usuario.id}
+          hayRutinaActiva={rutinas.some((r) => r.estado === 'activa')}
+          onCerrar={() => setAplicandoPlantilla(false)}
+          onAplicada={async (res) => {
+            setAplicandoPlantilla(false);
+            await cargar();
+            setAviso(res.omitidos?.length
+              ? `Rutina creada. Se omitieron ejercicios que ya no están en el catálogo: ${res.omitidos.join(', ')}.`
+              : 'Rutina creada desde la plantilla. Arranca en Semana 0 de testeo.');
+          }}
+        />
+      )}
 
       {aBorrar && (
         <div

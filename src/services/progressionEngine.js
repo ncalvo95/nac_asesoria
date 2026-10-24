@@ -128,6 +128,17 @@ const diaDeEjercicioAsignado = db.prepare(`
 // asignados: guarda el registro real (2 series al mismo peso) y setea el
 // piso del microciclo siguiente (peso = peso testeado, piso_reps = la mas
 // alta de las 2 series).
+const seriesActualesStmt = db.prepare('SELECT series_actuales FROM ejercicio_asignado WHERE id = ?');
+
+// Series con las que arranca el bloque 1 tras la Semana 0 inicial: las que ya
+// traia el ejercicio (una rutina desde plantilla trae las suyas), nunca menos
+// que el minimo. En un retesteo posterior (numero > 0) se vuelve al minimo como
+// siempre.
+function seriesTrasSemana0(microcicloTesteo, ejercicioAsignadoId, config) {
+  if (microcicloTesteo.numero !== 0) return config.seriesMinimo;
+  return Math.max(config.seriesMinimo, seriesActualesStmt.get(ejercicioAsignadoId)?.series_actuales ?? 0);
+}
+
 export const registrarSemana0 = db.transaction((rutinaId, usuarioId, resultados) => {
   asegurarNoPausada(rutinaId);
   const config = resolverConfigEntrenamiento(usuarioId);
@@ -155,10 +166,11 @@ export const registrarSemana0 = db.transaction((rutinaId, usuarioId, resultados)
     // series del testeo (no siempre la serie 2 - a veces la persona elige
     // mal el peso y la serie 1 le sale mejor que la 2, o al reves).
     const pisoReferencia = Math.max(reps_serie1, reps_serie2);
+    const seriesTrasTesteo = seriesTrasSemana0(microcicloTesteo, ejercicio_asignado_id, config);
     upsertProgresoEjercicio.run({
-      ejercicio_asignado_id, microciclo_id: siguiente.id, peso_prescrito: peso, piso_reps: pisoReferencia, series_prescritas: config.seriesMinimo,
+      ejercicio_asignado_id, microciclo_id: siguiente.id, peso_prescrito: peso, piso_reps: pisoReferencia, series_prescritas: seriesTrasTesteo,
     });
-    updateEjercicioAsignadoEstado.run(peso, config.seriesMinimo, ejercicio_asignado_id);
+    updateEjercicioAsignadoEstado.run(peso, seriesTrasTesteo, ejercicio_asignado_id);
   }
 
   cerrarMicrocicloRow.run(microcicloTesteo.id);
@@ -285,10 +297,11 @@ export const saltearTesteo = db.transaction((rutinaId) => {
 
   const ejercicios = getEjerciciosDeRutina.all(rutinaId);
   for (const ej of ejercicios) {
+    const series = seriesTrasSemana0(microcicloTesteo, ej.id, config);
     upsertProgresoEjercicio.run({
-      ejercicio_asignado_id: ej.id, microciclo_id: siguiente.id, peso_prescrito: 0, piso_reps: 0, series_prescritas: config.seriesMinimo,
+      ejercicio_asignado_id: ej.id, microciclo_id: siguiente.id, peso_prescrito: 0, piso_reps: 0, series_prescritas: series,
     });
-    db.prepare('UPDATE ejercicio_asignado SET peso_actual = NULL, series_actuales = ? WHERE id = ?').run(config.seriesMinimo, ej.id);
+    db.prepare('UPDATE ejercicio_asignado SET peso_actual = NULL, series_actuales = ? WHERE id = ?').run(series, ej.id);
   }
 
   cerrarMicrocicloRow.run(microcicloTesteo.id);

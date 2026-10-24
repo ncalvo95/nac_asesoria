@@ -48,6 +48,19 @@ const insertEjercicioAsignado = db.prepare(`
     @series_actuales, NULL, @rango_reps_min, @rango_reps_max, ${DESCANSO_SEGUNDOS_SQL}
   )
 `);
+// Variante de insertEjercicioAsignado para una plantilla: el descanso y los
+// musculos secundarios vienen de la plantilla en vez de calcularse.
+const insertEjercicioDePlantilla = db.prepare(`
+  INSERT INTO ejercicio_asignado (
+    dia_rutina_id, ejercicio_id, orden, es_top_de_musculo, musculo_objetivo_id,
+    series_actuales, peso_actual, rango_reps_min, rango_reps_max, descanso_segundos, musculos_secundarios_json
+  ) VALUES (
+    @dia_rutina_id, @ejercicio_id, @orden, @es_top_de_musculo, @musculo_objetivo_id,
+    @series_actuales, NULL, @rango_reps_min, @rango_reps_max, @descanso_segundos, @musculos_secundarios_json
+  )
+`);
+const existeMusculo = db.prepare('SELECT 1 FROM musculo WHERE id = ?');
+
 // Siempre numero=0, la semana de testeo inicial de una rutina recien creada
 // (las 3 formas de armar rutina la llaman igual) - tipo='testeo' fijo.
 const insertMicrociclo = db.prepare(`
@@ -200,6 +213,67 @@ export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEje
 // filtros son justamente lo que esta modalidad deja en manos del usuario.
 // dias: [{ dia_semana, ejercicios: [ejercicio_id, ...] }, ...] ya validado
 // por la ruta (2-6 dias, ids validos, sin duplicados dentro del dia).
+// Crea una rutina nueva (la anterior pasa a finalizada) con la estructura de una
+// plantilla: dias [{ dia_semana, ejercicios: [{ ejercicio_id, musculo_objetivo_id,
+// es_top_de_musculo, series, rango_reps_min, rango_reps_max, descanso_segundos,
+// musculos_secundarios }] }], con los dias de la semana ya mapeados. Sin pesos:
+// la rutina arranca en Semana 0 de testeo como cualquier rutina nueva. Los
+// ejercicios que ya no estan en el catalogo se omiten y se devuelven en
+// `omitidos`; un dia que se queda sin ejercicios no se crea.
+export const crearRutinaDesdePlantilla = db.transaction((usuarioId, { nombre, dias }) => {
+  const omitidos = [];
+  const diasValidos = [];
+  for (const dia of dias) {
+    const ejercicios = [];
+    for (const e of dia.ejercicios) {
+      const catalogo = getEjercicioCatalogo.get(e.ejercicio_id);
+      if (!catalogo || !catalogo.activo) {
+        omitidos.push(e.ejercicio_nombre || `Ejercicio ${e.ejercicio_id}`);
+        continue;
+      }
+      ejercicios.push({ ...e, catalogo });
+    }
+    if (ejercicios.length > 0) diasValidos.push({ dia_semana: dia.dia_semana, ejercicios });
+  }
+  if (diasValidos.length === 0) throw new Error('La plantilla ya no tiene ejercicios disponibles en el catálogo.');
+
+  desactivarRutinasPrevias.run(usuarioId);
+  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: `Plantilla: ${nombre}` });
+
+  diasValidos.forEach((dia, idx) => {
+    const musculos = [...new Set(dia.ejercicios.map((e) => e.catalogo.musculo_nombre))];
+    const { lastInsertRowid: diaRutinaId } = insertDiaRutina.run({
+      rutina_id: rutinaId, numero_dia: idx + 1, dia_semana: dia.dia_semana, musculos_trabajados_json: JSON.stringify(musculos),
+    });
+
+    // Si al omitir ejercicios un musculo se quedo sin su "top" (el que suma la
+    // serie extra al estancarse), el primero de ese musculo pasa a serlo.
+    const musculoDe = (e) => (existeMusculo.get(e.musculo_objetivo_id) ? e.musculo_objetivo_id : e.catalogo.musculo_primario_id);
+    const hayTop = new Set(dia.ejercicios.filter((e) => e.es_top_de_musculo).map(musculoDe));
+    const ya = new Set();
+    dia.ejercicios.forEach((e, i) => {
+      const musculoId = musculoDe(e);
+      const esTop = e.es_top_de_musculo || (!hayTop.has(musculoId) && !ya.has(musculoId));
+      if (esTop) ya.add(musculoId);
+      insertEjercicioDePlantilla.run({
+        dia_rutina_id: diaRutinaId,
+        ejercicio_id: e.catalogo.id,
+        orden: i + 1,
+        es_top_de_musculo: esTop ? 1 : 0,
+        musculo_objetivo_id: musculoId,
+        series_actuales: Math.max(1, Number(e.series) || 2),
+        rango_reps_min: e.rango_reps_min,
+        rango_reps_max: e.rango_reps_max,
+        descanso_segundos: e.descanso_segundos ?? 90,
+        musculos_secundarios_json: JSON.stringify(Array.isArray(e.musculos_secundarios) ? e.musculos_secundarios : []),
+      });
+    });
+  });
+
+  insertMicrociclo.run(rutinaId, 0);
+  return { rutina: obtenerRutinaActiva(usuarioId), omitidos };
+});
+
 export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
   const objetivo = getObjetivo.get(usuarioId);
   if (!objetivo) {

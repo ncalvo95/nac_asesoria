@@ -98,6 +98,17 @@ export default function CoachPage() {
           <span className="flex-none text-[13px] font-semibold text-accent whitespace-nowrap">Ir →</span>
         </Link>
 
+        <Link
+          to="/coach/plantillas"
+          className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between gap-3 text-left"
+        >
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[14px] font-semibold">Plantillas de rutina</span>
+            <span className="text-[12px] text-text-muted">Guardá una rutina como plantilla y aplicala a tus alumnos.</span>
+          </div>
+          <span className="flex-none text-[13px] font-semibold text-accent whitespace-nowrap">Ver →</span>
+        </Link>
+
         {solicitudes?.length > 0 && (
           <section className="flex flex-col gap-2">
             <h2 className="text-[13px] font-bold text-text-muted uppercase tracking-wide">

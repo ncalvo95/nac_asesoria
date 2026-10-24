@@ -1779,6 +1779,29 @@ cierre de microciclo → progreso → export a Excel):
     mostrar un día de la pausa (solo es la etiqueta, lo que se anota usa la
     fecha real).
 
+- **Plantillas de rutina (coach)**: la estructura de una rutina (días,
+  ejercicios en orden, series, rango de reps, descanso y músculos secundarios;
+  **sin pesos ni historial**) guardada para aplicarla a varios alumnos.
+  - **Crear**: en Rutinas, "Guardar como plantilla" en la rutina de cualquier
+    alumno (o la propia). **Usar**: en Rutinas de un alumno, "Usar plantilla" →
+    se elige la plantilla y en qué día de la semana va cada día (se acomodan
+    solos sobre los días que el alumno declaró si coinciden en cantidad; no se
+    puede repetir un día). La rutina activa pasa a finalizada y la nueva arranca
+    en Semana 0 de testeo. Los ejercicios que ya no están en el catálogo se
+    omiten y se avisa; si un músculo pierde su ejercicio "top", el primero de
+    ese músculo pasa a serlo.
+  - **Gestionar**: pantalla "Plantillas de rutina" (inicio de coach): ver el
+    detalle, editar nombre/descripción y borrar. Son **privadas** de quien las
+    crea (el admin ve y aplica las de cualquiera); el alumno no las ve.
+    Aplicar una plantilla crea una rutina independiente: editar o borrar la
+    plantilla después no toca rutinas ya creadas.
+  - Tabla `plantilla_rutina` (estructura en JSON), `GET/POST /plantillas`,
+    `GET/PATCH/DELETE /plantillas/:id` y
+    `POST /usuarios/:id/rutina/plantilla`. Para que las series de la plantilla
+    sobrevivan, la Semana 0 inicial ya no las pisa con el mínimo: conserva las
+    que traía el ejercicio (nunca menos que el mínimo); un retesteo posterior
+    sigue volviendo al mínimo.
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista
