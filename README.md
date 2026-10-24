@@ -1711,6 +1711,22 @@ cierre de microciclo → progreso → export a Excel):
     totales, semanas con entreno y racha de semanas seguidas
     (`GET /usuarios/:id/actividad`).
 
+- **Refactor de `EntrenamientoPage.jsx` (sin cambios de comportamiento)**: el
+  archivo de ~3.700 líneas se partió en módulos. `pages/EntrenamientoPage.jsx`
+  quedó con solo el componente de página (~75 líneas); las funciones puras
+  (borrador local, fechas, reps efectivas, coloreado, armado de series,
+  sugerencia de reps) están en `utils/entrenamiento.js` y cada componente en
+  `components/entrenamiento/` (`Semana0Form`, `DiaEntrenamiento`,
+  `RegistroDia`, `ResumenMuscular`, `EjercicioAcciones`, `VariantePanel`,
+  `AjustesEjercicio`, `EdicionEjercicio`, `Comentarios`, `PasosDiariosBoton`,
+  `SustituirEjercicio`, `FaseNutricional`, `AgregarEjercicioDia`,
+  `QuitarEjercicioBoton`, `NumberField`, `ExportarExcel`). El código se movió
+  tal cual (verificado línea por línea contra el original) y las dependencias
+  no tienen ciclos. **Las entradas anteriores de este changelog que dicen "en
+  `EntrenamientoPage.jsx`" se refieren al código que hoy vive en esos
+  módulos** (por ejemplo `colorVsPactadoLive` o `aplicarBorradorEnBase` en
+  `utils/entrenamiento.js`, `ResumenMuscularSesion` en `ResumenMuscular.jsx`).
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

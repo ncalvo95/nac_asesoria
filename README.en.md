@@ -1429,6 +1429,22 @@ sessions → closing a microcycle → progress → Excel export):
     levels by that day's sets, plus total sessions, weeks trained and week
     streak (`GET /usuarios/:id/actividad`).
 
+- **`EntrenamientoPage.jsx` refactor (no behaviour change)**: the ~3,700-line
+  file was split into modules. `pages/EntrenamientoPage.jsx` now holds only
+  the page component (~75 lines); pure helpers (local draft, dates, effective
+  reps, colouring, series building, rep suggestion) live in
+  `utils/entrenamiento.js` and each component in `components/entrenamiento/`
+  (`Semana0Form`, `DiaEntrenamiento`, `RegistroDia`, `ResumenMuscular`,
+  `EjercicioAcciones`, `VariantePanel`, `AjustesEjercicio`,
+  `EdicionEjercicio`, `Comentarios`, `PasosDiariosBoton`,
+  `SustituirEjercicio`, `FaseNutricional`, `AgregarEjercicioDia`,
+  `QuitarEjercicioBoton`, `NumberField`, `ExportarExcel`). Code was moved
+  verbatim (checked line by line against the original) and the dependency
+  graph has no cycles. **Earlier changelog entries saying "in
+  `EntrenamientoPage.jsx`" refer to the code that now lives in those
+  modules** (e.g. `colorVsPactadoLive` or `aplicarBorradorEnBase` in
+  `utils/entrenamiento.js`, `ResumenMuscularSesion` in `ResumenMuscular.jsx`).
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live
