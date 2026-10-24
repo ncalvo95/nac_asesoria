@@ -82,6 +82,29 @@ export function EjercicioAcciones({ ejercicio, usuario, actorRol, onCambiado, di
     }
   }
 
+  // Retesteo de este ejercicio ("resetear pesos y reps"): lo deja en blanco para
+  // medirlo de nuevo sin que cuente como progreso (ver retesteoService.js).
+  const [cambiandoRetesteo, setCambiandoRetesteo] = useState(false);
+  async function alternarRetesteo() {
+    setMenuAbierto(false);
+    const reseteando = !ejercicio.retesteo;
+    const aviso = reseteando
+      ? `Esto deja "${ejercicio.ejercicio_nombre}" en blanco para volver a medirlo. Lo que cargues desde ahora es tu nueva línea base: este bloque NO cuenta como progreso de este ejercicio, y al cerrarlo vas a ver si tu rendimiento subió o bajó respecto de antes. ¿Confirmás?`
+      : `Se cancela el retesteo y "${ejercicio.ejercicio_nombre}" vuelve al peso y objetivo de antes. ¿Confirmás?`;
+    if (!window.confirm(aviso)) return;
+    setCambiandoRetesteo(true);
+    setError('');
+    try {
+      if (reseteando) await api.post(`/ejercicios/${ejercicio.id}/retesteo`);
+      else await api.del(`/ejercicios/${ejercicio.id}/retesteo`);
+      onCambiado();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCambiandoRetesteo(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-2 pt-1 border-t border-border -mx-4 px-4">
       <div className="flex items-center justify-between gap-2 pt-2">
@@ -186,6 +209,17 @@ export function EjercicioAcciones({ ejercicio, usuario, actorRol, onCambiado, di
               >
                 {ejercicio.progreso_automatico ? 'Apagar progreso automático' : 'Prender progreso automático'}
               </button>
+              {ejercicio.variante_activa_id == null && (
+                <button
+                  type="button"
+                  onClick={alternarRetesteo}
+                  disabled={cambiandoRetesteo}
+                  title="Deja el ejercicio en blanco para volver a medirlo; ese bloque no cuenta como progreso y se muestra como subida o bajada de rendimiento"
+                  className="text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg disabled:opacity-60"
+                >
+                  {ejercicio.retesteo ? 'Cancelar retesteo' : 'Resetear pesos y reps'}
+                </button>
+              )}
               {diasHermanos?.length > 0 && (
                 <button
                   type="button"

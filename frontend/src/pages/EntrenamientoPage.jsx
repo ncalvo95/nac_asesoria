@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import PanelAdminEntrenamiento from '../components/PanelAdminEntrenamiento.jsx';
 import { Semana0Form } from '../components/entrenamiento/Semana0Form.jsx';
 import { DiaEntrenamiento } from '../components/entrenamiento/DiaEntrenamiento.jsx';
+import { BannerPausa, OfertaAlVolver } from '../components/PausaProgreso.jsx';
 
 export default function EntrenamientoPage() {
   const { usuario: sesion } = useAuth();
@@ -58,11 +59,28 @@ export default function EntrenamientoPage() {
     return <div className="p-6 text-sm text-text-muted">No hay un microciclo activo. Avisale a tu coach.</div>;
   }
 
+  // En pausa no se anota nada: solo el cartel para reanudar (lo ya tipeado
+  // queda guardado como borrador en el dispositivo).
+  if (rutina.pausa) {
+    return (
+      <div className="p-4 flex flex-col gap-3">
+        <BannerPausa rutina={rutina} onCambio={cargar} />
+      </div>
+    );
+  }
+
   if (microcicloActual.tipo === 'testeo') {
-    return <Semana0Form rutina={rutina} usuario={usuario} microciclo={microcicloActual} onListo={cargar} todosMusculos={todosMusculos} />;
+    return (
+      <>
+        <OfertaAlVolver rutina={rutina} onCambio={cargar} />
+        <Semana0Form rutina={rutina} usuario={usuario} microciclo={microcicloActual} onListo={cargar} todosMusculos={todosMusculos} />
+      </>
+    );
   }
 
   return (
+    <>
+    <OfertaAlVolver rutina={rutina} onCambio={cargar} />
     <DiaEntrenamiento
       rutina={rutina}
       microciclo={microcicloActual}
@@ -73,5 +91,6 @@ export default function EntrenamientoPage() {
       onRutinaCambiada={recargarSilencioso}
       todosMusculos={todosMusculos}
     />
+    </>
   );
 }

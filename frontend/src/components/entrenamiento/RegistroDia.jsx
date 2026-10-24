@@ -59,7 +59,12 @@ export function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGu
       : (semanaActual === 2 && dia.registros_semana?.[1] && !dia.registros_semana[1].salteada
         ? dia.registros_semana[1]
         : null);
-    if (registroBase) mezclarSesionEnBase(base, registroBase, undefined, registroBase === dia.sesion_actual);
+    // Un ejercicio en retesteo no hereda lo cargado ANTES de resetearlo: solo
+    // sesiones posteriores al reseteo (ver retesteo_ejercicio.sesion_desde_id).
+    const sinHerencia = (sesion) => new Set(
+      dia.ejercicios.filter((ej) => !ej.retesteo || sesion.id > ej.retesteo.sesion_desde_id).map((ej) => ej.id)
+    );
+    if (registroBase) mezclarSesionEnBase(base, registroBase, sinHerencia(registroBase), registroBase === dia.sesion_actual);
 
     // Ejercicios con el progreso automático apagado (ver toggle "Progreso
     // automático" en el menú "⋯") al abrir un microciclo NUEVO sin nada
@@ -73,7 +78,8 @@ export function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGu
     // microciclo. dia.ultima_sesion_microciclo_anterior ya viene filtrada a
     // la última semana real (no salteada) del bloque anterior.
     if (!registroBase && dia.ultima_sesion_microciclo_anterior) {
-      const ejerciciosCongelados = new Set(dia.ejercicios.filter((ej) => !ej.progreso_automatico).map((ej) => ej.id));
+      const permitidos = sinHerencia(dia.ultima_sesion_microciclo_anterior);
+      const ejerciciosCongelados = new Set(dia.ejercicios.filter((ej) => !ej.progreso_automatico && permitidos.has(ej.id)).map((ej) => ej.id));
       if (ejerciciosCongelados.size > 0) {
         mezclarSesionEnBase(base, dia.ultima_sesion_microciclo_anterior, ejerciciosCongelados);
       }
@@ -618,6 +624,14 @@ export function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGu
                       Variante
                     </span>
                   )}
+                  {ej.retesteo && (
+                    <span
+                      title="Este ejercicio está en retesteo: lo que cargues es su nueva línea base y este bloque no cuenta como progreso"
+                      className="text-[10.5px] font-semibold text-warning bg-warning-bg rounded-md px-2 py-0.5 whitespace-nowrap"
+                    >
+                      Retesteo
+                    </span>
+                  )}
                   {!ej.progreso_automatico && (
                     <span
                       title="El peso, el techo de reps y las series de este ejercicio no se ajustan solos al cerrar el microciclo"
@@ -789,6 +803,7 @@ export function MotivoObjetivo({ motivo }) {
     baja: 'bg-warning-bg text-warning',
     serie: 'bg-warning-bg text-warning',
     igual: 'bg-bg border border-border text-text-muted',
+    retesteo: 'bg-warning-bg text-warning',
     congelado: 'bg-bg border border-border text-text-faint',
     sin_datos: 'bg-bg border border-border text-text-faint',
   };

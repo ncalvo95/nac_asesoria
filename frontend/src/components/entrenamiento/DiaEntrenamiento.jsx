@@ -4,7 +4,7 @@ import QuitarDiaModal from '../QuitarDiaModal.jsx';
 import CambiarDiaModal from '../CambiarDiaModal.jsx';
 import MoverCopiarDiaModal from '../MoverCopiarDiaModal.jsx';
 import EditarSemana0Modal from '../EditarSemana0Modal.jsx';
-import { CAPITALIZAR, leerBorrador, guardarBorrador, duracionEstimadaDia, ORDEN_DIAS, elegirDiaInicial, fechaParaDia, formatearFechaCorta, sumarDiasFecha, hoyISO } from '../../utils/entrenamiento.js';
+import { CAPITALIZAR, leerBorrador, guardarBorrador, duracionEstimadaDia, ORDEN_DIAS, elegirDiaInicial, fechaParaDia, formatearFechaCorta, inicioDeSemana, hoyISO } from '../../utils/entrenamiento.js';
 import { ResumenSemanaPasada } from './ResumenMuscular.jsx';
 import { RegistroDia } from './RegistroDia.jsx';
 import { ComentarioRecordatorio, ComentarioBoton } from './Comentarios.jsx';
@@ -65,7 +65,7 @@ export function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progre
     });
   }
   const fechaVista = rutina.semana_actual
-    ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), descansoDiaSemana ?? dia.dia_semana)
+    ? fechaParaDia(inicioDeSemana(rutina, microciclo, semanaVista), descansoDiaSemana ?? dia.dia_semana)
     : null;
   // Fecha a la que van los pasos que se carguen desde esta pantalla - la del
   // dia que se esta viendo (entrenamiento o descanso), nunca una fecha
@@ -128,7 +128,7 @@ export function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progre
             {diasSemanaCompletos.map((d) => {
               if (d.esDescanso) {
                 const fechaTab = rutina.semana_actual
-                  ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), d.dia_semana)
+                  ? fechaParaDia(inicioDeSemana(rutina, microciclo, semanaVista), d.dia_semana)
                   : null;
                 return (
                   <button
@@ -146,7 +146,7 @@ export function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progre
               }
               const registroTab = d.registros_semana ? d.registros_semana[semanaVista] : d.sesion_actual;
               const fechaTab = rutina.semana_actual
-                ? fechaParaDia(sumarDiasFecha(microciclo.fecha_inicio, semanaVista === 2 ? 7 : 0), d.dia_semana)
+                ? fechaParaDia(inicioDeSemana(rutina, microciclo, semanaVista), d.dia_semana)
                 : null;
               return (
               <button

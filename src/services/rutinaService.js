@@ -6,6 +6,8 @@ import {
 import { aplicarDisponibilidad } from './perfilService.js';
 import { repsEfectivas } from './progressionEngine.js';
 import { obtenerConfigActiva, resolverConfigEntrenamiento } from './trainingConfigService.js';
+import { rangosDeBloqueDeRutina, estadoPausa } from './pausaService.js';
+import { retesteosAbiertosDeRutina } from './retesteoService.js';
 
 const getObjetivo = db.prepare('SELECT * FROM objetivo WHERE usuario_id = ?');
 const getDisponibilidad = db.prepare('SELECT * FROM disponibilidad WHERE usuario_id = ?');
@@ -257,12 +259,6 @@ export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
   return obtenerRutinaActiva(usuarioId);
 });
 
-function sumarDiasIso(fechaIso, dias) {
-  const fecha = new Date(`${fechaIso}T00:00:00`);
-  fecha.setDate(fecha.getDate() + dias);
-  return fecha.toISOString().slice(0, 10);
-}
-
 // Registro (con series) del dia_rutina en cada una de las 2 semanas del
 // microciclo en curso - por separado, para no pisarse entre si (antes solo
 // se mandaba "la sesion mas reciente" sin importar de que semana era, asi
@@ -324,10 +320,7 @@ function resumenMuscularDeSesion(registroSesionId) {
 // forma pareja, asi que se deja sin comparacion en ese caso.
 function comparacionMicrocicloAnterior(diaRutinaId, microcicloAnterior) {
   if (!microcicloAnterior || microcicloAnterior.numero < 1) return null;
-  const rangos = {
-    1: [microcicloAnterior.fecha_inicio, sumarDiasIso(microcicloAnterior.fecha_inicio, 6)],
-    2: [sumarDiasIso(microcicloAnterior.fecha_inicio, 7), sumarDiasIso(microcicloAnterior.fecha_inicio, 13)],
-  };
+  const rangos = rangosDeBloqueDeRutina(microcicloAnterior.rutina_id, microcicloAnterior.fecha_inicio);
   const resumenDeSemana = (rango) => {
     const sesion = sesionSemanaStmt.get(diaRutinaId, microcicloAnterior.id, rango[0], rango[1]);
     if (!sesion || sesion.salteada) return null;
@@ -348,10 +341,7 @@ function comparacionMicrocicloAnterior(diaRutinaId, microcicloAnterior) {
 // literalmente donde habia quedado, peso/reps/RIR incluidos.
 function ultimaSesionMicrocicloAnterior(diaRutinaId, microcicloAnterior) {
   if (!microcicloAnterior || microcicloAnterior.numero < 1) return null;
-  const rangos = {
-    1: [microcicloAnterior.fecha_inicio, sumarDiasIso(microcicloAnterior.fecha_inicio, 6)],
-    2: [sumarDiasIso(microcicloAnterior.fecha_inicio, 7), sumarDiasIso(microcicloAnterior.fecha_inicio, 13)],
-  };
+  const rangos = rangosDeBloqueDeRutina(microcicloAnterior.rutina_id, microcicloAnterior.fecha_inicio);
   const semana2 = registroDeSemana(diaRutinaId, microcicloAnterior.id, rangos[2]);
   if (semana2 && !semana2.salteada) return semana2;
   const semana1 = registroDeSemana(diaRutinaId, microcicloAnterior.id, rangos[1]);
@@ -425,11 +415,10 @@ export function obtenerRutinaActiva(usuarioId) {
   // testeo/numero 0 es una sola semana, se maneja aparte en Semana0Form) y
   // cual de las 2 es "hoy" - mismo criterio de semana1/semana2 que usa
   // cerrarMicrociclo en progressionEngine.js al cerrar el bloque.
+  // Con pausas de progreso los dias pausados no cuentan (ver rangosDeBloque).
+  const retestesAbiertos = retesteosAbiertosDeRutina(rutina.id);
   const rangosSemana = microcicloActual && microcicloActual.numero >= 1
-    ? {
-        1: [microcicloActual.fecha_inicio, sumarDiasIso(microcicloActual.fecha_inicio, 6)],
-        2: [sumarDiasIso(microcicloActual.fecha_inicio, 7), sumarDiasIso(microcicloActual.fecha_inicio, 13)],
-      }
+    ? rangosDeBloqueDeRutina(rutina.id, microcicloActual.fecha_inicio)
     : null;
   const hoyIso = new Date().toISOString().slice(0, 10);
   // Si ya paso la fecha de fin de la semana 2 (el bloque deberia haberse
@@ -446,6 +435,10 @@ export function obtenerRutinaActiva(usuarioId) {
   return {
     ...rutina,
     semana_actual: semanaActualNumero,
+    // Rango real de fechas de cada semana del bloque en curso (con las pausas
+    // ya descontadas) y la pausa abierta, si hay.
+    rangos_semana: rangosSemana ? { 1: rangosSemana[1], 2: rangosSemana[2] } : null,
+    pausa: estadoPausa(rutina.id),
     dias: dias.map((d) => {
       const registrosSemana = rangosSemana && microcicloActual
         ? { 1: registroDeSemana(d.id, microcicloActual.id, rangosSemana[1]), 2: registroDeSemana(d.id, microcicloActual.id, rangosSemana[2]) }
@@ -453,7 +446,7 @@ export function obtenerRutinaActiva(usuarioId) {
       const borrador = microcicloActual ? getBorradorDia.get(d.id, microcicloActual.id) : null;
       return {
         ...d,
-        ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id).map(aplicarVarianteActiva),
+        ejercicios: ejerciciosStmt.all(microcicloActual?.id ?? -1, d.id).map(aplicarVarianteActiva).map((e) => ({ ...e, retesteo: retestesAbiertos.get(e.id) ?? null })),
         sesion_actual: registrosSemana ? registrosSemana[semanaActualNumero] : null,
         registros_semana: registrosSemana,
         borrador_registro: borrador ? JSON.parse(borrador.valores_json) : null,

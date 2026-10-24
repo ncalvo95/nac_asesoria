@@ -344,7 +344,7 @@ export function calcularSugerenciaReps(ej, seriesEjercicio, idx) {
   const actual = seriesEjercicio[idx];
   if (actual.esDropset) return undefined;
   if (idx === 0) {
-    return ej.piso_reps != null ? String(ej.piso_reps) : undefined;
+    return ej.piso_reps ? String(ej.piso_reps) : undefined;
   }
   const anterior = seriesEjercicio[idx - 1];
   if (anterior.esDropset) return undefined;
@@ -358,4 +358,10 @@ export function calcularSugerenciaReps(ej, seriesEjercicio, idx) {
     ? Number(anterior.reps)
     : Number(calcularSugerenciaReps(ej, seriesEjercicio, idx - 1));
   return Number.isFinite(repsAnterior) ? String(Math.max(0, repsAnterior - 2)) : undefined;
+}
+
+// Primer dia de la semana 1 o 2 del bloque en curso. Usa los rangos del backend
+// (con las pausas ya descontadas); sin ellos, el calendario de siempre.
+export function inicioDeSemana(rutina, microciclo, semana) {
+  return rutina.rangos_semana?.[semana]?.[0] ?? sumarDiasFecha(microciclo.fecha_inicio, semana === 2 ? 7 : 0);
 }

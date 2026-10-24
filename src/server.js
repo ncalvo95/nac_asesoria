@@ -63,6 +63,11 @@ app.use(MOUNT_PATH, router);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
+  // Progreso en pausa (ver pausaService.js): no es un error del servidor sino
+  // un conflicto de estado que la UI explica y resuelve con "Reanudar".
+  if (err.name === 'ProgresoEnPausaError') {
+    return res.status(409).json({ error: err.message, pausada: true });
+  }
   console.error(err);
   res.status(500).json({ error: 'Error interno del servidor.' });
 });

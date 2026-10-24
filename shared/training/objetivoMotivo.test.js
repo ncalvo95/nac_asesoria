@@ -41,4 +41,10 @@ describe('explicarObjetivo', () => {
   test('sin reps registradas en el bloque anterior', () => {
     assert.equal(explicarObjetivo(ej, { techo_reps: null }).tipo, 'sin_datos');
   });
+
+  test('un ejercicio en retesteo no tiene objetivo, se mide de nuevo', () => {
+    const r = explicarObjetivo({ ...ej, retesteo: { peso_mejor_anterior: 60, reps_mejor_anterior: 10 } }, { techo_reps: 13 });
+    assert.equal(r.tipo, 'retesteo');
+    assert.match(r.detalle, /60 kg × 10/);
+  });
 });

@@ -15,6 +15,8 @@ import { generarWorkbookHistorial, generarWorkbookUsuario } from '../services/ex
 import { musculosSecundariosDe, tagsDisponibles, TODOS_MUSCULOS } from '../services/routineBuilder.js';
 import { crearSolicitudCambio, debeQuedarPendiente } from '../services/solicitudCambio.js';
 import { obtenerConfigActiva } from '../services/trainingConfigService.js';
+import { pausar, reanudar } from '../services/pausaService.js';
+import { resetearEjercicio, cancelarRetesteo, listarRetesteos } from '../services/retesteoService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -490,6 +492,36 @@ router.patch('/ejercicios/:ejercicioAsignadoId/progreso-automatico', (req, res) 
   if (typeof activo !== 'boolean') return res.status(400).json({ error: 'activo debe ser true o false.' });
   db.prepare('UPDATE ejercicio_asignado SET progreso_automatico = ? WHERE id = ?').run(activo ? 1 : 0, ea.id);
   res.json({ id: ea.id, progreso_automatico: activo });
+});
+
+// Retesteo de un ejercicio ("resetear pesos y reps"): lo deja en blanco para
+// volver a medirlo; lo que se cargue es la nueva linea base y no cuenta como
+// progreso del bloque, solo se muestra como subida/bajada de rendimiento. Ver
+// retesteoService.js.
+router.post('/ejercicios/:ejercicioAsignadoId/retesteo', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  try {
+    res.status(201).json(resetearEjercicio(ea.id));
+  } catch (err) {
+    res.status(err.name === 'ProgresoEnPausaError' ? 409 : 400).json({ error: err.message });
+  }
+});
+
+router.delete('/ejercicios/:ejercicioAsignadoId/retesteo', (req, res) => {
+  const ea = getEjercicioAsignadoOr404(req, res);
+  if (!ea) return;
+  try {
+    res.json(cancelarRetesteo(ea.id));
+  } catch (err) {
+    res.status(err.name === 'ProgresoEnPausaError' ? 409 : 400).json({ error: err.message });
+  }
+});
+
+router.get('/rutinas/:rutinaId/retesteos', (req, res) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  res.json(listarRetesteos(rutina.id));
 });
 
 // Descanso entre series (segundos), solo informativo/editable a mano -no lo
@@ -1073,6 +1105,29 @@ router.post('/rutinas/:rutinaId/testeo', (req, res, next) => {
 
 // Todas las semanas de testeo ya cerradas de esta rutina (la inicial y
 // cualquier repetida), para comparar peso/reps entre si.
+// Pausa del progreso (vacaciones, viaje, lesion...): congela el bloque en
+// curso - ver pausaService.js. Pausar/reanudar es del propio usuario, su coach
+// o el admin (mismo acceso que el resto de /rutinas/:id).
+router.post('/rutinas/:rutinaId/pausa', (req, res) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  try {
+    res.status(201).json(pausar(rutina.id, { motivo: req.body?.motivo, fecha: req.body?.fecha, usuarioId: req.usuario.id }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/rutinas/:rutinaId/reanudar', (req, res) => {
+  const rutina = getRutinaOr404(req, res);
+  if (!rutina) return;
+  try {
+    res.json(reanudar(rutina.id, { fecha: req.body?.fecha }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.get('/rutinas/:rutinaId/testeos', (req, res) => {
   const rutina = getRutinaOr404(req, res);
   if (!rutina) return;

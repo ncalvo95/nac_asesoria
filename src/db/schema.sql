@@ -340,6 +340,50 @@ CREATE TABLE IF NOT EXISTS progreso_ejercicio_microciclo (
   UNIQUE (ejercicio_asignado_id, microciclo_id)
 );
 
+-- Pausas del progreso de una rutina (vacaciones, viaje, lesion...). Mientras hay
+-- una abierta (hasta IS NULL) no se puede anotar ni cerrar nada, y los dias
+-- pausados NO cuentan para las 2 semanas de un bloque (ver rangosDeBloque en
+-- shared/training/calendarioBloque.js): el bloque se congela en vez de vencerse
+-- vacio y quedar "estancado". Como mucho una abierta por rutina.
+CREATE TABLE IF NOT EXISTS pausa_progreso (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  rutina_id INTEGER NOT NULL REFERENCES rutina(id) ON DELETE CASCADE,
+  desde TEXT NOT NULL,
+  hasta TEXT,
+  motivo TEXT,
+  creado_por INTEGER REFERENCES usuarios(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pausa_progreso_abierta ON pausa_progreso(rutina_id) WHERE hasta IS NULL;
+
+-- Retesteo de UN ejercicio ("resetear pesos y reps"): el ejercicio queda en
+-- blanco, lo que se cargue a partir de ahi es la nueva linea base y ese bloque
+-- NO cuenta como progreso (mejoro/estancado) para el ejercicio - en su lugar se
+-- guarda cuanto subio o bajo el rendimiento (1RM estimado) contra lo de antes.
+-- Las sesiones con id > sesion_desde_id son las del retesteo (asi no se mezclan
+-- con lo ya cargado ese mismo bloque antes de resetear).
+CREATE TABLE IF NOT EXISTS retesteo_ejercicio (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ejercicio_asignado_id INTEGER NOT NULL REFERENCES ejercicio_asignado(id) ON DELETE CASCADE,
+  microciclo_id INTEGER NOT NULL REFERENCES microciclo(id) ON DELETE CASCADE,
+  estado TEXT NOT NULL DEFAULT 'abierto' CHECK (estado IN ('abierto', 'cerrado', 'cancelado', 'sin_datos')),
+  sesion_desde_id INTEGER NOT NULL DEFAULT 0,
+  peso_anterior REAL,
+  piso_anterior INTEGER,
+  series_anterior INTEGER,
+  peso_mejor_anterior REAL,
+  reps_mejor_anterior INTEGER,
+  e1rm_anterior REAL,
+  peso_nuevo REAL,
+  reps_nuevo INTEGER,
+  e1rm_nuevo REAL,
+  delta_e1rm_pct REAL,
+  creado_en TEXT NOT NULL DEFAULT (datetime('now')),
+  cerrado_en TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_retesteo_abierto ON retesteo_ejercicio(ejercicio_asignado_id) WHERE estado = 'abierto';
+
 CREATE TABLE IF NOT EXISTS progreso_muscular_microciclo (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,

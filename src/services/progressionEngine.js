@@ -1,6 +1,8 @@
 import db from '../db/index.js';
 import { musculosSecundariosDe, topeSeriesPara } from './routineBuilder.js';
 import { obtenerConfigActiva, resolverConfigEntrenamiento } from './trainingConfigService.js';
+import { asegurarNoPausada, rangosDeBloqueDeRutina } from './pausaService.js';
+import { retesteoAbierto, medirRetesteo, cerrarRetesteo, cancelarRetestesDeMicrociclo } from './retesteoService.js';
 
 // "Repeticiones efectivas": de las reps hechas en una serie, cuantas caen
 // dentro de la ventana de las ultimas config.repsEfectivasUmbral reps antes
@@ -127,6 +129,7 @@ const diaDeEjercicioAsignado = db.prepare(`
 // piso del microciclo siguiente (peso = peso testeado, piso_reps = la mas
 // alta de las 2 series).
 export const registrarSemana0 = db.transaction((rutinaId, usuarioId, resultados) => {
+  asegurarNoPausada(rutinaId);
   const config = resolverConfigEntrenamiento(usuarioId);
   const microcicloTesteo = getMicrocicloTesteoActual.get(rutinaId);
   if (!microcicloTesteo) throw new Error('La rutina no tiene una semana de testeo en curso.');
@@ -268,6 +271,7 @@ export const guardarBorradorSemana0 = db.transaction((rutinaId, valores) => {
 // primera sesion va a "superarlo", asi se establece la base organicamente
 // en el primer cierre en vez de compararse contra un testeo que no paso).
 export const saltearTesteo = db.transaction((rutinaId) => {
+  asegurarNoPausada(rutinaId);
   const config = resolverConfigEntrenamiento(getRutina.get(rutinaId).usuario_id);
   const microcicloTesteo = getMicrocicloTesteoActual.get(rutinaId);
   if (!microcicloTesteo) throw new Error('La rutina no tiene una semana de testeo en curso.');
@@ -291,7 +295,11 @@ export const saltearTesteo = db.transaction((rutinaId) => {
   return { microciclo0: microcicloTesteo, microciclo1: siguiente };
 });
 
+const rutinaDeDia = db.prepare('SELECT rutina_id FROM dia_rutina WHERE id = ?');
+
 export function registrarSesion({ usuarioId, diaRutinaId, microcicloId, fecha, salteada, series }) {
+  const rutinaId = rutinaDeDia.get(diaRutinaId)?.rutina_id;
+  if (rutinaId != null) asegurarNoPausada(rutinaId);
   const { lastInsertRowid: sesionId } = insertRegistroSesion.run({
     usuario_id: usuarioId, dia_rutina_id: diaRutinaId, fecha: fecha || null, salteada: salteada ? 1 : 0, microciclo_id: microcicloId,
   });
@@ -341,6 +349,8 @@ const deleteBorradorDia = db.prepare('DELETE FROM borrador_dia WHERE dia_rutina_
 // viejo resurgiendo la proxima vez que se entrene ese mismo dia en ese
 // mismo microciclo (ej. semana 2 despues de haber guardado la semana 1).
 export function guardarBorradorDia(diaRutinaId, microcicloId, valores) {
+  const rutinaId = rutinaDeDia.get(diaRutinaId)?.rutina_id;
+  if (rutinaId != null) asegurarNoPausada(rutinaId);
   upsertBorradorDia.run(diaRutinaId, microcicloId, JSON.stringify(valores || {}));
 }
 
@@ -348,6 +358,7 @@ export function guardarBorradorDia(diaRutinaId, microcicloId, valores) {
 // calcula techo/piso/estancamiento por musculo, ajusta series y peso, y
 // crea el siguiente microciclo con los valores resultantes.
 export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
+  asegurarNoPausada(rutinaId);
   const rutina = getRutina.get(rutinaId);
   const config = resolverConfigEntrenamiento(rutina.usuario_id);
   const microciclo = getMicrociclo.get(rutinaId, numero);
@@ -366,7 +377,7 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
     const siguienteNumero = numero + 1;
     let siguiente = getMicrociclo.get(rutinaId, siguienteNumero);
     if (!siguiente) {
-      insertMicrociclo.run(rutinaId, siguienteNumero, sumarDias(microciclo.fecha_inicio, 14));
+      insertMicrociclo.run(rutinaId, siguienteNumero, rangosDeBloqueDeRutina(rutinaId, microciclo.fecha_inicio).siguienteInicio);
       siguiente = getMicrociclo.get(rutinaId, siguienteNumero);
     }
     const ejercicios = getEjerciciosDeRutina.all(rutinaId);
@@ -386,13 +397,25 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
   const objetivo = db.prepare('SELECT tipo FROM objetivo WHERE usuario_id = ?').get(rutina.usuario_id);
   const ejercicios = getEjerciciosDeRutina.all(rutinaId);
 
-  const semana1 = [microciclo.fecha_inicio, sumarDias(microciclo.fecha_inicio, 6)];
-  const semana2 = [sumarDias(microciclo.fecha_inicio, 7), sumarDias(microciclo.fecha_inicio, 13)];
+  const rangosBloque = rangosDeBloqueDeRutina(rutinaId, microciclo.fecha_inicio);
+  const semana1 = rangosBloque[1];
+  const semana2 = rangosBloque[2];
 
   const resultadosPorEjercicio = [];
   for (const ej of ejercicios) {
     const progreso = getProgresoEjercicio.get(ej.id, microciclo.id);
     if (!progreso) continue; // ejercicio incorporado despues de que arranco este microciclo
+
+    // Ejercicio en retesteo (ver retesteoService.js): solo cuenta lo cargado
+    // despues del reseteo y nunca marca mejoro/estancado.
+    const retest = retesteoAbierto(ej.id);
+    if (retest && retest.microciclo_id === microciclo.id) {
+      const medicion = medirRetesteo(retest, semana1, semana2, (a, b) => techoDesde(a, b, config));
+      resultadosPorEjercicio.push({
+        ejercicio: ej, progreso, sem1: medicion.sem1, sem2: medicion.sem2, techo: medicion.techo, mejoro: null, retest, medicion,
+      });
+      continue;
+    }
 
     const sem1 = getUltimaSerieEnRango.get(ej.id, ...semana1)?.reps ?? null;
     const sem2 = getUltimaSerieEnRango.get(ej.id, ...semana2)?.reps ?? null;
@@ -445,7 +468,7 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
   const siguienteNumero = numero + 1;
   let siguiente = getMicrociclo.get(rutinaId, siguienteNumero);
   if (!siguiente) {
-    insertMicrociclo.run(rutinaId, siguienteNumero, sumarDias(microciclo.fecha_inicio, 14));
+    insertMicrociclo.run(rutinaId, siguienteNumero, rangosDeBloqueDeRutina(rutinaId, microciclo.fecha_inicio).siguienteInicio);
     siguiente = getMicrociclo.get(rutinaId, siguienteNumero);
   }
 
@@ -454,6 +477,23 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
   for (const r of resultadosPorEjercicio) {
     const { ejercicio: ej, progreso, sem1, sem2, techo, mejoro } = r;
     const musculo = ej.musculo_nombre;
+
+    if (r.retest) {
+      const cierre = cerrarRetesteo(r.retest, r.medicion, progreso);
+      updateProgresoResultado.run({
+        id: progreso.id, sem1_reps: sem1, sem2_reps: sem2, techo_reps: techo, mejoro: null, serie_agregada: 0, nota: cierre.nota,
+      });
+      // El bloque cerrado queda con la linea base nueva como peso de referencia
+      // (si no, Progreso mostraria 0 kg para este ejercicio).
+      upsertProgresoEjercicio.run({
+        ejercicio_asignado_id: ej.id, microciclo_id: microciclo.id, peso_prescrito: cierre.peso, piso_reps: progreso.piso_reps, series_prescritas: progreso.series_prescritas,
+      });
+      upsertProgresoEjercicio.run({
+        ejercicio_asignado_id: ej.id, microciclo_id: siguiente.id, peso_prescrito: cierre.peso, piso_reps: cierre.piso, series_prescritas: cierre.series,
+      });
+      updateEjercicioAsignadoEstado.run(cierre.peso || null, cierre.series, ej.id);
+      continue;
+    }
     const topeSeries = topeSeriesPara({ objetivo: objetivo?.tipo, esCompuestoPrincipalFuerza: Boolean(ej.es_compuesto_principal_fuerza) }, config);
 
     let seriesSugeridas = progreso.series_prescritas;
@@ -544,6 +584,7 @@ const getMicrocicloEnCursoNormal = db.prepare(
 // cerrarMicrociclo los use tal cual al cerrar la descarga (retoma la rutina
 // exactamente donde estaba, la descarga no cuenta para la progresion).
 export const marcarSemanaDescarga = db.transaction((rutinaId) => {
+  asegurarNoPausada(rutinaId);
   const rutina = getRutina.get(rutinaId);
   const config = resolverConfigEntrenamiento(rutina.usuario_id);
   const microciclo = getMicrocicloEnCursoNormal.get(rutinaId);
@@ -551,6 +592,9 @@ export const marcarSemanaDescarga = db.transaction((rutinaId) => {
   if (microciclo.tipo === 'descarga') throw new Error('Esta semana ya es tu semana de descarga.');
   if (microciclo.tipo === 'testeo') throw new Error('No se puede convertir una semana de testeo en descarga.');
 
+  // Un retesteo en curso se cancela ANTES de armar la descarga: esta toma el
+  // peso/piso prescritos del bloque, que el retesteo habia dejado en blanco.
+  cancelarRetestesDeMicrociclo(rutinaId, microciclo.id);
   const ejercicios = getEjerciciosDeRutina.all(rutinaId);
   const detalle = [];
   for (const ej of ejercicios) {
@@ -601,11 +645,13 @@ export function marcarFaseNutricional(rutinaId, fase) {
 // no solo el numero 0), que crea el siguiente microciclo normal con los
 // resultados y cierra este.
 export function marcarNuevoTesteo(rutinaId) {
+  asegurarNoPausada(rutinaId);
   const microciclo = getMicrocicloEnCursoNormal.get(rutinaId);
   if (!microciclo) throw new Error('No hay microciclo en curso para convertir en una nueva semana de testeo.');
   if (microciclo.tipo === 'testeo') throw new Error('Esta semana ya es una semana de testeo.');
   if (microciclo.tipo === 'descarga') throw new Error('No se puede convertir una semana de descarga en testeo.');
 
+  cancelarRetestesDeMicrociclo(rutinaId, microciclo.id);
   db.prepare("UPDATE microciclo SET tipo = 'testeo' WHERE id = ?").run(microciclo.id);
   return { ...microciclo, tipo: 'testeo' };
 }

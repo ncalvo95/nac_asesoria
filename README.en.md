@@ -1460,6 +1460,41 @@ sessions → closing a microcycle → progress → Excel export):
   "glúteos", "bíceps", "tríceps" and "cuádriceps" with accents everywhere
   (display only; the database is unchanged).
 
+- **Progress pause, test week in Routines and per-exercise retest**:
+  - **Pause progress** (holiday, trip, injury, other): from Routines →
+    "Programación del bloque". While paused nothing can be logged, blocks can't
+    be closed, tested or deloaded (409 with "Reanudar progreso"), and paused
+    days **do not count** towards the block's 2 weeks: the block freezes
+    instead of expiring empty and flagging you as stalled (the day you pause
+    and the day you resume do count). Pure calendar in
+    `shared/training/calendarioBloque.js` (tested); `rangosDeBloque` skips
+    paused days and replaces the `+6/+7/+13/+14` arithmetic in `rutinaService`
+    and `cerrarMicrociclo`. Table `pausa_progreso` (one open per routine),
+    `POST /rutinas/:id/pausa` and `/reanudar`; the routine returns `pausa` and
+    `rangos_semana`. On resume, after 2+ days away, you are offered to
+    **continue where you left, run a test week or a deload week** (recommended by
+    days: 7+ deload, 14+ test; never mandatory).
+  - **Test week in Routines**: the "Programación del bloque" card adds
+    "Convertir en testeo" (the same `POST /rutinas/:id/testeo` already in
+    Progress, which stays there) and "Marcar descarga", each with an
+    explanation.
+  - **Reset weights and reps** of ONE exercise (⋯ menu → "Resetear pesos y
+    reps"): the exercise goes blank, what you log is the **new baseline** and
+    that block **does not count as progress** for that exercise (no "improved"
+    or "stalled", no extra sets, and it does not inherit what was logged before
+    the reset). When the block closes, how much your performance rose or fell
+    (estimated 1RM, `shared/training/e1rm.js`) against before is stored and
+    Progress shows it in the **Retesteos** section ("▼ Bajó 8.1%"). It can be
+    cancelled while open (back to the previous weight and target); if the block
+    becomes a test or deload week, the retest cancels itself. Table
+    `retesteo_ejercicio`, `POST/DELETE /ejercicios/:id/retesteo` and
+    `GET /rutinas/:id/retesteos`. Note: like any exercise without `mejoro`, a
+    retest in a muscle keeps that muscle from being flagged "stalled" that
+    block.
+  - Week 1/2 day dates on screen are computed from each week's real start;
+    after a mid-week pause a label can show a paused day (labels only: what
+    gets logged uses the real date).
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live

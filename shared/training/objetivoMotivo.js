@@ -16,6 +16,19 @@
 export function explicarObjetivo(ej, previo) {
   if (!ej) return null;
 
+  // Retesteo de este ejercicio ("resetear pesos y reps"): no hay objetivo, se
+  // mide de nuevo, y ese bloque no cuenta como progreso.
+  if (ej.retesteo) {
+    const antes = ej.retesteo.peso_mejor_anterior != null && ej.retesteo.reps_mejor_anterior != null
+      ? ` Antes: ${ej.retesteo.peso_mejor_anterior} kg × ${ej.retesteo.reps_mejor_anterior}.`
+      : '';
+    return {
+      tipo: 'retesteo',
+      resumen: 'Retesteo: cargá tus nuevos pesos y reps',
+      detalle: `Lo que cargues ahora es tu nueva línea base. Este bloque no cuenta como progreso de este ejercicio: al cerrarlo se muestra si tu rendimiento subió o bajó respecto de antes.${antes}`,
+    };
+  }
+
   if (!ej.progreso_automatico) {
     return {
       tipo: 'congelado',

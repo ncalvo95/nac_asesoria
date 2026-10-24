@@ -5,6 +5,7 @@ import { api, API_BASE } from '../api/client.js';
 import { formatearMusculo } from '../utils/musculo.js';
 import MapaActividad from '../components/MapaActividad.jsx';
 import MapaMuscular from '../components/MapaMuscular.jsx';
+import { BannerPausa, OfertaAlVolver } from '../components/PausaProgreso.jsx';
 import { aIso } from '../utils/fechas.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -38,6 +39,7 @@ export default function ProgresoPage() {
   const [pidiendoTesteo, setPidiendoTesteo] = useState(false);
   const [actividad, setActividad] = useState(null);
   const [mapaMuscular, setMapaMuscular] = useState(null);
+  const [retesteos, setRetesteos] = useState([]);
 
   async function cargar() {
     setCargando(true);
@@ -52,6 +54,7 @@ export default function ProgresoPage() {
       const t = await api.get(`/rutinas/${r.id}/testeos`).catch(() => []);
       setTesteos(t.filter((x) => x.ejercicios.length > 0));
       setActividad(await api.get(`/usuarios/${usuario.id}/actividad?semanas=13`).catch(() => null));
+      setRetesteos((await api.get(`/rutinas/${r.id}/retesteos`).catch(() => [])).filter((x) => x.estado !== 'cancelado'));
       setMapaMuscular(await api.get(`/usuarios/${usuario.id}/mapa-muscular?hoy=${aIso(new Date())}`).catch(() => null));
     } catch (err) {
       setError(err.message);
@@ -139,12 +142,15 @@ export default function ProgresoPage() {
   const actual = rutina.microciclos.find((m) => m.estado === 'en_curso');
   const enTesteo = actual?.tipo === 'testeo';
   const enDescarga = actual?.tipo === 'descarga';
-  const puedeCerrar = actual && actual.numero >= 1 && !enTesteo;
+  const puedeCerrar = actual && actual.numero >= 1 && !enTesteo && !rutina.pausa;
   const puedePedirDescargaOTesteo = actual && actual.numero >= 1 && !enTesteo && !enDescarga;
 
   return (
     <div className="flex flex-col gap-6 p-4 pb-8">
       {esPropioCliente && sesion.coach_id != null && <AprobacionCoach usuario={sesion} />}
+
+      <BannerPausa rutina={rutina} onCambio={cargar} />
+      <OfertaAlVolver rutina={rutina} onCambio={cargar} />
 
       <div className="flex items-center justify-between">
         <div>
@@ -208,6 +214,18 @@ export default function ProgresoPage() {
           <span className="text-[13px] font-semibold text-text-muted tracking-wide">ACTIVIDAD</span>
           <p className="text-[12px] text-text-muted -mt-1.5">Cada cuadrito es un día; más oscuro = más series ese día. Últimas 13 semanas.</p>
           <MapaActividad dias={actividad.dias} />
+        </section>
+      )}
+
+      {retesteos.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <span className="text-[13px] font-semibold text-text-muted tracking-wide">RETESTEOS</span>
+          <p className="text-[12px] text-text-muted -mt-1.5">
+            Ejercicios que reseteaste para volver a medir. No cuentan como progreso del bloque: acá ves si tu rendimiento (1RM estimado) subió o bajó.
+          </p>
+          <div className="flex flex-col gap-2">
+            {retesteos.map((r) => <FilaRetesteo key={r.id} r={r} />)}
+          </div>
         </section>
       )}
 
@@ -322,6 +340,30 @@ export default function ProgresoPage() {
 // en el bloque que se acaba de cerrar. Envuelto en un <details> (una sola
 // "pestana desplegable", no una por dia) para no ocupar toda la pantalla
 // de entrada.
+function FilaRetesteo({ r }) {
+  const cerrado = r.estado === 'cerrado';
+  const delta = r.delta_e1rm_pct;
+  const sube = delta != null && delta >= 0;
+  const antes = r.peso_mejor_anterior != null ? `${r.peso_mejor_anterior} kg × ${r.reps_mejor_anterior}` : 'sin dato previo';
+  return (
+    <div className="bg-surface border border-border rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-3">
+      <div className="min-w-0 flex flex-col">
+        <span className="text-[13.5px] font-semibold truncate">{r.ejercicio_nombre}</span>
+        <span className="text-[12px] text-text-muted tabular">
+          {cerrado
+            ? `${antes} → ${r.peso_nuevo} kg × ${r.reps_nuevo} (bloque ${r.microciclo_numero})`
+            : r.estado === 'cancelado' ? 'Retesteo cancelado' : 'Sin datos: se mantuvo lo anterior'}
+        </span>
+      </div>
+      {cerrado && delta != null && (
+        <span className={`flex-none text-[12.5px] font-bold tabular rounded-full px-2.5 py-1 ${sube ? 'bg-success-bg text-success' : 'bg-warning-bg text-warning'}`}>
+          {sube ? '▲ Subió' : '▼ Bajó'} {Math.abs(delta)}%
+        </span>
+      )}
+    </div>
+  );
+}
+
 function MicrocicloAnteriorDetalle({ progreso }) {
   const porDia = new Map();
   for (const e of progreso.ejercicios) {

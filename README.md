@@ -1743,6 +1743,42 @@ cierre de microciclo → progreso → export a Excel):
   "glúteos", "bíceps", "tríceps" y "cuádriceps" con tilde en toda la app
   (solo al mostrar; la base no cambia).
 
+- **Pausa de progreso, semana de testeo en Rutinas y retesteo por ejercicio**:
+  - **Pausar el progreso** (vacaciones, viaje, lesión, otro): desde Rutinas →
+    "Programación del bloque". Mientras está en pausa no se puede anotar,
+    cerrar bloques, testear ni descargar (409 con "Reanudar progreso"), y los
+    días pausados **no cuentan** para las 2 semanas del bloque: el bloque se
+    congela en vez de vencerse vacío y marcarte "estancado" (el día de pausar y
+    el de reanudar sí cuentan). Calendario puro en
+    `shared/training/calendarioBloque.js` (con tests); `rangosDeBloque` descuenta
+    los días pausados y reemplaza las cuentas `+6/+7/+13/+14` de
+    `rutinaService` y `cerrarMicrociclo`. Tabla `pausa_progreso` (una abierta
+    por rutina), `POST /rutinas/:id/pausa` y `/reanudar`; la rutina devuelve
+    `pausa` y `rangos_semana`. Al reanudar, si estuviste 2+ días fuera, se ofrece
+    **seguir donde quedaste, hacer una semana de testeo o una de descarga**
+    (recomendada según los días: 7+ descarga, 14+ testeo; nunca obligatorio).
+  - **Semana de testeo en Rutinas**: la tarjeta "Programación del bloque"
+    suma "Convertir en testeo" (el mismo `POST /rutinas/:id/testeo` que ya
+    estaba en Progreso, que sigue ahí) y "Marcar descarga", con una explicación
+    de qué hace cada una.
+  - **Resetear pesos y reps** de UN ejercicio (menú ⋯ → "Resetear pesos y
+    reps"): el ejercicio queda en blanco, lo que cargues es la **nueva línea
+    base** y ese bloque **no cuenta como progreso** de ese ejercicio (no marca
+    "mejoró" ni "estancado", ni suma series; tampoco hereda lo anotado antes del
+    reseteo). Al cerrar el bloque se guarda cuánto subió o bajó tu rendimiento
+    (1RM estimado, `shared/training/e1rm.js`) contra lo de antes y Progreso lo
+    muestra en la sección **Retesteos** ("▼ Bajó 8.1%"). Se puede cancelar
+    mientras está abierto (vuelve al peso y objetivo de antes); si el bloque se
+    convierte en testeo o descarga, el retesteo se cancela solo. Tabla
+    `retesteo_ejercicio`, `POST/DELETE /ejercicios/:id/retesteo` y
+    `GET /rutinas/:id/retesteos`. Nota: como cualquier ejercicio sin
+    `mejoro`, un retesteo en un músculo evita que ese músculo se marque
+    "estancado" en ese bloque.
+  - Las fechas de los días de la semana 1/2 en pantalla se calculan desde el
+    inicio real de cada semana; tras una pausa en medio de una semana pueden
+    mostrar un día de la pausa (solo es la etiqueta, lo que se anota usa la
+    fecha real).
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista
