@@ -15,6 +15,8 @@ import TemporizadorDescanso from '../components/TemporizadorDescanso.jsx';
 import { CampoNumerico, BotonRIR, BotonSerieHecha, EncabezadoRIR, TextoLeyendaRIR } from '../components/ControlesSerie.jsx';
 import { useTemporizadorDescanso } from '../hooks/useTemporizadorDescanso.js';
 import { explicarObjetivo } from '@shared/training/objetivoMotivo.js';
+import { detectarRecords } from '@shared/training/e1rm.js';
+import HistorialEjercicio from '../components/HistorialEjercicio.jsx';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -1556,6 +1558,16 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
   const [guardandoBorrador, setGuardandoBorrador] = useState(false);
   const [borradorGuardado, setBorradorGuardado] = useState(false);
   const temporizador = useTemporizadorDescanso();
+  // Mejor 1RM estimado historico por ejercicio (sin la sesion de hoy ya
+  // guardada, para que sus propios records no desaparezcan al reabrirla).
+  const [recordsPrevios, setRecordsPrevios] = useState(null);
+  const sesionGuardadaId = dia.sesion_actual?.id ?? null;
+  useEffect(() => {
+    let vigente = true;
+    const q = sesionGuardadaId != null ? `?excluir_sesion_id=${sesionGuardadaId}` : '';
+    api.get(`/usuarios/${usuario.id}/records${q}`).then((r) => { if (vigente) setRecordsPrevios(r); }).catch(() => {});
+    return () => { vigente = false; };
+  }, [usuario.id, sesionGuardadaId]);
   const [leyendaRirAbierta, setLeyendaRirAbierta] = useState(false);
   // "ejercicio:serie" de la fila a la que le faltaba peso/reps al tildarla -
   // se resalta un instante para que se vea cual es sin mostrar un cartel.
@@ -2014,6 +2026,8 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
             (e) => e.musculo_objetivo_id === ej.musculo_objetivo_id
           ).length === 1;
           const seriesReferencia = seriesPactadasAlAbrir[ej.id] ?? ej.series_actuales;
+          const recordsEj = recordsPrevios && ej.variante_activa_id == null ? detectarRecords(seriesPorEjercicio[ej.id], recordsPrevios[ej.ejercicio_id]) : [];
+          const filasRecord = new Set(recordsEj.map((r) => r.indice));
           const { pesoColor, repsColores } = coloreadoActivo
             ? colorVsPactadoLive(seriesPorEjercicio[ej.id], ej, seriesReferencia)
             : { pesoColor: null, repsColores: [] };
@@ -2106,7 +2120,7 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
                   <div
                     key={idx}
                     className={`grid ${COLUMNAS_SERIE} gap-1.5 items-center rounded-lg ${s.esDropset ? 'opacity-90' : ''} ${
-                      faltaDato ? 'ring-2 ring-danger' : ''
+                      faltaDato ? 'ring-2 ring-danger' : filasRecord.has(idx) ? 'ring-2 ring-success' : ''
                     }`}
                   >
                     <span className="tabular text-[11px] font-semibold text-text-muted text-center">
@@ -2141,6 +2155,19 @@ function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGuardado,
                   <> · {seriesPorEjercicio[ej.id].filter((s) => s.esDropset).reduce((acc, s) => acc + (repsEfectivas(s.reps, s.rir) || 0), 0)} de dropset</>
                 )}
               </span>
+
+              {recordsEj.length > 0 && (() => {
+                const mejor = recordsEj[recordsEj.length - 1];
+                const fila = seriesPorEjercicio[ej.id][mejor.indice];
+                return (
+                  <div role="status" className="bg-success-bg text-success rounded-lg px-2.5 py-1.5 text-[12px] leading-snug">
+                    <strong>🏆 ¡Nuevo récord!</strong> Serie {mejor.indice + 1}: {fila.peso} kg × {fila.reps} →
+                    1RM estimado {mejor.valor} kg (tu mejor anterior: {mejor.anterior} kg).
+                  </div>
+                );
+              })()}
+
+              <HistorialEjercicio usuarioId={usuario.id} ejercicioId={ej.ejercicio_id} />
 
               <EjercicioAcciones
                 ejercicio={ej}

@@ -1693,6 +1693,24 @@ cierre de microciclo → progreso → export a Excel):
     El tilde se guarda en el borrador y vuelve marcado al reabrir una sesión
     ya registrada.
 
+- **Entrenar: historial por ejercicio, récords y mapa de actividad**:
+  - **"📈 Ver historial"** en cada ejercicio: gráfico del 1RM estimado por
+    sesión (Epley, `shared/training/e1rm.js`), mejor 1RM y mayor peso
+    históricos, y tabla de las últimas 5 sesiones (mejor serie, 1RM, volumen).
+    Al pasar el dedo/mouse por el gráfico se ve cada punto; un anillo verde
+    marca las sesiones que superaron todo lo anterior. Nuevo
+    `GET /usuarios/:id/ejercicios/:ejercicioId/historial`.
+  - **Aviso de récord en vivo**: al tildar una serie cuyo 1RM estimado supera
+    el mejor histórico de ese ejercicio (o una serie anterior de hoy), la fila
+    se marca en verde y aparece "🏆 ¡Nuevo récord!". La primera vez que se
+    hace un ejercicio no cuenta (todo sería récord), los dropsets tampoco, y
+    reabrir la sesión de hoy ya guardada sigue mostrando sus récords
+    (`GET /usuarios/:id/records?excluir_sesion_id=`).
+  - **Mapa de actividad** en Progreso: 13 semanas (lunes a domingo), un
+    cuadrito por día con 4 niveles según las series de ese día, más sesiones
+    totales, semanas con entreno y racha de semanas seguidas
+    (`GET /usuarios/:id/actividad`).
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

@@ -1413,6 +1413,22 @@ sessions → closing a microcycle → progress → Excel export):
     line below remains. The tick is stored in the draft and comes back marked
     when reopening an already-logged session.
 
+- **Training: per-exercise history, records and activity map**:
+  - **"📈 Ver historial"** on every exercise: estimated-1RM chart per session
+    (Epley, `shared/training/e1rm.js`), best 1RM and heaviest weight, and a
+    table of the last 5 sessions (best set, 1RM, volume). Hover/touch shows
+    each point; a green ring marks sessions that beat everything before. New
+    `GET /usuarios/:id/ejercicios/:ejercicioId/historial`.
+  - **Live record alert**: ticking a set whose estimated 1RM beats the
+    exercise's historical best (or an earlier set today) turns the row green
+    and shows "🏆 ¡Nuevo récord!". The first time an exercise is done does
+    not count (everything would be a record), nor do dropsets, and reopening
+    today's already-saved session keeps showing its records
+    (`GET /usuarios/:id/records?excluir_sesion_id=`).
+  - **Activity map** in Progress: 13 weeks (Mon-Sun), one square per day in 4
+    levels by that day's sets, plus total sessions, weeks trained and week
+    streak (`GET /usuarios/:id/actividad`).
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live
