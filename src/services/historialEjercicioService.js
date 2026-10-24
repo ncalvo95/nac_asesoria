@@ -84,3 +84,39 @@ export function actividadDesde(usuarioId, desde) {
   }
   return [...porFecha.values()];
 }
+
+// Series directas (al musculo objetivo del ejercicio, sin dropsets) de cada
+// musculo en la ventana, y la ultima fecha en que se lo trabajo alguna vez.
+// Todos los musculos con referencia de volumen salen, trabajados o no.
+const volumenPorMusculoStmt = db.prepare(`
+  SELECT m.nombre,
+         r.mev, r.mav, r.mrv,
+         (SELECT COUNT(*) FROM registro_serie rs
+            JOIN registro_sesion rses ON rses.id = rs.registro_sesion_id
+            JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
+           WHERE rses.usuario_id = @usuario AND rses.salteada = 0 AND rs.es_dropset = 0
+             AND ea.musculo_objetivo_id = m.id AND rses.fecha >= @desde AND rses.fecha <= @hoy) AS series,
+         (SELECT MAX(rses.fecha) FROM registro_serie rs
+            JOIN registro_sesion rses ON rses.id = rs.registro_sesion_id
+            JOIN ejercicio_asignado ea ON ea.id = rs.ejercicio_asignado_id
+           WHERE rses.usuario_id = @usuario AND rses.salteada = 0 AND rs.es_dropset = 0
+             AND ea.musculo_objetivo_id = m.id AND rses.fecha <= @hoy) AS ultimo_entreno
+  FROM musculo m
+  JOIN referencia_volumen_muscular r ON r.musculo_id = m.id
+  ORDER BY m.id
+`);
+
+// `hoy` (YYYY-MM-DD) es el dia de referencia; la ventana son los 7 dias que
+// terminan en `hoy` (inclusive).
+export function mapaMuscular(usuarioId, hoy) {
+  const d = new Date(`${hoy}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 6);
+  const desde = d.toISOString().slice(0, 10);
+  const musculos = volumenPorMusculoStmt.all({ usuario: usuarioId, desde, hoy }).map((m) => ({
+    nombre: m.nombre,
+    series_7d: m.series,
+    ultimo_entreno: m.ultimo_entreno,
+    mev: m.mev, mav: m.mav, mrv: m.mrv,
+  }));
+  return { desde, hoy, musculos };
+}

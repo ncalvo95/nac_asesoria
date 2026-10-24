@@ -2,7 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { puedeAccederAUsuario, requireAuth } from '../middleware/auth.js';
 import { registrarSesion } from '../services/progressionEngine.js';
-import { historialDeEjercicio, recordsDelUsuario, actividadDesde } from '../services/historialEjercicioService.js';
+import { historialDeEjercicio, recordsDelUsuario, actividadDesde, mapaMuscular } from '../services/historialEjercicioService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -83,6 +83,16 @@ router.get('/usuarios/:usuarioId/actividad', (req, res) => {
   const semanas = Math.min(52, Math.max(1, Number(req.query.semanas) || 12));
   const desde = new Date(Date.now() - semanas * 7 * 86400000).toISOString().slice(0, 10);
   res.json({ desde, dias: actividadDesde(usuarioId, desde) });
+});
+
+// Series de los ultimos 7 dias y ultima vez trabajado de cada musculo, para el
+// mapa muscular (la lectura volumen/recuperacion se hace en shared/training/
+// mapaMuscular.js). ?hoy=YYYY-MM-DD permite al cliente fijar su dia local.
+router.get('/usuarios/:usuarioId/mapa-muscular', (req, res) => {
+  const usuarioId = accesoOr403(req, res);
+  if (usuarioId === null) return;
+  const hoy = /^\d{4}-\d{2}-\d{2}$/.test(req.query.hoy ?? '') ? req.query.hoy : new Date().toISOString().slice(0, 10);
+  res.json(mapaMuscular(usuarioId, hoy));
 });
 
 export default router;

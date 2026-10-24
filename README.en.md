@@ -1445,6 +1445,21 @@ sessions → closing a microcycle → progress → Excel export):
   modules** (e.g. `colorVsPactadoLive` or `aplicarBorradorEnBase` in
   `utils/entrenamiento.js`, `ResumenMuscularSesion` in `ResumenMuscular.jsx`).
 
+- **Muscle map in Progress**: front and back body (hand-written SVG, the left
+  half is drawn and mirrored) with muscles coloured in two modes. **Volume (7
+  days)**: direct sets over the last 7 days against the MEV/MAV/MRV of
+  `referencia_volumen_muscular` (none / low / in range / high / exceeded).
+  **Recovery**: days since the muscle was last trained (just trained <=1 day,
+  recovering 2, recovered >=3: a simple 48-72 h rule, not a measurement).
+  Tapping a muscle shows its detail (sets, thresholds, last session), the
+  legend names every colour and "Ver como tabla" lists all 18 muscles, so
+  colour is never the only cue. The three deltoid heads also add the sets
+  logged to the generic "deltoides". Rules in `shared/training/mapaMuscular.js`
+  (tested), data from `GET /usuarios/:id/mapa-muscular`, geometry in
+  `utils/mapaMuscularRegiones.js`. `formatearMusculo` now also shows
+  "glúteos", "bíceps", "tríceps" and "cuádriceps" with accents everywhere
+  (display only; the database is unchanged).
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live

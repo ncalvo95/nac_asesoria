@@ -1727,6 +1727,22 @@ cierre de microciclo → progreso → export a Excel):
   módulos** (por ejemplo `colorVsPactadoLive` o `aplicarBorradorEnBase` en
   `utils/entrenamiento.js`, `ResumenMuscularSesion` en `ResumenMuscular.jsx`).
 
+- **Mapa muscular en Progreso**: cuerpo de frente y de espalda (SVG a mano,
+  la mitad izquierda se dibuja y se espeja) con los músculos coloreados en dos
+  modos. **Volumen (7 días)**: series directas de los últimos 7 días contra
+  los MEV/MAV/MRV de `referencia_volumen_muscular` (sin trabajo / bajo / en
+  rango / alto / excedido). **Recuperación**: días desde la última vez que se
+  trabajó (recién trabajado ≤1 día, recuperándose 2, recuperado ≥3: una regla
+  simple de 48-72 h, no una medición). Tocar un músculo muestra su detalle
+  (series, umbrales, último entrenamiento), la leyenda nombra cada color y
+  "Ver como tabla" lista los 18 músculos, así el color nunca es la única
+  pista. Las tres cabezas del deltoides suman también las series cargadas al
+  "deltoides" general. Reglas en `shared/training/mapaMuscular.js` (con tests),
+  datos en `GET /usuarios/:id/mapa-muscular`, geometría en
+  `utils/mapaMuscularRegiones.js`. Además `formatearMusculo` ahora muestra
+  "glúteos", "bíceps", "tríceps" y "cuádriceps" con tilde en toda la app
+  (solo al mostrar; la base no cambia).
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

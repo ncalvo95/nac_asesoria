@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { api, API_BASE } from '../api/client.js';
 import { formatearMusculo } from '../utils/musculo.js';
 import MapaActividad from '../components/MapaActividad.jsx';
+import MapaMuscular from '../components/MapaMuscular.jsx';
+import { aIso } from '../utils/fechas.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -35,6 +37,7 @@ export default function ProgresoPage() {
   const [testeos, setTesteos] = useState([]);
   const [pidiendoTesteo, setPidiendoTesteo] = useState(false);
   const [actividad, setActividad] = useState(null);
+  const [mapaMuscular, setMapaMuscular] = useState(null);
 
   async function cargar() {
     setCargando(true);
@@ -49,6 +52,7 @@ export default function ProgresoPage() {
       const t = await api.get(`/rutinas/${r.id}/testeos`).catch(() => []);
       setTesteos(t.filter((x) => x.ejercicios.length > 0));
       setActividad(await api.get(`/usuarios/${usuario.id}/actividad?semanas=13`).catch(() => null));
+      setMapaMuscular(await api.get(`/usuarios/${usuario.id}/mapa-muscular?hoy=${aIso(new Date())}`).catch(() => null));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -204,6 +208,13 @@ export default function ProgresoPage() {
           <span className="text-[13px] font-semibold text-text-muted tracking-wide">ACTIVIDAD</span>
           <p className="text-[12px] text-text-muted -mt-1.5">Cada cuadrito es un día; más oscuro = más series ese día. Últimas 13 semanas.</p>
           <MapaActividad dias={actividad.dias} />
+        </section>
+      )}
+
+      {mapaMuscular && (
+        <section className="flex flex-col gap-3">
+          <span className="text-[13px] font-semibold text-text-muted tracking-wide">MAPA MUSCULAR</span>
+          <MapaMuscular datos={mapaMuscular} />
         </section>
       )}
 
