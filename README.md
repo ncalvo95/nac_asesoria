@@ -1811,6 +1811,16 @@ cierre de microciclo → progreso → export a Excel):
   /plantillas/desde-cero`; mismos límites que el resto (hasta 7 días, sin
   días ni ejercicios repetidos).
 
+- **Editar plantillas guardadas**: el botón "Editar" de cada plantilla abre un
+  editor completo (el mismo que usa "+ Nueva plantilla desde cero", que ahora
+  también permite fijar los valores): nombre y descripción, qué días de la
+  semana, qué ejercicios del catálogo, su **orden** (↑ ↓) y, por ejercicio,
+  **series, rango de reps y descanso**. Lo que se deja en blanco toma el valor
+  estándar. El servidor vuelve a armar la estructura desde el catálogo (no
+  confía en nombres ni músculos que lleguen del cliente) y garantiza un solo
+  ejercicio "top" por músculo y día. Los cambios **no tocan rutinas ya creadas**
+  con la plantilla. `PATCH /plantillas/:id` acepta ahora `dias`.
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

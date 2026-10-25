@@ -86,50 +86,75 @@ const catalogoStmt = db.prepare(`
   WHERE e.id = ? AND e.activo = 1
 `);
 
-// Plantilla armada a mano desde el catalogo (sin partir de una rutina de un
-// alumno). `dias`: [{ dia_semana, ejercicios: [ejercicio_id, ...] }]. Los
-// valores arrancan como en una rutina manual nueva - series minimas, rango de
-// reps estandar y descanso de 90s (60s si es unilateral); se ajustan despues en
-// la rutina de cada alumno.
-export function crearDesdeCero(ownerId, { nombre, descripcion, dias }) {
+const entero = (v, min, max, campo) => {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < min || n > max) throw new PlantillaError(`${campo} debe ser un entero entre ${min} y ${max}.`);
+  return n;
+};
+const existeMusculoStmt = db.prepare('SELECT 1 FROM musculo WHERE id = ?');
+
+// Arma y valida la estructura de una plantilla a partir de lo que manda el
+// cliente (el catalogo manda: nombres y musculos se leen de la base, no se
+// confia en lo que llegue). `dias`: [{ dia_semana, ejercicios: [e, ...] }] donde
+// cada `e` es un id de catalogo (queda con valores estandar: series minimas,
+// rango de reps estandar, descanso de 90s o 60s si es unilateral) o un objeto
+// { ejercicio_id, series?, rango_reps_min?, rango_reps_max?, descanso_segundos?,
+// es_top_de_musculo?, musculo_objetivo_id?, musculos_secundarios? } para
+// fijarlos. El orden del arreglo es el orden de los ejercicios.
+function construirDias(dias) {
   if (!Array.isArray(dias) || dias.length < 1 || dias.length > 7) throw new PlantillaError('La plantilla necesita entre 1 y 7 días.');
   const config = obtenerConfigActiva().config;
   const vistos = new Set();
-  const estructura = dias.map((dia) => {
+  return dias.map((dia) => {
     if (!dia || !DIAS_VALIDOS.includes(dia.dia_semana)) throw new PlantillaError(`Día inválido: ${dia?.dia_semana}.`);
     if (vistos.has(dia.dia_semana)) throw new PlantillaError(`El ${dia.dia_semana} está repetido.`);
     vistos.add(dia.dia_semana);
     if (!Array.isArray(dia.ejercicios) || dia.ejercicios.length === 0) throw new PlantillaError(`El ${dia.dia_semana} necesita al menos un ejercicio.`);
-    if (new Set(dia.ejercicios).size !== dia.ejercicios.length) throw new PlantillaError(`El ${dia.dia_semana} tiene un ejercicio repetido.`);
+    const entradas = dia.ejercicios.map((e) => (e !== null && typeof e === 'object' ? e : { ejercicio_id: e }));
+    const ids = entradas.map((e) => Number(e.ejercicio_id));
+    if (new Set(ids).size !== ids.length) throw new PlantillaError(`El ${dia.dia_semana} tiene un ejercicio repetido.`);
 
-    const catalogos = dia.ejercicios.map((id) => {
-      const c = catalogoStmt.get(Number(id));
-      if (!c) throw new PlantillaError(`Ejercicio ${id} no encontrado en el catálogo.`);
-      return c;
-    });
-    // El "top" de cada musculo (el que suma la serie extra al estancarse): el
-    // compuesto si hay, si no el primero elegido - igual que una rutina manual.
-    const topPorMusculo = new Map();
-    for (const c of catalogos) {
-      const actual = topPorMusculo.get(c.musculo_nombre);
-      if (!actual || (c.tipo === 'compuesto' && actual.tipo !== 'compuesto')) topPorMusculo.set(c.musculo_nombre, c);
-    }
-    return {
-      dia_semana: dia.dia_semana,
-      ejercicios: catalogos.map((c) => ({
+    const ejercicios = entradas.map((e, i) => {
+      const c = catalogoStmt.get(ids[i]);
+      if (!c) throw new PlantillaError(`Ejercicio ${e.ejercicio_id} no encontrado en el catálogo.`);
+      const min = e.rango_reps_min != null ? entero(e.rango_reps_min, 1, 50, 'Las reps mínimas') : config.rangoReps.default.min;
+      const max = e.rango_reps_max != null ? entero(e.rango_reps_max, 1, 50, 'Las reps máximas') : config.rangoReps.default.max;
+      if (max < min) throw new PlantillaError(`En "${c.nombre}" las reps máximas no pueden ser menores que las mínimas.`);
+      return {
         ejercicio_id: c.id,
         ejercicio_nombre: c.nombre,
         musculo_nombre: c.musculo_nombre,
-        musculo_objetivo_id: c.musculo_primario_id,
-        es_top_de_musculo: topPorMusculo.get(c.musculo_nombre) === c ? 1 : 0,
-        series: config.seriesMinimo,
-        rango_reps_min: config.rangoReps.default.min,
-        rango_reps_max: config.rangoReps.default.max,
-        descanso_segundos: c.es_unilateral || /unilateral/i.test(c.nombre) ? 60 : 90,
-        musculos_secundarios: [],
-      })),
-    };
+        musculo_objetivo_id: e.musculo_objetivo_id && existeMusculoStmt.get(e.musculo_objetivo_id) ? Number(e.musculo_objetivo_id) : c.musculo_primario_id,
+        es_top_de_musculo: e.es_top_de_musculo ? 1 : 0,
+        series: e.series != null ? entero(e.series, 1, 10, 'Las series') : config.seriesMinimo,
+        rango_reps_min: min,
+        rango_reps_max: max,
+        descanso_segundos: e.descanso_segundos != null ? entero(e.descanso_segundos, 10, 600, 'El descanso') : (c.es_unilateral || /unilateral/i.test(c.nombre) ? 60 : 90),
+        musculos_secundarios: Array.isArray(e.musculos_secundarios) ? e.musculos_secundarios.filter((m) => typeof m === 'string').slice(0, 2) : [],
+        _tipo: c.tipo,
+      };
+    });
+
+    // Cada musculo tiene un solo "top" (el que suma la serie extra al estancarse):
+    // el primero marcado; si ninguno lo esta, el compuesto si hay, si no el primero.
+    const porMusculo = new Map();
+    for (const e of ejercicios) {
+      if (!porMusculo.has(e.musculo_objetivo_id)) porMusculo.set(e.musculo_objetivo_id, []);
+      porMusculo.get(e.musculo_objetivo_id).push(e);
+    }
+    for (const grupo of porMusculo.values()) {
+      const elegido = grupo.find((e) => e.es_top_de_musculo) ?? grupo.find((e) => e._tipo === 'compuesto') ?? grupo[0];
+      for (const e of grupo) e.es_top_de_musculo = e === elegido ? 1 : 0;
+    }
+    for (const e of ejercicios) delete e._tipo;
+    return { dia_semana: dia.dia_semana, ejercicios };
   });
+}
+
+// Plantilla armada a mano desde el catalogo (sin partir de una rutina de un
+// alumno); ver construirDias para el formato de `dias`.
+export function crearDesdeCero(ownerId, { nombre, descripcion, dias }) {
+  const estructura = construirDias(dias);
   const { lastInsertRowid } = db.prepare(
     'INSERT INTO plantilla_rutina (owner_id, nombre, descripcion, dias_json) VALUES (?, ?, ?, ?)'
   ).run(ownerId, limpiarTexto(nombre, 80, true, 'El nombre'), limpiarTexto(descripcion, 300, false) || null, JSON.stringify(estructura));
@@ -152,11 +177,16 @@ export function obtener(actorOrId, id, rolForzado) {
   return { ...resumen(fila), dias: JSON.parse(fila.dias_json) };
 }
 
-export function actualizar(actor, id, { nombre, descripcion }) {
+// Edita una plantilla: nombre/descripcion y, si llegan `dias`, TODA la
+// estructura (ejercicios, orden, series, reps, descanso y dias). Las rutinas ya
+// creadas con ella no cambian.
+export function actualizar(actor, id, { nombre, descripcion, dias }) {
   const fila = filaOr404(actor, id);
-  db.prepare("UPDATE plantilla_rutina SET nombre = ?, descripcion = ?, actualizado_en = datetime('now') WHERE id = ?").run(
+  const estructura = dias !== undefined ? construirDias(dias) : null;
+  db.prepare("UPDATE plantilla_rutina SET nombre = ?, descripcion = ?, dias_json = ?, actualizado_en = datetime('now') WHERE id = ?").run(
     nombre !== undefined ? limpiarTexto(nombre, 80, true, 'El nombre') : fila.nombre,
     descripcion !== undefined ? (limpiarTexto(descripcion, 300, false) || null) : fila.descripcion,
+    estructura ? JSON.stringify(estructura) : fila.dias_json,
     id,
   );
   return obtener(actor, id);

@@ -1525,6 +1525,16 @@ sessions → closing a microcycle → progress → Excel export):
   /plantillas/desde-cero`; same limits as the rest (up to 7 days, no repeated
   days or exercises).
 
+- **Edit saved templates**: each template's "Editar" button opens a full editor
+  (the same one "+ Nueva plantilla desde cero" now uses, which can also set
+  values): name and description, which weekdays, which catalogue exercises,
+  their **order** (↑ ↓) and, per exercise, **sets, rep range and rest**.
+  Blank fields take the standard value. The server rebuilds the structure from
+  the catalogue (it doesn't trust names or muscles sent by the client) and
+  guarantees a single "top" exercise per muscle and day. Changes **don't touch
+  routines already created** from the template. `PATCH /plantillas/:id` now
+  accepts `dias`.
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live
