@@ -1535,6 +1535,19 @@ sessions → closing a microcycle → progress → Excel export):
   routines already created** from the template. `PATCH /plantillas/:id` now
   accepts `dias`.
 
+- **Overdue block: notice to close it, and late training now counts**: a block
+  (2-week microcycle) **never closes by itself**: until "Cerrar microciclo" is
+  tapped the screen stays on week 2 and weights don't advance. Previously,
+  anything trained **after** the block's 14 days was also invisible on screen
+  and ignored at close (weeks were filtered by date). Now: (1) once the 14 days
+  pass (not counting pauses) Training shows "Tu bloque ya terminó" with a
+  button to close it right there; (2) week 2 is **open-ended**: a session
+  belongs to a block by its `microciclo_id`, not by date, so late entries show
+  up and count as week 2 (the most recent last set wins, as usual); (3) the
+  close filters by block; (4) the next block starts **the day you close** the
+  previous one, not on a past or future calendar date. `rutina.fin_bloque`
+  exposes the last calendar day of the current block.
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live

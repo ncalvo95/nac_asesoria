@@ -6,6 +6,7 @@ import PanelAdminEntrenamiento from '../components/PanelAdminEntrenamiento.jsx';
 import { Semana0Form } from '../components/entrenamiento/Semana0Form.jsx';
 import { DiaEntrenamiento } from '../components/entrenamiento/DiaEntrenamiento.jsx';
 import { BannerPausa, OfertaAlVolver } from '../components/PausaProgreso.jsx';
+import AvisoBloqueVencido from '../components/AvisoBloqueVencido.jsx';
 
 export default function EntrenamientoPage() {
   const { usuario: sesion } = useAuth();
@@ -81,6 +82,7 @@ export default function EntrenamientoPage() {
   return (
     <>
     <OfertaAlVolver rutina={rutina} onCambio={cargar} />
+    <div className="px-4 pt-4 empty:hidden"><AvisoBloqueVencido rutina={rutina} microciclo={microcicloActual} onCambio={cargar} /></div>
     <DiaEntrenamiento
       rutina={rutina}
       microciclo={microcicloActual}

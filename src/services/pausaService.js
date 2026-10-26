@@ -25,10 +25,27 @@ export function asegurarNoPausada(rutinaId) {
   if (pausaActiva(rutinaId)) throw new ProgresoEnPausaError();
 }
 
-// Rangos de fechas {1: [a,b], 2: [c,d], siguienteInicio} de un bloque de esta
-// rutina que arranca en fechaInicio, descontando los dias pausados.
+// Fin "abierto" de la semana 2: una sesion se asigna a un bloque por su
+// microciclo_id (el del bloque abierto al registrarla), no por la fecha, asi que
+// lo entrenado DESPUES de los 14 dias del bloque -porque todavia no se lo cerro-
+// sigue contando como semana 2 en vez de quedar afuera y no verse en ningun lado.
+export const FIN_ABIERTO = '9999-12-31';
+
+// Rangos de fechas {1: [a,b], 2: [c, FIN_ABIERTO], finBloque, siguienteInicio} de
+// un bloque de esta rutina que arranca en fechaInicio, descontando los dias
+// pausados. `finBloque` es el ultimo dia "de calendario" del bloque (el que
+// vence, no el tope de la semana 2).
 export function rangosDeBloqueDeRutina(rutinaId, fechaInicio, hoy = hoyUtc()) {
-  return rangosDeBloque(fechaInicio, intervalosDePausas(pausasStmt.all(rutinaId), hoy));
+  const r = rangosDeBloque(fechaInicio, intervalosDePausas(pausasStmt.all(rutinaId), hoy));
+  return { 1: r[1], 2: [r[2][0], FIN_ABIERTO], finBloque: r[2][1], siguienteInicio: r.siguienteInicio };
+}
+
+// Fecha de arranque del bloque que sigue a uno que se cierra ahora: hoy (nunca
+// antes del inicio del que se cierra). Asi cerrar tarde no deja al siguiente
+// arrancando en el pasado, y cerrar antes de los 14 dias tampoco lo deja
+// arrancando en el futuro, donde lo que se anote hasta entonces no se veria.
+export function inicioDelSiguienteBloque(rutinaId, fechaInicio, hoy = hoyUtc()) {
+  return hoy > fechaInicio ? hoy : fechaInicio;
 }
 
 function fechaValida(fecha) {

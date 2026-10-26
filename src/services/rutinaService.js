@@ -511,7 +511,10 @@ export function obtenerRutinaActiva(usuarioId) {
     semana_actual: semanaActualNumero,
     // Rango real de fechas de cada semana del bloque en curso (con las pausas
     // ya descontadas) y la pausa abierta, si hay.
-    rangos_semana: rangosSemana ? { 1: rangosSemana[1], 2: rangosSemana[2] } : null,
+    rangos_semana: rangosSemana ? { 1: rangosSemana[1], 2: [rangosSemana[2][0], rangosSemana.finBloque] } : null,
+    // Ultimo dia de calendario del bloque en curso: pasado ese dia el bloque esta
+    // "vencido" y hay que cerrarlo a mano (nunca se cierra solo).
+    fin_bloque: rangosSemana ? rangosSemana.finBloque : null,
     pausa: estadoPausa(rutina.id),
     dias: dias.map((d) => {
       const registrosSemana = rangosSemana && microcicloActual

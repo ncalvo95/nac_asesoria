@@ -1821,6 +1821,20 @@ cierre de microciclo → progreso → export a Excel):
   ejercicio "top" por músculo y día. Los cambios **no tocan rutinas ya creadas**
   con la plantilla. `PATCH /plantillas/:id` acepta ahora `dias`.
 
+- **Bloque vencido: aviso para cerrarlo y lo entrenado tarde ya cuenta**: un
+  bloque (microciclo de 2 semanas) **nunca se cierra solo**: hasta tocar
+  "Cerrar microciclo" la pantalla sigue en la semana 2 y los pesos no avanzan.
+  Antes, además, lo entrenado **después** de los 14 días del bloque no se veía
+  en la pantalla ni contaba al cerrar (las semanas se filtraban por fecha).
+  Ahora: (1) cuando pasan los 14 días (sin contar pausas) Entrenamiento muestra
+  "Tu bloque ya terminó" con el botón para cerrarlo ahí mismo; (2) la semana 2
+  queda **abierta**: una sesión pertenece al bloque por su `microciclo_id`, no
+  por la fecha, así que lo anotado tarde se ve y cuenta como semana 2 (la
+  última serie más reciente manda, como siempre); (3) el cierre filtra por
+  bloque; (4) el bloque siguiente arranca **el día que cerrás** el anterior, no
+  en una fecha de calendario pasada o futura. `rutina.fin_bloque` expone el
+  último día de calendario del bloque en curso.
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

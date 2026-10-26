@@ -136,7 +136,7 @@ const ultimaSerieRetesteoStmt = db.prepare(`
   SELECT rs.reps, rs.peso
   FROM registro_serie rs
   JOIN registro_sesion s ON s.id = rs.registro_sesion_id
-  WHERE rs.ejercicio_asignado_id = ? AND s.id > ? AND s.fecha BETWEEN ? AND ? AND s.salteada = 0 AND rs.es_dropset = 0
+  WHERE rs.ejercicio_asignado_id = ? AND s.id > ? AND s.microciclo_id = ? AND s.fecha BETWEEN ? AND ? AND s.salteada = 0 AND rs.es_dropset = 0
   ORDER BY s.fecha DESC, s.id DESC, rs.numero_serie DESC
   LIMIT 1
 `);
@@ -152,8 +152,8 @@ const seriesRetesteoStmt = db.prepare(`
 // por 1RM estimado. `techoDesde` es la funcion del motor para juntar las 2
 // semanas; con una sola semana con datos se usa esa.
 export function medirRetesteo(rt, semana1, semana2, techoDesde) {
-  const s1 = ultimaSerieRetesteoStmt.get(rt.ejercicio_asignado_id, rt.sesion_desde_id, ...semana1);
-  const s2 = ultimaSerieRetesteoStmt.get(rt.ejercicio_asignado_id, rt.sesion_desde_id, ...semana2);
+  const s1 = ultimaSerieRetesteoStmt.get(rt.ejercicio_asignado_id, rt.sesion_desde_id, rt.microciclo_id, ...semana1);
+  const s2 = ultimaSerieRetesteoStmt.get(rt.ejercicio_asignado_id, rt.sesion_desde_id, rt.microciclo_id, ...semana2);
   const sem1 = s1?.reps ?? null;
   const sem2 = s2?.reps ?? null;
   const techo = sem1 != null && sem2 != null ? techoDesde(sem1, sem2) : (sem1 ?? sem2);

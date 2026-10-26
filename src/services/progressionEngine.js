@@ -1,7 +1,7 @@
 import db from '../db/index.js';
 import { musculosSecundariosDe, topeSeriesPara } from './routineBuilder.js';
 import { obtenerConfigActiva, resolverConfigEntrenamiento } from './trainingConfigService.js';
-import { asegurarNoPausada, rangosDeBloqueDeRutina } from './pausaService.js';
+import { asegurarNoPausada, rangosDeBloqueDeRutina, inicioDelSiguienteBloque } from './pausaService.js';
 import { retesteoAbierto, medirRetesteo, cerrarRetesteo, cancelarRetestesDeMicrociclo } from './retesteoService.js';
 
 // "Repeticiones efectivas": de las reps hechas en una serie, cuantas caen
@@ -95,8 +95,8 @@ const getUltimaSerieEnRango = db.prepare(`
   SELECT rs.reps
   FROM registro_serie rs
   JOIN registro_sesion s ON s.id = rs.registro_sesion_id
-  WHERE rs.ejercicio_asignado_id = ? AND s.fecha BETWEEN ? AND ? AND s.salteada = 0 AND rs.es_dropset = 0
-  ORDER BY s.fecha DESC, rs.numero_serie DESC
+  WHERE rs.ejercicio_asignado_id = ? AND s.microciclo_id = ? AND s.fecha BETWEEN ? AND ? AND s.salteada = 0 AND rs.es_dropset = 0
+  ORDER BY s.fecha DESC, s.id DESC, rs.numero_serie DESC
   LIMIT 1
 `);
 
@@ -390,7 +390,7 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
     const siguienteNumero = numero + 1;
     let siguiente = getMicrociclo.get(rutinaId, siguienteNumero);
     if (!siguiente) {
-      insertMicrociclo.run(rutinaId, siguienteNumero, rangosDeBloqueDeRutina(rutinaId, microciclo.fecha_inicio).siguienteInicio);
+      insertMicrociclo.run(rutinaId, siguienteNumero, inicioDelSiguienteBloque(rutinaId, microciclo.fecha_inicio));
       siguiente = getMicrociclo.get(rutinaId, siguienteNumero);
     }
     const ejercicios = getEjerciciosDeRutina.all(rutinaId);
@@ -430,8 +430,8 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
       continue;
     }
 
-    const sem1 = getUltimaSerieEnRango.get(ej.id, ...semana1)?.reps ?? null;
-    const sem2 = getUltimaSerieEnRango.get(ej.id, ...semana2)?.reps ?? null;
+    const sem1 = getUltimaSerieEnRango.get(ej.id, microciclo.id, ...semana1)?.reps ?? null;
+    const sem2 = getUltimaSerieEnRango.get(ej.id, microciclo.id, ...semana2)?.reps ?? null;
     const techo = techoDesde(sem1, sem2, config);
     const mejoro = techo == null ? null : techo > progreso.piso_reps ? 1 : 0;
 
@@ -481,7 +481,7 @@ export const cerrarMicrociclo = db.transaction((rutinaId, numero) => {
   const siguienteNumero = numero + 1;
   let siguiente = getMicrociclo.get(rutinaId, siguienteNumero);
   if (!siguiente) {
-    insertMicrociclo.run(rutinaId, siguienteNumero, rangosDeBloqueDeRutina(rutinaId, microciclo.fecha_inicio).siguienteInicio);
+    insertMicrociclo.run(rutinaId, siguienteNumero, inicioDelSiguienteBloque(rutinaId, microciclo.fecha_inicio));
     siguiente = getMicrociclo.get(rutinaId, siguienteNumero);
   }
 
