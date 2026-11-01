@@ -1866,6 +1866,27 @@ cierre de microciclo → progreso → export a Excel):
     puede borrar los datos de sitios sin uso por semanas: conviene instalar la app
     en la pantalla de inicio.
 
+- **Correcciones (sin conexión y reseteo de ejercicio)**:
+  - **El cartel "Sin conexión" ya no queda pegado**: una espera cortada por
+    lentitud (el servidor tardando, p. ej. una Raspberry cargada) ya no cuenta
+    como "sin internet" (la espera subió a 20 s y, si hay copia guardada, se
+    muestra con el aviso "Conexión lenta"); y mientras la app cree que no hay
+    conexión se comprueba sola cada 8 s con `GET /api/health` (y al volver a la
+    app o a conectarse), así que el cartel se va solo apenas el servidor responde.
+    La precarga de datos ahora pide de a uno y 3 s después de abrir la pantalla,
+    sin competir con la carga.
+  - **"Resetear pesos y reps" dejaba los valores viejos en pantalla**: el
+    servidor reseteaba el ejercicio pero el formulario seguía mostrando lo
+    tipeado o heredado. Ahora al resetear (o cancelar el retesteo) las filas del
+    ejercicio se vacían. Además, un ejercicio en retesteo que hoy no se hizo (todo
+    en blanco) ya no impide registrar el resto de la sesión: queda pendiente.
+  - **El menú ⋯ del ejercicio se cerraba al scrollear dentro de él**, así que en
+    pantallas chicas las últimas opciones ("Resetear pesos y reps", "Quitar") eran
+    inalcanzables; ahora solo se cierra al scrollear la página.
+  - La fila de links del día ("Pasos", "Comentario", "Cambiar día"... "Editar
+    Semana 0", "Quitar") se pasa a dos líneas en vez de hacer scrollear toda la
+    pantalla de costado.
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

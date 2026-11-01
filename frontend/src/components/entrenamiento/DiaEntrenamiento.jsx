@@ -179,7 +179,8 @@ export function DiaEntrenamiento({ rutina, microciclo, usuario, actorRol, progre
               + Agregar día
             </button>
           </div>
-          <div className="flex items-center gap-3">
+          {/* flex-wrap: con "Editar Semana 0" y "Quitar" la fila medía más que la pantalla y hacía scrollear de costado toda la página */}
+          <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
             <PasosDiariosBoton usuarioId={usuario.id} fecha={fechaParaPasos} />
             {!descansoDiaSemana && (
               <>

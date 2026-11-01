@@ -1578,6 +1578,27 @@ sessions → closing a microcycle → progress → Excel export):
     screens never opened while online (no copy). iPhone may erase data of unused
     sites after weeks: install the app on the home screen.
 
+- **Fixes (offline and exercise reset)**:
+  - **The "Sin conexión" banner no longer sticks**: a wait cut short by slowness
+    (a busy Raspberry answering slowly, say) no longer counts as "no internet"
+    (the wait went up to 20 s and, if a saved copy exists, it is shown with a
+    "Conexión lenta" notice); and while the app believes it is offline it checks
+    by itself every 8 s with `GET /api/health` (and on returning to the app or
+    reconnecting), so the banner goes away as soon as the server answers. The
+    data pre-load now asks one request at a time, 3 s after the screen opens,
+    without competing with its loading.
+  - **"Resetear pesos y reps" left the old values on screen**: the server reset
+    the exercise but the form kept showing what had been typed or inherited. Now
+    resetting (or cancelling the retest) empties that exercise's rows. Also, a
+    retest exercise left blank today no longer blocks logging the rest of the
+    session: it stays pending.
+  - **The exercise's ⋯ menu closed when scrolling inside it**, so on small
+    screens the last options ("Resetear pesos y reps", "Quitar") were
+    unreachable; it now only closes when the page scrolls.
+  - The day's links row ("Pasos", "Comentario", "Cambiar día"... "Editar Semana
+    0", "Quitar") wraps onto two lines instead of making the whole screen scroll
+    sideways.
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live

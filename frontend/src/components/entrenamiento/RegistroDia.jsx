@@ -339,6 +339,25 @@ export function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ejercicioIdKey]);
 
+  // "Resetear pesos y reps" (o cancelar el retesteo) cambia el estado del ejercicio
+  // en el servidor, pero el formulario ya tiene cargado lo de antes (lo tipeado o
+  // lo heredado de otra sesion): hay que vaciarlo, si no el ejercicio "en blanco"
+  // seguia mostrando los pesos viejos.
+  const retesteoKey = dia.ejercicios.map((e) => `${e.id}:${e.retesteo?.id ?? 0}`).join(',');
+  const retesteoPrevioRef = useRef(retesteoKey);
+  useEffect(() => {
+    const anteriores = Object.fromEntries(retesteoPrevioRef.current.split(',').filter(Boolean).map((par) => par.split(':')));
+    retesteoPrevioRef.current = retesteoKey;
+    const cambiados = dia.ejercicios.filter((ej) => anteriores[ej.id] != null && anteriores[ej.id] !== String(ej.retesteo?.id ?? 0));
+    if (cambiados.length === 0) return;
+    setSeries((prev) => {
+      const copia = { ...prev };
+      for (const ej of cambiados) copia[ej.id] = construirSeriesPorDefecto(ej);
+      return copia;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retesteoKey]);
+
   const notasPorEjercicio = useMemo(() => {
     const map = new Map();
     for (const e of progreso?.ejercicios ?? []) map.set(e.id, e);
@@ -453,6 +472,9 @@ export function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGu
     setError('');
     const payload = [];
     for (const ej of dia.ejercicios) {
+      // Un ejercicio en retesteo que hoy no se hizo (todo en blanco) no se
+      // registra: queda pendiente de medir, sin trabar el resto de la sesion.
+      if (ej.retesteo && seriesPorEjercicio[ej.id].every((s) => s.peso === '' && s.reps === '')) continue;
       for (const [idx, s] of seriesPorEjercicio[ej.id].entries()) {
         if (s.peso === '' || s.reps === '') {
           const serie = s.esDropset ? 'la serie de dropset' : 'todas las series';

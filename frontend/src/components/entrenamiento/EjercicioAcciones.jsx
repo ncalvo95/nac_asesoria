@@ -39,7 +39,11 @@ export function EjercicioAcciones({ ejercicio, usuario, actorRol, onCambiado, di
     // Scrollear tambien lo cierra (no solo tocar afuera) - al ser
     // position:absolute, el menu no sigue a la tarjeta y queda flotando en
     // cualquier lado si no se cierra solo.
-    function onScroll() {
+    function onScroll(e) {
+      // Scrollear DENTRO del propio menú (en pantallas chicas no entra entero y
+      // tiene scroll propio) no lo cierra: antes se cerraba y las últimas
+      // opciones -"Resetear pesos y reps", "Quitar"- eran inalcanzables.
+      if (menuRef.current && e.target instanceof Node && menuRef.current.contains(e.target)) return;
       setMenuAbierto(false);
     }
     window.addEventListener('mousedown', onClickFuera);

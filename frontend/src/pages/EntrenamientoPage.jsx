@@ -47,18 +47,19 @@ export default function EntrenamientoPage() {
   useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [usuario.id]);
 
   // Modo sin conexión (ver src/offline/): con la rutina cargada se deja guardado lo
-  // necesario para entrenar sin internet, y cuando la cola envía sesiones
-  // pendientes se vuelve a leer todo del servidor.
+  // necesario para entrenar sin internet (un poco después, para no competir con
+  // la carga de la pantalla), y cuando la cola envía sesiones pendientes se vuelve
+  // a leer todo del servidor.
   useEffect(() => {
-    precargarParaSinConexion(usuario.id);
-    const alVolver = () => precargarParaSinConexion(usuario.id, { forzar: true });
+    if (!rutina) return undefined;
+    const t = setTimeout(() => precargarParaSinConexion(usuario.id, rutina), 3000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rutina?.id]);
+  useEffect(() => {
     const alSincronizar = () => cargar({ silencioso: true });
-    window.addEventListener('online', alVolver);
     window.addEventListener('nac:sincronizado', alSincronizar);
-    return () => {
-      window.removeEventListener('online', alVolver);
-      window.removeEventListener('nac:sincronizado', alSincronizar);
-    };
+    return () => window.removeEventListener('nac:sincronizado', alSincronizar);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuario.id]);
   // Catalogo completo de musculos (no solo los del dia): permite agregar un

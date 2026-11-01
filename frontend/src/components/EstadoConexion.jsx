@@ -17,7 +17,8 @@ function hace(iso) {
 // pudieron enviar. No aparece si todo está en orden.
 export default function EstadoConexion() {
   const e = useConexion();
-  const hayAlgo = e.sinConexion || e.pendientes > 0 || e.conError.length > 0 || e.sesionVencida;
+  const lenta = !e.sinConexion && Boolean(e.datosDesde);
+  const hayAlgo = e.sinConexion || lenta || e.pendientes > 0 || e.conError.length > 0 || e.sesionVencida;
   if (!hayAlgo) return null;
 
   return (
@@ -27,6 +28,11 @@ export default function EstadoConexion() {
           <strong>Sin conexión.</strong>{' '}
           {e.datosDesde ? `Estás viendo datos guardados ${hace(e.datosDesde)}. ` : ''}
           Podés entrenar y anotar igual: se envía todo cuando vuelva internet.
+        </div>
+      )}
+      {lenta && (
+        <div className="bg-warning-bg text-warning px-4 py-2">
+          <strong>Conexión lenta.</strong> El servidor tardó en responder y se muestran datos guardados {hace(e.datosDesde)}.
         </div>
       )}
       {e.pendientes > 0 && (

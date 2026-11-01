@@ -8,7 +8,7 @@ export const API_BASE = `${import.meta.env.BASE_URL}api`;
 
 // Un GET con copia guardada espera como mucho esto antes de usar la copia: con
 // señal mala (típico en un gimnasio) el pedido puede quedar colgado minutos.
-const ESPERA_GET_MS = 8000;
+const ESPERA_GET_MS = 20000;
 
 async function request(method, path, body, { timeoutMs } = {}) {
   const controller = timeoutMs ? new AbortController() : null;
@@ -23,8 +23,12 @@ async function request(method, path, body, { timeoutMs } = {}) {
       signal: controller?.signal,
     });
   } catch (err) {
-    // fetch solo rechaza por red (sin conexión, DNS, corte, timeout propio): un
-    // error HTTP (400, 500...) llega como respuesta y se maneja más abajo.
+    // Se cortó la espera propia: el servidor está lento o la señal es mala, pero
+    // NO es lo mismo que no tener internet (no se marca "sin conexión": en una
+    // Raspberry cargada una respuesta lenta es normal).
+    if (err?.name === 'AbortError') throw new ApiError('El servidor tardó demasiado en responder.', 0, null, false, true);
+    // fetch solo rechaza por red (sin conexión, DNS, corte): un error HTTP (400,
+    // 500...) llega como respuesta y se maneja más abajo.
     marcarSinConexion();
     throw new ApiError('Sin conexión a internet.', 0, null, true);
   } finally {
@@ -45,12 +49,14 @@ async function request(method, path, body, { timeoutMs } = {}) {
 }
 
 export class ApiError extends Error {
-  constructor(message, status, body, sinConexion = false) {
+  constructor(message, status, body, sinConexion = false, lenta = false) {
     super(message);
     this.status = status;
     this.body = body;
     // true si el pedido ni siquiera llegó al servidor (no hay internet).
     this.sinConexion = sinConexion;
+    // true si se cortó la espera (servidor o señal lentos).
+    this.lenta = lenta;
   }
 }
 
@@ -63,10 +69,10 @@ async function get(path) {
     guardarCopia(path, datos);
     return datos;
   } catch (err) {
-    if (err.sinConexion) {
+    if (err.sinConexion || err.lenta) {
       const copia = await leerCopia(path);
       if (copia) {
-        marcarUsandoCopia(copia.guardadoEn);
+        marcarUsandoCopia(copia.guardadoEn, { sinConexion: Boolean(err.sinConexion) });
         return copia.datos;
       }
     }

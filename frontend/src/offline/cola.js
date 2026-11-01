@@ -1,6 +1,6 @@
-import { pedirSinCopia } from '../api/client.js';
+import { pedirSinCopia, API_BASE } from '../api/client.js';
 import { idb } from './idb.js';
-import { cambiarConexion, leerConexion } from './conexion.js';
+import { cambiarConexion, leerConexion, marcarOnline } from './conexion.js';
 import { aIso } from '../utils/fechas.js';
 
 // Cola de sesiones pendientes de enviar. Registrar una sesión SIEMPRE intenta
@@ -134,13 +134,32 @@ export async function asegurarSincronizado() {
   if (e.conError.length > 0) throw new Error('Hay sesiones que no se pudieron enviar. Revisalas (arriba) antes de cerrar el bloque.');
 }
 
+// Pregunta al servidor si responde (GET /api/health, liviano y sin copia). Solo
+// actúa si la app cree que no hay conexión.
+async function sondear() {
+  if (!leerConexion().sinConexion) return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(`${API_BASE}/health`, { cache: 'no-store', signal: controller.signal });
+    if (res.ok) { marcarOnline(); sincronizar(); }
+  } catch { /* sigue sin conexión */ } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Sincronización automática: al volver la conexión, al volver a abrir la app y
 // cada tanto mientras haya algo pendiente.
 let iniciada = false;
 export function iniciarSincronizacionAutomatica() {
   if (iniciada || typeof window === 'undefined') return;
   iniciada = true;
-  window.addEventListener('online', () => sincronizar());
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizar(); });
+  window.addEventListener('online', () => { sondear(); sincronizar(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sondear(); sincronizar(); } });
   setInterval(() => { if (leerConexion().pendientes > 0) sincronizar(); }, 45000);
+  // Mientras la app cree que no hay conexión, se comprueba sola cada pocos
+  // segundos: el cartel no puede quedar pegado por el orden en que terminaron
+  // unos pedidos viejos.
+  setInterval(sondear, 8000);
+  sondear();
 }

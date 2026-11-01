@@ -44,9 +44,9 @@ export function marcarSinConexion() {
 }
 
 // Se está mostrando una copia guardada de `guardadoEn` (ISO): se conserva la más vieja.
-export function marcarUsandoCopia(guardadoEn) {
+export function marcarUsandoCopia(guardadoEn, { sinConexion = true } = {}) {
   const datosDesde = estado.datosDesde && estado.datosDesde < guardadoEn ? estado.datosDesde : guardadoEn;
-  cambiarConexion({ sinConexion: true, datosDesde });
+  cambiarConexion(sinConexion ? { sinConexion: true, datosDesde } : { datosDesde });
 }
 
 if (typeof window !== 'undefined') {
