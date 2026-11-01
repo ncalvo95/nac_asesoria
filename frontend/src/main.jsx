@@ -9,11 +9,25 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>
 );
 
-// Registra el service worker (sw.js) para que la PWA sea instalable de
-// verdad (pantalla completa, sin barra del navegador) en vez de quedar
-// como un simple acceso directo. Ver frontend/public/sw.js.
+// Service worker (public/sw.js): permite abrir la app sin internet. Solo en la
+// versión publicada: en desarrollo se desregistra para que el caché no tape los
+// cambios mientras se programa.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
-  });
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', async () => {
+      const registro = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
+      // Los archivos de esta primera carga se pidieron antes de que el worker
+      // controlara la página: se le avisa cuáles son para que los guarde.
+      const listo = await navigator.serviceWorker.ready;
+      const urls = performance.getEntriesByType('resource')
+        .map((r) => r.name)
+        .filter((u) => new URL(u).origin === location.origin && !u.includes('/api/'));
+      (registro.active ?? listo.active)?.postMessage({
+        type: 'GUARDAR_URLS',
+        urls: [...urls, `${import.meta.env.BASE_URL}manifest.webmanifest`],
+      });
+    });
+  } else {
+    navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
+  }
 }

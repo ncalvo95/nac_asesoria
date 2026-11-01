@@ -1548,6 +1548,36 @@ sessions → closing a microcycle → progress → Excel export):
   previous one, not on a past or future calendar date. `rutina.fin_bloque`
   exposes the last calendar day of the current block.
 
+- **Offline mode (always on)**: the app opens and you can train without
+  internet, and what you log is sent automatically when the connection returns.
+  - **Opens offline**: the service worker (`public/sw.js`, production build
+    only; unregistered in development) stores the app (HTML, JS, CSS, icons) and
+    serves it if the network fails; with network it always fetches fresh first.
+  - **Saved data**: every server read (routine, weights, goals, records,
+    progress...) is stored in IndexedDB under the logged-in user
+    (`src/offline/cache.js`); with network the fresh data is always used and only
+    if the network fails the last copy is shown. Opening Training pre-loads
+    everything its screens ask for (`offline/precarga.js`, at most every 10 min
+    and when internet returns). Logging out deletes that person's copies.
+  - **Logging sessions offline**: `enviarSesion` (`offline/cola.js`) tries the
+    server first; with no network the session stays on the phone and is sent on
+    its own when internet returns (`online` event, on reopening the app and every
+    45 s). Each session carries a `client_id` and the server records it **only
+    once** even if the send arrives twice (`registro_sesion.client_id` column
+    with a unique index); the phone's local date is now sent too (before, the
+    server's UTC date was used, which at night in Argentina fell on the next
+    day). If the server rejects a session (pause, invalid data) it is flagged
+    "No se pudo enviar" with Retry/Discard: it is never lost silently.
+  - **Status bar** (`components/EstadoConexion.jsx`): "Sin conexión" with the age
+    of the data being shown, pending sessions with "Enviar ahora", send errors and
+    a notice if the login session expired with something pending.
+  - **Closing a block** first sends what is pending (the close evaluates what the
+    server has) and is blocked if that fails.
+  - **What does not work offline**: anything that writes to the server besides
+    logging sessions (editing routines, templates, nutrition, parameters...) and
+    screens never opened while online (no copy). iPhone may erase data of unused
+    sites after weeks: install the app on the home screen.
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live

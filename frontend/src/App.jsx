@@ -14,6 +14,7 @@ import EntrenamientoPage from './pages/EntrenamientoPage.jsx';
 import RutinasPage from './pages/RutinasPage.jsx';
 import ProgresoPage from './pages/ProgresoPage.jsx';
 import CoachPage from './pages/CoachPage.jsx';
+import EstadoConexion from './components/EstadoConexion.jsx';
 import PlantillasPage from './pages/PlantillasPage.jsx';
 import CatalogoPage from './pages/CatalogoPage.jsx';
 import ReportesPage from './pages/ReportesPage.jsx';
@@ -26,6 +27,7 @@ export default function App() {
       <InstallPromptProvider>
         <AuthProvider>
           <BrowserRouter basename={import.meta.env.BASE_URL}>
+            <EstadoConexion />
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/invitacion" element={<InvitePage />} />

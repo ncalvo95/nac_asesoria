@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api/client.js';
+import { asegurarSincronizado } from '../offline/cola.js';
 import { aIso, fechaCorta, parseFechaLocal } from '../utils/fechas.js';
 
 // Un bloque (microciclo de 2 semanas) NUNCA se cierra solo: hasta que se toque
@@ -22,6 +23,8 @@ export default function AvisoBloqueVencido({ rutina, microciclo, onCambio }) {
     setEnviando(true);
     setError('');
     try {
+      // El cierre evalúa lo que el servidor tiene: antes se envía lo pendiente.
+      await asegurarSincronizado();
       await api.post(`/rutinas/${rutina.id}/microciclos/${microciclo.numero}/cerrar`);
       await onCambio();
     } catch (err) {

@@ -1835,6 +1835,37 @@ cierre de microciclo → progreso → export a Excel):
   en una fecha de calendario pasada o futura. `rutina.fin_bloque` expone el
   último día de calendario del bloque en curso.
 
+- **Modo sin conexión (siempre activo)**: la app abre y se puede entrenar sin
+  internet, y lo anotado se envía solo cuando vuelve la conexión.
+  - **Abre sin internet**: el service worker (`public/sw.js`, solo en la versión
+    publicada; en desarrollo se desregistra) guarda la app (HTML, JS, CSS,
+    íconos) y la sirve si la red falla; con red siempre pide lo nuevo primero.
+  - **Datos guardados**: cada lectura del servidor (rutina, pesos, objetivos,
+    récords, progreso...) se guarda en IndexedDB a nombre de quien está logueado
+    (`src/offline/cache.js`); con red se usa siempre lo fresco y solo si la red
+    falla se muestra la última copia. Al abrir Entrenamiento se precarga todo lo
+    que sus pantallas piden (`offline/precarga.js`, como mucho cada 10 min y al
+    volver internet). Al cerrar sesión se borran las copias de esa persona.
+  - **Registrar sesiones sin red**: `enviarSesion` (`offline/cola.js`) intenta el
+    servidor; si no hay red la sesión queda en el celular y se manda sola al
+    volver internet (evento `online`, al reabrir la app y cada 45 s). Cada sesión
+    lleva un `client_id` y el servidor la registra **una sola vez** aunque el
+    envío llegue repetido (columna `registro_sesion.client_id` con índice único);
+    ahora también se manda la fecha local del celular (antes se usaba la del
+    servidor en UTC, que de noche en Argentina caía en el día siguiente). Si el
+    servidor rechaza una sesión (pausa, dato inválido) queda marcada con
+    "No se pudo enviar" con Reintentar/Descartar: nunca se pierde en silencio.
+  - **Cartel fijo** (`components/EstadoConexion.jsx`): "Sin conexión" con la
+    antigüedad de los datos que se ven, sesiones pendientes con "Enviar ahora",
+    errores de envío y aviso si la sesión de login venció con algo pendiente.
+  - **Cerrar un bloque** primero envía lo pendiente (el cierre evalúa lo que
+    tiene el servidor) y se bloquea si no se pudo.
+  - **Qué no funciona sin conexión**: lo que escribe en el servidor aparte de
+    registrar sesiones (editar rutina, plantillas, nutrición, parámetros...) y
+    las pantallas que nunca se abrieron con internet (no tienen copia). iPhone
+    puede borrar los datos de sitios sin uso por semanas: conviene instalar la app
+    en la pantalla de inicio.
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

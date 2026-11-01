@@ -13,7 +13,7 @@ router.post('/usuarios/:usuarioId/sesiones', (req, res) => {
     return res.status(403).json({ error: 'No autorizado.' });
   }
 
-  const { dia_rutina_id, microciclo_id, fecha, salteada, series } = req.body || {};
+  const { dia_rutina_id, microciclo_id, fecha, salteada, series, client_id } = req.body || {};
   if (!dia_rutina_id || !microciclo_id) {
     return res.status(400).json({ error: 'dia_rutina_id y microciclo_id son obligatorios.' });
   }
@@ -29,7 +29,12 @@ router.post('/usuarios/:usuarioId/sesiones', (req, res) => {
     return res.status(400).json({ error: 'Ese dia ya no esta activo en la rutina.' });
   }
 
-  const sesionId = registrarSesion({ usuarioId, diaRutinaId: dia_rutina_id, microcicloId: microciclo_id, fecha, salteada, series });
+  if (fecha != null && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return res.status(400).json({ error: 'fecha debe tener formato YYYY-MM-DD.' });
+  if (client_id != null && (typeof client_id !== 'string' || client_id.length < 8 || client_id.length > 64)) {
+    return res.status(400).json({ error: 'client_id invalido.' });
+  }
+
+  const sesionId = registrarSesion({ usuarioId, diaRutinaId: dia_rutina_id, microcicloId: microciclo_id, fecha, salteada, series, clientId: client_id });
   res.status(201).json({ id: sesionId });
 });
 

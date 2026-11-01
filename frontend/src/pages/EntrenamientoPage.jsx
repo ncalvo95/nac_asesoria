@@ -7,6 +7,7 @@ import { Semana0Form } from '../components/entrenamiento/Semana0Form.jsx';
 import { DiaEntrenamiento } from '../components/entrenamiento/DiaEntrenamiento.jsx';
 import { BannerPausa, OfertaAlVolver } from '../components/PausaProgreso.jsx';
 import AvisoBloqueVencido from '../components/AvisoBloqueVencido.jsx';
+import { precargarParaSinConexion } from '../offline/precarga.js';
 
 export default function EntrenamientoPage() {
   const { usuario: sesion } = useAuth();
@@ -44,6 +45,22 @@ export default function EntrenamientoPage() {
   const recargarSilencioso = () => cargar({ silencioso: true });
 
   useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [usuario.id]);
+
+  // Modo sin conexión (ver src/offline/): con la rutina cargada se deja guardado lo
+  // necesario para entrenar sin internet, y cuando la cola envía sesiones
+  // pendientes se vuelve a leer todo del servidor.
+  useEffect(() => {
+    precargarParaSinConexion(usuario.id);
+    const alVolver = () => precargarParaSinConexion(usuario.id, { forzar: true });
+    const alSincronizar = () => cargar({ silencioso: true });
+    window.addEventListener('online', alVolver);
+    window.addEventListener('nac:sincronizado', alSincronizar);
+    return () => {
+      window.removeEventListener('online', alVolver);
+      window.removeEventListener('nac:sincronizado', alSincronizar);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario.id]);
   // Catalogo completo de musculos (no solo los del dia): permite agregar un
   // ejercicio de un musculo que el dia todavia no entrenaba, por si surge
   // durante el entrenamiento - se carga una sola vez acá y se pasa hacia

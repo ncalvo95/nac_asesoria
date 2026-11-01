@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
+import { enviarSesion } from '../../offline/cola.js';
 import { useArrastreOrden } from '../../hooks/useArrastreOrden.js';
 import { formatearMusculo } from '../../utils/musculo.js';
 import TemporizadorDescanso from '../TemporizadorDescanso.jsx';
@@ -98,6 +99,7 @@ export function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGu
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [ok, setOk] = useState(false);
+  const [guardadaOffline, setGuardadaOffline] = useState(false);
   const [modoExpress, setModoExpress] = useState(false);
   // Confirmacion antes de pisar datos ya tipeados (ver mas abajo) - null
   // cuando no hay ningun cambio de modo esperando confirmacion.
@@ -469,14 +471,20 @@ export function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGu
     }
     setEnviando(true);
     try {
-      await api.post(`/usuarios/${usuario.id}/sesiones`, {
+      const r = await enviarSesion(usuario.id, {
         dia_rutina_id: dia.id,
         microciclo_id: microciclo.id,
         series: payload,
-      });
-      borrarBorrador(borradorKey);
-      setOk(true);
-      onGuardado();
+      }, borradorKey);
+      if (r.pendiente) {
+        // Sin conexión: quedó guardada en el celular (y el borrador se conserva
+        // hasta que se envíe, para no perder lo tipeado si se recarga la app).
+        setGuardadaOffline(true);
+      } else {
+        borrarBorrador(borradorKey);
+        setOk(true);
+        onGuardado();
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -487,14 +495,18 @@ export function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGu
   async function saltear() {
     setEnviando(true);
     try {
-      await api.post(`/usuarios/${usuario.id}/sesiones`, {
+      const r = await enviarSesion(usuario.id, {
         dia_rutina_id: dia.id,
         microciclo_id: microciclo.id,
         salteada: true,
-      });
-      borrarBorrador(borradorKey);
-      setOk(true);
-      onGuardado();
+      }, borradorKey);
+      if (r.pendiente) {
+        setGuardadaOffline(true);
+      } else {
+        borrarBorrador(borradorKey);
+        setOk(true);
+        onGuardado();
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -507,6 +519,11 @@ export function RegistroDia({ dia, microciclo, usuario, actorRol, progreso, onGu
       {ok && (
         <div className="bg-success-bg text-success text-[13px] font-semibold rounded-lg px-3 py-2.5">
           Sesión guardada.
+        </div>
+      )}
+      {guardadaOffline && (
+        <div className="bg-warning-bg text-warning text-[13px] font-semibold rounded-lg px-3 py-2.5">
+          Sesión guardada en tu celular: se envía sola cuando vuelva internet.
         </div>
       )}
 

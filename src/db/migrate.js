@@ -41,6 +41,9 @@ const columnasNuevas = [
   { tabla: 'registro_antropometrico', columna: 'porcentaje_graso', definicion: 'REAL' },
   { tabla: 'registro_antropometrico', columna: 'porcentaje_muscular', definicion: 'REAL' },
   { tabla: 'nutrition_plans', columna: 'distribucion_semanal_json', definicion: 'TEXT' },
+  // Id generado por el cliente al registrar una sesion: permite reenviarla sin
+  // duplicarla (ver registrarSesion) - clave para el modo sin conexion.
+  { tabla: 'registro_sesion', columna: 'client_id', definicion: 'TEXT' },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {
@@ -49,6 +52,10 @@ for (const { tabla, columna, definicion } of columnasNuevas) {
     if (!/duplicate column name/i.test(err.message)) throw err;
   }
 }
+
+// El indice va despues del ALTER TABLE (en schema.sql correria antes de que la
+// columna exista en una base ya creada).
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_registro_sesion_client_id ON registro_sesion(client_id) WHERE client_id IS NOT NULL');
 
 // "deltoides" a secas se separo en 3 cabezas (deltoides_lateral/anterior/
 // posterior, ver seed/musculos.js) porque el lateral necesita volumen

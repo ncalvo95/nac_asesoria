@@ -7,6 +7,7 @@ import MapaActividad from '../components/MapaActividad.jsx';
 import MapaMuscular from '../components/MapaMuscular.jsx';
 import { BannerPausa, OfertaAlVolver } from '../components/PausaProgreso.jsx';
 import { aIso } from '../utils/fechas.js';
+import { asegurarSincronizado } from '../offline/cola.js';
 
 const CAPITALIZAR = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -127,6 +128,7 @@ export default function ProgresoPage() {
     setCerrando(true);
     setError('');
     try {
+      await asegurarSincronizado(); // el cierre evalúa lo que tiene el servidor
       await api.post(`/rutinas/${rutina.id}/microciclos/${actual.numero}/cerrar`);
       await cargar();
     } catch (err) {

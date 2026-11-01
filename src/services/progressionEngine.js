@@ -310,12 +310,22 @@ export const saltearTesteo = db.transaction((rutinaId) => {
 
 const rutinaDeDia = db.prepare('SELECT rutina_id FROM dia_rutina WHERE id = ?');
 
-export function registrarSesion({ usuarioId, diaRutinaId, microcicloId, fecha, salteada, series }) {
+const sesionPorClientId = db.prepare('SELECT id FROM registro_sesion WHERE client_id = ? AND usuario_id = ?');
+
+// `clientId` (opcional) hace el registro idempotente: si ya existe una sesion
+// con ese id para este usuario se devuelve la misma en vez de duplicarla - asi el
+// modo sin conexion puede reenviar una sesion cuya respuesta se perdio.
+export function registrarSesion({ usuarioId, diaRutinaId, microcicloId, fecha, salteada, series, clientId }) {
+  if (clientId) {
+    const existente = sesionPorClientId.get(clientId, usuarioId);
+    if (existente) return existente.id;
+  }
   const rutinaId = rutinaDeDia.get(diaRutinaId)?.rutina_id;
   if (rutinaId != null) asegurarNoPausada(rutinaId);
   const { lastInsertRowid: sesionId } = insertRegistroSesion.run({
     usuario_id: usuarioId, dia_rutina_id: diaRutinaId, fecha: fecha || null, salteada: salteada ? 1 : 0, microciclo_id: microcicloId,
   });
+  if (clientId) db.prepare('UPDATE registro_sesion SET client_id = ? WHERE id = ?').run(clientId, sesionId);
   if (!salteada) {
     for (const s of series || []) {
       insertRegistroSerie.run({
