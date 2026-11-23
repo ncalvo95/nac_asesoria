@@ -15,7 +15,7 @@ const DIAS = [
 // catalogo (GET /musculos + GET /ejercicios?musculo_id=), en vez de que el
 // motor los elija por el los solo. "dias" viene del padre (OnboardingPage)
 // como [{ dia_semana, ejercicios: [{id, nombre, musculo_nombre, tipo}] }].
-export default function ArmadoManualRutina({ dias, onChange }) {
+export default function ArmadoManualRutina({ dias, onChange, progresoAutoGlobal = true }) {
   const [musculos, setMusculos] = useState([]);
   const [ejerciciosPorMusculo, setEjerciciosPorMusculo] = useState({});
   const [musculoAbierto, setMusculoAbierto] = useState({});
@@ -56,6 +56,13 @@ export default function ArmadoManualRutina({ dias, onChange }) {
     nuevo[diaIdx] = { ...dia, ejercicios: [...dia.ejercicios, ejercicio] };
     onChange(nuevo);
   }
+  // Interruptor propio de un ejercicio (pisa el general solo para ese ejercicio).
+  function cambiarProgreso(diaIdx, ejercicioId, valor) {
+    const dia = dias[diaIdx];
+    const nuevo = [...dias];
+    nuevo[diaIdx] = { ...dia, ejercicios: dia.ejercicios.map((e) => (e.id === ejercicioId ? { ...e, progreso_automatico: valor } : e)) };
+    onChange(nuevo);
+  }
   function quitarEjercicio(diaIdx, ejercicioId) {
     const dia = dias[diaIdx];
     const nuevo = [...dias];
@@ -86,9 +93,27 @@ export default function ArmadoManualRutina({ dias, onChange }) {
                     <span>
                       {ej.nombre} <span className="text-text-faint capitalize">· {ej.musculo_nombre}</span>
                     </span>
-                    <button type="button" onClick={() => quitarEjercicio(idx, ej.id)} className="text-text-faint px-1">
-                      ✕
-                    </button>
+                    <span className="flex items-center gap-1.5">
+                      {(() => {
+                        const efectivo = ej.progreso_automatico ?? progresoAutoGlobal;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => cambiarProgreso(idx, ej.id, !efectivo)}
+                            aria-pressed={efectivo}
+                            title={efectivo ? 'Progreso automático activado para este ejercicio (tocá para apagarlo)' : 'Progreso automático apagado para este ejercicio (tocá para activarlo)'}
+                            className={`h-6 px-2 rounded-md border text-[10.5px] font-semibold ${
+                              efectivo ? 'bg-success-bg text-success border-success' : 'bg-bg text-text-faint border-border'
+                            }`}
+                          >
+                            Auto {efectivo ? 'sí' : 'no'}
+                          </button>
+                        );
+                      })()}
+                      <button type="button" onClick={() => quitarEjercicio(idx, ej.id)} className="text-text-faint px-1" aria-label="Quitar ejercicio">
+                        ✕
+                      </button>
+                    </span>
                   </div>
                 ))}
               </div>

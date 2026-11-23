@@ -44,6 +44,7 @@ const columnasNuevas = [
   // Id generado por el cliente al registrar una sesion: permite reenviarla sin
   // duplicarla (ver registrarSesion) - clave para el modo sin conexion.
   { tabla: 'registro_sesion', columna: 'client_id', definicion: 'TEXT' },
+  { tabla: 'rutina', columna: 'progreso_auto_defecto', definicion: 'INTEGER NOT NULL DEFAULT 1' },
 ];
 for (const { tabla, columna, definicion } of columnasNuevas) {
   try {

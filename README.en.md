@@ -1599,6 +1599,26 @@ sessions → closing a microcycle → progress → Excel export):
     0", "Quitar") wraps onto two lines instead of making the whole screen scroll
     sideways.
 
+- **Creating a routine without loading everything up front, with automatic
+  progress switchable off from the start**:
+  - **No minimum of exercises**: in "Armarla yo mismo" **1 day** is enough and
+    that day may be **empty**; the rest (more days, exercises) is added from
+    Training ("+ Agregar día", "+ Agregar ejercicio"). In "Elegir mi split" with
+    "I'll pick the exercises myself, later" days may have no muscles. Automatic
+    mode accepts **1 day** (Full Body) instead of a minimum of 2, and so does
+    availability (1 to 6 days). The 6-day cap and unique days are unchanged.
+  - **"Progreso automático" switch** at creation (all three modes and when
+    **applying a template**): if turned off, every exercise of the routine is
+    born with automatic progress off (weight, reps and sets stay until you
+    change them by hand) and **so are the ones you add later**: the routine stores
+    the value (`rutina.progreso_auto_defecto`) and every new exercise inherits
+    it. In the manual builder each exercise also has an **"Auto sí/no"** button
+    that overrides the general one for that exercise only (the server accepts
+    each exercise as an id or as `{ id, progreso_automatico }`). For changes that
+    go through coach approval the value travels in the request. Copying or
+    moving an exercise between days takes the routine's value, not the
+    original's.
+
 Known limitations / accepted simplifications:
 
 - `EntrenamientoPage.jsx`'s mirror of `REPS_EFECTIVAS_UMBRAL` (the live

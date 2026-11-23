@@ -25,7 +25,8 @@ const getPreferidos = db.prepare(
 const getMusculoId = db.prepare('SELECT id FROM musculo WHERE nombre = ?');
 
 const insertRutina = db.prepare(`
-  INSERT INTO rutina (usuario_id, split_asignado, fecha_inicio, estado) VALUES (@usuario_id, @split_asignado, date('now'), 'activa')
+  INSERT INTO rutina (usuario_id, split_asignado, fecha_inicio, estado, progreso_auto_defecto)
+  VALUES (@usuario_id, @split_asignado, date('now'), 'activa', @progreso_auto_defecto)
 `);
 const insertDiaRutina = db.prepare(`
   INSERT INTO dia_rutina (rutina_id, numero_dia, dia_semana, musculos_trabajados_json)
@@ -39,13 +40,18 @@ const DESCANSO_SEGUNDOS_SQL = `(
   SELECT CASE WHEN es_unilateral = 1 OR nombre LIKE '%unilateral%' THEN 60 ELSE 90 END
   FROM ejercicio WHERE id = @ejercicio_id
 )`;
+// El progreso automatico de un ejercicio nuevo lo decide la rutina a la que
+// entra (rutina.progreso_auto_defecto, elegido al crearla): asi tambien lo heredan
+// los ejercicios que se agregan despues.
+const PROGRESO_AUTO_SQL = `COALESCE((SELECT r.progreso_auto_defecto FROM rutina r JOIN dia_rutina dr ON dr.rutina_id = r.id WHERE dr.id = @dia_rutina_id), 1)`;
 const insertEjercicioAsignado = db.prepare(`
   INSERT INTO ejercicio_asignado (
     dia_rutina_id, ejercicio_id, orden, es_top_de_musculo, musculo_objetivo_id,
-    series_actuales, peso_actual, rango_reps_min, rango_reps_max, descanso_segundos
+    series_actuales, peso_actual, rango_reps_min, rango_reps_max, descanso_segundos, progreso_automatico
   ) VALUES (
     @dia_rutina_id, @ejercicio_id, @orden, @es_top_de_musculo, @musculo_objetivo_id,
-    @series_actuales, NULL, @rango_reps_min, @rango_reps_max, ${DESCANSO_SEGUNDOS_SQL}
+    @series_actuales, NULL, @rango_reps_min, @rango_reps_max, ${DESCANSO_SEGUNDOS_SQL},
+    ${PROGRESO_AUTO_SQL}
   )
 `);
 // Variante de insertEjercicioAsignado para una plantilla: el descanso y los
@@ -53,10 +59,11 @@ const insertEjercicioAsignado = db.prepare(`
 const insertEjercicioDePlantilla = db.prepare(`
   INSERT INTO ejercicio_asignado (
     dia_rutina_id, ejercicio_id, orden, es_top_de_musculo, musculo_objetivo_id,
-    series_actuales, peso_actual, rango_reps_min, rango_reps_max, descanso_segundos, musculos_secundarios_json
+    series_actuales, peso_actual, rango_reps_min, rango_reps_max, descanso_segundos, musculos_secundarios_json, progreso_automatico
   ) VALUES (
     @dia_rutina_id, @ejercicio_id, @orden, @es_top_de_musculo, @musculo_objetivo_id,
-    @series_actuales, NULL, @rango_reps_min, @rango_reps_max, @descanso_segundos, @musculos_secundarios_json
+    @series_actuales, NULL, @rango_reps_min, @rango_reps_max, @descanso_segundos, @musculos_secundarios_json,
+    ${PROGRESO_AUTO_SQL}
   )
 `);
 const existeMusculo = db.prepare('SELECT 1 FROM musculo WHERE id = ?');
@@ -104,7 +111,7 @@ function persistirDias(rutinaId, rutinaPorDia, config) {
 // Genera y persiste una rutina nueva para el usuario, en base al perfil ya
 // cargado (objetivo, disponibilidad, equipamiento, exclusiones). Finaliza
 // cualquier rutina activa previa. Crea el microciclo 0 (semana de testeo).
-export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_lower', musculosPrioritarios = []) => {
+export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_lower', musculosPrioritarios = [], { progresoAutomatico = true } = {}) => {
   const objetivo = getObjetivo.get(usuarioId);
   const disponibilidad = getDisponibilidad.get(usuarioId);
   const equipamiento = getEquipamiento.get(usuarioId);
@@ -136,7 +143,7 @@ export const crearRutina = db.transaction((usuarioId, varianteSplit = 'upper_low
   desactivarRutinasPrevias.run(usuarioId);
 
   const splitNombre = describirSplit(diasEspecificos.length, rutinaPorDia);
-  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: splitNombre });
+  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: splitNombre, progreso_auto_defecto: progresoAutomatico ? 1 : 0 });
   persistirDias(rutinaId, rutinaPorDia, config);
   insertMicrociclo.run(rutinaId, 0);
 
@@ -163,7 +170,7 @@ function describirSplit(nDias, rutinaPorDia) {
 // sin nada que testear) y arranca el microciclo 1 sin ejercicios; cada uno
 // que se agregue ahi pide su propia serie de referencia (ver
 // registrarReferenciaEjercicioNuevo), asi que no hace falta otro testeo.
-export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEjercicios = false, musculosPrioritarios = [] }) => {
+export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEjercicios = false, musculosPrioritarios = [], progresoAutomatico = true }) => {
   const objetivo = getObjetivo.get(usuarioId);
   const equipamiento = getEquipamiento.get(usuarioId);
   if (!objetivo || !equipamiento) {
@@ -199,7 +206,7 @@ export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEje
   }
 
   desactivarRutinasPrevias.run(usuarioId);
-  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: 'Split personalizado' });
+  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: 'Split personalizado', progreso_auto_defecto: progresoAutomatico ? 1 : 0 });
   persistirDias(rutinaId, rutinaPorDia, config);
   insertMicrociclo.run(rutinaId, 0);
 
@@ -220,7 +227,7 @@ export const crearRutinaConSplit = db.transaction((usuarioId, { dias, diferirEje
 // la rutina arranca en Semana 0 de testeo como cualquier rutina nueva. Los
 // ejercicios que ya no estan en el catalogo se omiten y se devuelven en
 // `omitidos`; un dia que se queda sin ejercicios no se crea.
-export const crearRutinaDesdePlantilla = db.transaction((usuarioId, { nombre, dias }) => {
+export const crearRutinaDesdePlantilla = db.transaction((usuarioId, { nombre, dias, progresoAutomatico = true }) => {
   const omitidos = [];
   const diasValidos = [];
   for (const dia of dias) {
@@ -238,7 +245,7 @@ export const crearRutinaDesdePlantilla = db.transaction((usuarioId, { nombre, di
   if (diasValidos.length === 0) throw new Error('La plantilla ya no tiene ejercicios disponibles en el catálogo.');
 
   desactivarRutinasPrevias.run(usuarioId);
-  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: `Plantilla: ${nombre}` });
+  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: `Plantilla: ${nombre}`, progreso_auto_defecto: progresoAutomatico ? 1 : 0 });
 
   diasValidos.forEach((dia, idx) => {
     const musculos = [...new Set(dia.ejercicios.map((e) => e.catalogo.musculo_nombre))];
@@ -274,7 +281,7 @@ export const crearRutinaDesdePlantilla = db.transaction((usuarioId, { nombre, di
   return { rutina: obtenerRutinaActiva(usuarioId), omitidos };
 });
 
-export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
+export const crearRutinaManual = db.transaction((usuarioId, { dias, progresoAutomatico = true }) => {
   const objetivo = getObjetivo.get(usuarioId);
   if (!objetivo) {
     throw new Error('Falta completar el objetivo antes de crear una rutina.');
@@ -282,12 +289,15 @@ export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
 
   const config = resolverConfigEntrenamiento(usuarioId);
   desactivarRutinasPrevias.run(usuarioId);
-  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: 'Rutina personalizada' });
+  const { lastInsertRowid: rutinaId } = insertRutina.run({ usuario_id: usuarioId, split_asignado: 'Rutina personalizada', progreso_auto_defecto: progresoAutomatico ? 1 : 0 });
 
   dias.forEach((dia, idx) => {
-    const catalogos = dia.ejercicios.map((ejercicioId) => {
-      const catalogo = getEjercicioCatalogo.get(ejercicioId);
-      if (!catalogo || !catalogo.activo) throw new Error(`Ejercicio ${ejercicioId} no encontrado.`);
+    // Cada ejercicio llega como id de catalogo o como { id, progreso_automatico }
+    // (un valor explicito pisa el de la rutina para ese ejercicio).
+    const entradas = dia.ejercicios.map((e) => (e !== null && typeof e === 'object' ? e : { id: e }));
+    const catalogos = entradas.map((e) => {
+      const catalogo = getEjercicioCatalogo.get(e.id);
+      if (!catalogo || !catalogo.activo) throw new Error(`Ejercicio ${e.id} no encontrado.`);
       return catalogo;
     });
 
@@ -316,7 +326,7 @@ export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
         esCompuestoPrincipalFuerza: Boolean(catalogo.es_compuesto_principal_fuerza),
         region: catalogo.musculo_region,
       }, config);
-      insertEjercicioAsignado.run({
+      const { lastInsertRowid: eaId } = insertEjercicioAsignado.run({
         dia_rutina_id: diaRutinaId,
         ejercicio_id: catalogo.id,
         orden: i + 1,
@@ -326,6 +336,9 @@ export const crearRutinaManual = db.transaction((usuarioId, { dias }) => {
         rango_reps_min: rango.min,
         rango_reps_max: rango.max,
       });
+      if (typeof entradas[i].progreso_automatico === 'boolean') {
+        db.prepare('UPDATE ejercicio_asignado SET progreso_automatico = ? WHERE id = ?').run(entradas[i].progreso_automatico ? 1 : 0, eaId);
+      }
     });
   });
 
@@ -893,10 +906,11 @@ const hayEjercicioDelMusculoEnElDia = db.prepare(
 const insertEjercicioAsignadoExtra = db.prepare(`
   INSERT INTO ejercicio_asignado (
     dia_rutina_id, ejercicio_id, orden, es_top_de_musculo, musculo_objetivo_id,
-    series_actuales, peso_actual, rango_reps_min, rango_reps_max, descanso_segundos
+    series_actuales, peso_actual, rango_reps_min, rango_reps_max, descanso_segundos, progreso_automatico
   ) VALUES (
     @dia_rutina_id, @ejercicio_id, @orden, @es_top_de_musculo, @musculo_objetivo_id,
-    @series_actuales, NULL, @rango_reps_min, @rango_reps_max, ${DESCANSO_SEGUNDOS_SQL}
+    @series_actuales, NULL, @rango_reps_min, @rango_reps_max, ${DESCANSO_SEGUNDOS_SQL},
+    ${PROGRESO_AUTO_SQL}
   )
 `);
 

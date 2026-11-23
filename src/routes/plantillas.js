@@ -56,8 +56,8 @@ router.delete('/plantillas/:id', soCoach, conManejoDeErrores((req, res) => {
 router.post('/usuarios/:usuarioId/rutina/plantilla', soCoach, conManejoDeErrores((req, res) => {
   const usuarioId = Number(req.params.usuarioId);
   if (!puedeAccederAUsuario(req.usuario, usuarioId)) return res.status(403).json({ error: 'No autorizado.' });
-  const { plantilla_id, mapeo_dias } = req.body || {};
-  res.status(201).json(aplicar(req.usuario, Number(plantilla_id), usuarioId, mapeo_dias));
+  const { plantilla_id, mapeo_dias, progreso_automatico } = req.body || {};
+  res.status(201).json(aplicar(req.usuario, Number(plantilla_id), usuarioId, mapeo_dias, { progresoAutomatico: progreso_automatico !== false }));
 }));
 
 export default router;

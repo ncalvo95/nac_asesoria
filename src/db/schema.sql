@@ -222,7 +222,11 @@ CREATE TABLE IF NOT EXISTS rutina (
   -- Nombre elegido por el usuario para identificarla en "Mis rutinas" (ej.
   -- "Rutina de verano") - si es NULL se sigue mostrando split_asignado, como
   -- siempre.
-  nombre TEXT
+  nombre TEXT,
+  -- 0 = los ejercicios de esta rutina (y los que se le agreguen despues) nacen
+  -- con el progreso automatico apagado (ver ejercicio_asignado.progreso_automatico).
+  -- Se elige al crearla; 1 (default) = comportamiento de siempre.
+  progreso_auto_defecto INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX IF NOT EXISTS idx_rutina_usuario ON rutina(usuario_id);

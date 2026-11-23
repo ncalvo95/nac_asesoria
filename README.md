@@ -1887,6 +1887,27 @@ cierre de microciclo → progreso → export a Excel):
     Semana 0", "Quitar") se pasa a dos líneas en vez de hacer scrollear toda la
     pantalla de costado.
 
+- **Crear una rutina sin cargarlo todo de antemano, y con el progreso
+  automático apagable desde el inicio**:
+  - **Sin mínimo de ejercicios**: en "Armarla yo mismo" alcanza con **1 día** y
+    ese día puede quedar **vacío**; el resto (más días, ejercicios) se va
+    agregando desde Entrenamiento ("+ Agregar día", "+ Agregar ejercicio"). En
+    "Elegir mi split" con "voy a elegir los ejercicios yo mismo, después" los
+    días pueden quedar sin músculos. El modo automático acepta **1 día**
+    (Full Body) en vez de mínimo 2, y la disponibilidad también (de 1 a 6 días).
+    Los topes de 6 días y los días únicos siguen igual.
+  - **Interruptor "Progreso automático"** en la creación (los tres modos y al
+    **aplicar una plantilla**): si se apaga, todos los ejercicios de la rutina
+    nacen con el progreso automático apagado (peso, reps y series se mantienen
+    hasta que los cambies a mano) y **también los que agregues después**: la
+    rutina guarda el valor (`rutina.progreso_auto_defecto`) y todo ejercicio nuevo
+    lo hereda. En el armado manual, además, cada ejercicio tiene su botón
+    **"Auto sí/no"** que pisa el general solo para ese ejercicio (el servidor
+    acepta cada ejercicio como id o como `{ id, progreso_automatico }`). Para los
+    cambios que pasan por la aprobación del coach el valor viaja en la solicitud.
+    Copiar o mover un ejercicio entre días toma el valor de la rutina, no el del
+    original.
+
 Pendiente / simplificaciones conocidas:
 
 - El espejo de `REPS_EFECTIVAS_UMBRAL` en `EntrenamientoPage.jsx` (vista

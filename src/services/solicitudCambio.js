@@ -64,7 +64,7 @@ export function aplicarSolicitud(solicitud) {
     case 'equipamiento':
       return aplicarEquipamiento(solicitud.usuario_id, payload);
     case 'rutina_auto':
-      return crearRutina(solicitud.usuario_id, payload.variante_split, payload.musculos_prioritarios);
+      return crearRutina(solicitud.usuario_id, payload.variante_split, payload.musculos_prioritarios, { progresoAutomatico: payload.progreso_automatico !== false });
     case 'rutina_manual':
       return crearRutinaManual(solicitud.usuario_id, payload);
     case 'rutina_split':

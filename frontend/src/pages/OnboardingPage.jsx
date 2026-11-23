@@ -47,6 +47,9 @@ export default function OnboardingPage() {
   const [diasManual, setDiasManual] = useState([]);
   const [diasSplit, setDiasSplit] = useState([]);
   const [diferirEjercicios, setDiferirEjercicios] = useState(false);
+  // Interruptor general: si se apaga, los ejercicios de la rutina (y los que se le
+  // agreguen despues) nacen con el progreso automatico apagado.
+  const [progresoAuto, setProgresoAuto] = useState(true);
 
   const [tipo, setTipo] = useState('hipertrofia');
   const [subObjetivo, setSubObjetivo] = useState('');
@@ -93,27 +96,23 @@ export default function OnboardingPage() {
       setError('Si el objetivo es rendimiento, indicá el deporte.');
       return;
     }
-    if (modo === 'auto' && (dias.length < 2 || dias.length > 6)) {
-      setError('Elegí entre 2 y 6 días.');
+    if (modo === 'auto' && (dias.length < 1 || dias.length > 6)) {
+      setError('Elegí entre 1 y 6 días.');
       return;
     }
-    if (modo === 'manual') {
-      if (diasManual.length < 2 || diasManual.length > 6) {
-        setError('Armá entre 2 y 6 días.');
-        return;
-      }
-      if (diasManual.some((d) => d.ejercicios.length === 0)) {
-        setError('Todos los días necesitan al menos un ejercicio.');
-        return;
-      }
+    // Sin mínimo de ejercicios: en el modo manual alcanza con 1 día (puede estar
+    // vacío) y el resto se va agregando desde Entrenamiento.
+    if (modo === 'manual' && (diasManual.length < 1 || diasManual.length > 6)) {
+      setError('Agregá al menos 1 día (puede quedar sin ejercicios, los vas cargando desde Entrenamiento).');
+      return;
     }
     if (modo === 'split') {
-      if (diasSplit.length < 2 || diasSplit.length > 6) {
-        setError('Armá entre 2 y 6 días.');
+      if (diasSplit.length < 1 || diasSplit.length > 6) {
+        setError('Armá entre 1 y 6 días.');
         return;
       }
-      if (diasSplit.some((d) => d.musculos.length === 0)) {
-        setError('Todos los días necesitan al menos un músculo.');
+      if (!diferirEjercicios && diasSplit.some((d) => d.musculos.length === 0)) {
+        setError('Todos los días necesitan al menos un músculo (o elegí cargar los ejercicios después).');
         return;
       }
     }
@@ -132,7 +131,13 @@ export default function OnboardingPage() {
 
       if (modo === 'manual') {
         marcar(await api.post(`/usuarios/${usuario.id}/rutina/manual`, {
-          dias: diasManual.map((d) => ({ dia_semana: d.dia_semana, ejercicios: d.ejercicios.map((ej) => ej.id) })),
+          // Un ejercicio al que se le tocó su propio interruptor viaja con ese valor;
+          // el resto sigue el interruptor general.
+          dias: diasManual.map((d) => ({
+            dia_semana: d.dia_semana,
+            ejercicios: d.ejercicios.map((ej) => (ej.progreso_automatico === undefined ? ej.id : { id: ej.id, progreso_automatico: ej.progreso_automatico })),
+          })),
+          progreso_automatico: progresoAuto,
         }));
       } else if (modo === 'split') {
         marcar(await api.put(`/usuarios/${usuario.id}/equipamiento`, {
@@ -143,6 +148,7 @@ export default function OnboardingPage() {
         marcar(await api.post(`/usuarios/${usuario.id}/rutina/split`, {
           dias: diasSplit.map((d) => ({ dia_semana: d.dia_semana, musculos: d.musculos, duracion_minutos: Number(d.duracion_minutos) })),
           diferir_ejercicios: diferirEjercicios,
+          progreso_automatico: progresoAuto,
         }));
       } else {
         const duracionPorDia = Object.fromEntries(dias.map((d) => [d, Number(duracion)]));
@@ -157,6 +163,7 @@ export default function OnboardingPage() {
         marcar(await api.post(`/usuarios/${usuario.id}/rutina`, {
           variante_split: (dias.length === 4 || dias.length === 5) ? varianteSplit : undefined,
           musculos_prioritarios: dias.length >= 4 ? musculosPrioritarios : undefined,
+          progreso_automatico: progresoAuto,
         }));
       }
 
@@ -445,9 +452,37 @@ export default function OnboardingPage() {
         {modo === 'manual' && (
           <section className="flex flex-col gap-3">
             <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Tus días y ejercicios</span>
-            <ArmadoManualRutina dias={diasManual} onChange={setDiasManual} />
+            <ArmadoManualRutina dias={diasManual} onChange={setDiasManual} progresoAutoGlobal={progresoAuto} />
           </section>
         )}
+
+        <section className="flex flex-col gap-2">
+          <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Progreso automático</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={progresoAuto}
+            onClick={() => setProgresoAuto((v) => !v)}
+            className={`text-left rounded-lg border px-3 py-2.5 flex items-center justify-between gap-3 ${
+              progresoAuto ? 'bg-surface border-border' : 'bg-warning-bg border-warning'
+            }`}
+          >
+            <span className="flex flex-col gap-0.5">
+              <span className="text-[13px] font-semibold">{progresoAuto ? 'Activado' : 'Desactivado'}</span>
+              <span className="text-[11.5px] text-text-muted leading-snug">
+                {progresoAuto
+                  ? 'Al cerrar cada bloque la app ajusta peso, reps y series de cada ejercicio.'
+                  : 'Los ejercicios se mantienen como están (peso, reps y series) hasta que los cambies a mano. Vale también para los que agregues después.'}
+              </span>
+            </span>
+            <span aria-hidden="true" className={`flex-none w-10 h-6 rounded-full p-0.5 transition-colors ${progresoAuto ? 'bg-accent' : 'bg-track'}`}>
+              <span className={`block w-5 h-5 rounded-full bg-surface transition-transform ${progresoAuto ? 'translate-x-4' : ''}`} />
+            </span>
+          </button>
+          {modo === 'manual' && (
+            <span className="text-[11.5px] text-text-faint">Si querés, en cada ejercicio podés cambiarlo individualmente (botón "Auto").</span>
+          )}
+        </section>
 
         {error && <p className="text-[13px] text-danger">{error}</p>}
 

@@ -98,6 +98,7 @@ export function AplicarPlantillaModal({ usuarioId, hayRutinaActiva, onCerrar, on
   const [mapeo, setMapeo] = useState({});
   const [disponibles, setDisponibles] = useState([]);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [progresoAuto, setProgresoAuto] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
 
@@ -133,7 +134,7 @@ export function AplicarPlantillaModal({ usuarioId, hayRutinaActiva, onCerrar, on
     setEnviando(true);
     setError('');
     try {
-      const r = await api.post(`/usuarios/${usuarioId}/rutina/plantilla`, { plantilla_id: elegida.id, mapeo_dias: mapeo });
+      const r = await api.post(`/usuarios/${usuarioId}/rutina/plantilla`, { plantilla_id: elegida.id, mapeo_dias: mapeo, progreso_automatico: progresoAuto });
       onAplicada(r);
     } catch (err) {
       setError(err.message);
@@ -202,6 +203,13 @@ export function AplicarPlantillaModal({ usuarioId, hayRutinaActiva, onCerrar, on
             ))}
             {repetidos && <p className="text-[12px] text-danger">Hay dos días de la plantilla en el mismo día de la semana.</p>}
           </div>
+          <label className="flex items-start gap-2 text-[12.5px]">
+            <input type="checkbox" checked={progresoAuto} onChange={(e) => setProgresoAuto(e.target.checked)} className="mt-0.5 w-4 h-4 accent-accent" />
+            <span>
+              <strong>Progreso automático</strong>
+              <span className="block text-[11.5px] text-text-muted">Si lo desactivás, los ejercicios no se ajustan solos al cerrar cada bloque (también los que se agreguen después).</span>
+            </span>
+          </label>
           <p className="text-[12px] text-text-muted leading-relaxed">
             {hayRutinaActiva ? 'La rutina activa pasa a finalizada y se crea una nueva. ' : ''}
             La nueva rutina arranca en Semana 0 de testeo para sacar los pesos de este alumno.

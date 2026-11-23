@@ -200,7 +200,7 @@ export function eliminar(actor, id) {
 // Aplica la plantilla a un alumno. `mapeoDias`: { [dia_semana de la plantilla]:
 // dia_semana nuevo } - los dias que no esten en el mapeo conservan el suyo; el
 // resultado no puede repetir un dia de la semana.
-export function aplicar(actor, plantillaId, usuarioId, mapeoDias = {}) {
+export function aplicar(actor, plantillaId, usuarioId, mapeoDias = {}, { progresoAutomatico = true } = {}) {
   const fila = filaOr404(actor, plantillaId);
   const dias = JSON.parse(fila.dias_json);
   const usados = new Set();
@@ -211,5 +211,5 @@ export function aplicar(actor, plantillaId, usuarioId, mapeoDias = {}) {
     usados.add(destino);
     return { ...d, dia_semana: destino };
   });
-  return crearRutinaDesdePlantilla(usuarioId, { nombre: fila.nombre, dias: mapeados });
+  return crearRutinaDesdePlantilla(usuarioId, { nombre: fila.nombre, dias: mapeados, progresoAutomatico });
 }

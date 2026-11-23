@@ -60,7 +60,10 @@ export function armarSecuenciaDeDias(diasEspecificos, varianteSplit = 'upper_low
   const consecutivos = n === 3 && sonConsecutivos(diasEspecificos);
 
   let tipos;
-  if (n === 2) {
+  if (n === 1) {
+    // Un solo dia: Full Body.
+    tipos = [{ nombre: 'Full Body', musculos: TODOS_MUSCULOS }];
+  } else if (n === 2) {
     tipos = [{ nombre: 'Full Body', musculos: TODOS_MUSCULOS }, { nombre: 'Full Body', musculos: TODOS_MUSCULOS }];
   } else if (n === 3 && !consecutivos) {
     tipos = Array.from({ length: 3 }, () => ({ nombre: 'Full Body', musculos: TODOS_MUSCULOS }));
@@ -112,7 +115,7 @@ export function armarSecuenciaDeDias(diasEspecificos, varianteSplit = 'upper_low
       { nombre: 'Legs', musculos: LEGS },
     ];
   } else {
-    throw new Error(`Dias por semana no soportado: ${n}. Debe ser entre 2 y 6.`);
+    throw new Error(`Dias por semana no soportado: ${n}. Debe ser entre 1 y 6.`);
   }
 
   return diasEspecificos.map((dia, i) => ({ dia_semana: dia, ...tipos[i] }));

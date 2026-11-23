@@ -51,7 +51,8 @@ function validarMusculosPrioritarios(res, musculos_prioritarios) {
 router.post('/usuarios/:usuarioId/rutina', (req, res, next) => {
   const usuarioId = Number(req.params.usuarioId);
   if (!checkAccesoUsuario(req, res, usuarioId)) return;
-  const { variante_split, musculos_prioritarios } = req.body || {};
+  const { variante_split, musculos_prioritarios, progreso_automatico } = req.body || {};
+  const progresoAutomatico = progreso_automatico !== false;
   if (variante_split && !['upper_lower', 'push_pull'].includes(variante_split)) {
     return res.status(400).json({ error: 'variante_split debe ser upper_lower o push_pull.' });
   }
@@ -60,12 +61,12 @@ router.post('/usuarios/:usuarioId/rutina', (req, res, next) => {
   if (debeQuedarPendiente(req.usuario, usuarioId)) {
     const s = crearSolicitudCambio({
       usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_auto',
-      payload: { variante_split, musculos_prioritarios: prioritarios },
+      payload: { variante_split, musculos_prioritarios: prioritarios, progreso_automatico: progresoAutomatico },
     });
     return res.status(202).json({ pendiente: true, solicitud_id: s.id });
   }
   try {
-    const rutina = crearRutina(usuarioId, variante_split, prioritarios);
+    const rutina = crearRutina(usuarioId, variante_split, prioritarios, { progresoAutomatico });
     res.status(201).json(rutina);
   } catch (err) {
     if (err.message.includes('Falta completar')) return res.status(400).json({ error: err.message });
@@ -137,29 +138,42 @@ router.post('/usuarios/:usuarioId/rutina/manual', (req, res, next) => {
   const usuarioId = Number(req.params.usuarioId);
   if (!checkAccesoUsuario(req, res, usuarioId)) return;
 
-  const { dias } = req.body || {};
-  if (!Array.isArray(dias) || dias.length < 2 || dias.length > 6) {
-    return res.status(400).json({ error: 'dias debe tener entre 2 y 6 elementos.' });
+  // Sin minimo de ejercicios: alcanza con 1 dia y puede estar vacio - lo demas se
+  // va armando sobre la marcha desde Entrenamiento. Cada ejercicio llega como id
+  // de catalogo o como { id, progreso_automatico }.
+  const { dias, progreso_automatico } = req.body || {};
+  const progresoAutomatico = progreso_automatico !== false;
+  if (!Array.isArray(dias) || dias.length < 1 || dias.length > 6) {
+    return res.status(400).json({ error: 'dias debe tener entre 1 y 6 elementos.' });
   }
+  const diasVistos = new Set();
   for (const dia of dias) {
     if (!dia || !DIAS_VALIDOS.includes(dia.dia_semana)) {
       return res.status(400).json({ error: `dia_semana invalido: ${dia?.dia_semana}` });
     }
-    if (!Array.isArray(dia.ejercicios) || dia.ejercicios.length === 0) {
-      return res.status(400).json({ error: `El dia ${dia.dia_semana} necesita al menos un ejercicio.` });
+    if (diasVistos.has(dia.dia_semana)) {
+      return res.status(400).json({ error: `El dia ${dia.dia_semana} esta repetido.` });
     }
-    if (new Set(dia.ejercicios).size !== dia.ejercicios.length) {
+    diasVistos.add(dia.dia_semana);
+    if (!Array.isArray(dia.ejercicios)) {
+      return res.status(400).json({ error: `El dia ${dia.dia_semana} necesita una lista de ejercicios (puede estar vacia).` });
+    }
+    const ids = dia.ejercicios.map((e) => (e !== null && typeof e === 'object' ? e.id : e));
+    if (new Set(ids).size !== ids.length) {
       return res.status(400).json({ error: `El dia ${dia.dia_semana} tiene un ejercicio repetido.` });
+    }
+    if (dia.ejercicios.some((e) => e !== null && typeof e === 'object' && e.progreso_automatico != null && typeof e.progreso_automatico !== 'boolean')) {
+      return res.status(400).json({ error: 'progreso_automatico de cada ejercicio debe ser true o false.' });
     }
   }
 
   if (debeQuedarPendiente(req.usuario, usuarioId)) {
-    const s = crearSolicitudCambio({ usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_manual', payload: { dias } });
+    const s = crearSolicitudCambio({ usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_manual', payload: { dias, progresoAutomatico } });
     return res.status(202).json({ pendiente: true, solicitud_id: s.id });
   }
 
   try {
-    const rutina = crearRutinaManual(usuarioId, { dias });
+    const rutina = crearRutinaManual(usuarioId, { dias, progresoAutomatico });
     res.status(201).json(rutina);
   } catch (err) {
     if (err.message.includes('objetivo') || err.message.includes('Ejercicio')) {
@@ -178,9 +192,10 @@ router.post('/usuarios/:usuarioId/rutina/split', (req, res, next) => {
   const usuarioId = Number(req.params.usuarioId);
   if (!checkAccesoUsuario(req, res, usuarioId)) return;
 
-  const { dias, diferir_ejercicios, musculos_prioritarios } = req.body || {};
-  if (!Array.isArray(dias) || dias.length < 2 || dias.length > 6) {
-    return res.status(400).json({ error: 'dias debe tener entre 2 y 6 elementos.' });
+  const { dias, diferir_ejercicios, musculos_prioritarios, progreso_automatico } = req.body || {};
+  const progresoAutomatico = progreso_automatico !== false;
+  if (!Array.isArray(dias) || dias.length < 1 || dias.length > 6) {
+    return res.status(400).json({ error: 'dias debe tener entre 1 y 6 elementos.' });
   }
   const diasVistos = new Set();
   for (const dia of dias) {
@@ -188,10 +203,13 @@ router.post('/usuarios/:usuarioId/rutina/split', (req, res, next) => {
       return res.status(400).json({ error: `dia_semana invalido o repetido: ${dia?.dia_semana}` });
     }
     diasVistos.add(dia.dia_semana);
-    if (!Array.isArray(dia.musculos) || dia.musculos.length === 0 || dia.musculos.some((m) => !TODOS_MUSCULOS.includes(m))) {
+    // Con "elegir los ejercicios despues" el dia puede quedar sin musculos ni
+    // duracion: se arma sobre la marcha. Si el motor elige los ejercicios, hacen falta.
+    const diferir = Boolean(diferir_ejercicios);
+    if (!Array.isArray(dia.musculos) || (!diferir && dia.musculos.length === 0) || dia.musculos.some((m) => !TODOS_MUSCULOS.includes(m))) {
       return res.status(400).json({ error: `El dia ${dia.dia_semana} necesita al menos un musculo valido.` });
     }
-    if (!Number.isFinite(dia.duracion_minutos) || dia.duracion_minutos <= 0) {
+    if (!diferir && (!Number.isFinite(dia.duracion_minutos) || dia.duracion_minutos <= 0)) {
       return res.status(400).json({ error: `El dia ${dia.dia_semana} necesita duracion_minutos (numero mayor a 0).` });
     }
   }
@@ -201,13 +219,13 @@ router.post('/usuarios/:usuarioId/rutina/split', (req, res, next) => {
   if (debeQuedarPendiente(req.usuario, usuarioId)) {
     const s = crearSolicitudCambio({
       usuario_id: usuarioId, coach_id: req.usuario.coach_id, tipo: 'rutina_split',
-      payload: { dias, diferirEjercicios: Boolean(diferir_ejercicios), musculosPrioritarios: prioritarios },
+      payload: { dias, diferirEjercicios: Boolean(diferir_ejercicios), musculosPrioritarios: prioritarios, progresoAutomatico },
     });
     return res.status(202).json({ pendiente: true, solicitud_id: s.id });
   }
 
   try {
-    const rutina = crearRutinaConSplit(usuarioId, { dias, diferirEjercicios: Boolean(diferir_ejercicios), musculosPrioritarios: prioritarios });
+    const rutina = crearRutinaConSplit(usuarioId, { dias, diferirEjercicios: Boolean(diferir_ejercicios), musculosPrioritarios: prioritarios, progresoAutomatico });
     res.status(201).json(rutina);
   } catch (err) {
     if (err.message.includes('objetivo') || err.message.includes('equipamiento')) {

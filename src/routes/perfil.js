@@ -47,8 +47,8 @@ router.put('/:usuarioId/disponibilidad', (req, res) => {
   const usuario_id = checkAcceso(req, res);
   if (usuario_id === null) return;
   const { dias_especificos, duracion_sesion } = req.body || {};
-  if (!Array.isArray(dias_especificos) || dias_especificos.length < 2 || dias_especificos.length > 6) {
-    return res.status(400).json({ error: 'dias_especificos debe tener entre 2 y 6 dias.' });
+  if (!Array.isArray(dias_especificos) || dias_especificos.length < 1 || dias_especificos.length > 6) {
+    return res.status(400).json({ error: 'dias_especificos debe tener entre 1 y 6 dias.' });
   }
   if (dias_especificos.some((d) => !DIAS_VALIDOS.includes(d))) {
     return res.status(400).json({ error: `Dias validos: ${DIAS_VALIDOS.join(', ')}.` });
